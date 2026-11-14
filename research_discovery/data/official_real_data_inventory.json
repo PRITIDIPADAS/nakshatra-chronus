@@ -1,0 +1,72 @@
+{
+  "as_of": "2026-11-14",
+  "spherex_dr1": {
+    "release_date": "2026-11-12",
+    "official_query_tutorial": "https://caltech-ipac.github.io/irsa-tutorials/spherex-cutouts/",
+    "official_query_tables": [
+      "spherex.artifact",
+      "spherex.plane"
+    ],
+    "official_query_join": "a.planeid = p.planeid",
+    "official_query_geometry": "CONTAINS(POINT('ICRS', ra_deg, dec_deg), p.poly)",
+    "official_m101_demo": {
+      "name": "M101 / Pinwheel Galaxy",
+      "ra_deg": 210.80227,
+      "dec_deg": 54.34895,
+      "bandpass": "SPHEREx-D2",
+      "official_tutorial_tap_rows": 84,
+      "tutorial_demo_size_deg": 0.1,
+      "status": "DISCOVERY_DEMONSTRATED_BY_IRSA_TUTORIAL; NOT_DOWNLOADED_IN_THIS_RUNTIME"
+    },
+    "sample_dr1_native_mef_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/2025W50_2A/l2b-v27-2026-210/2/level2_2025W50_2A_0072_2D2_spx_l2b-v27-2026-210.fits",
+    "sample_dr1_cutout_url_as_printed_by_tutorial": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/2025W50_2A/l2b-v27-2026-210/2/level2_2025W50_2A_0072_2D2_spx_l2b-v27-2026-210.fits?center=210.80227,54.34895d&size=0.1",
+    "example_qr3_epsf_d2_url": "https://nasa-irsa-spherex.s3.us-east-1.amazonaws.com/qr3/epsf/cal-epsf-v1-2026-191/2/epsf_D2_spx_cal-epsf-v1-2026-191.fits",
+    "native_mef_approx_size_mb": 70,
+    "native_image_shape": [
+      2040,
+      2040
+    ],
+    "required_science_extensions": [
+      "IMAGE",
+      "FLAGS",
+      "VARIANCE",
+      "ZODI",
+      "EPSF",
+      "WCS-WAVE"
+    ],
+    "science_wavelength_calibration_extensions": [
+      "CWAVE",
+      "CBAND"
+    ],
+    "downloaded_bytes_in_this_runtime": false,
+    "calibration_compatibility_established": false,
+    "sample_native_uri_note": "This is the base artifact path obtained by stripping the cutout query parameters from the official tutorial URL. The underlying URI convention is documented, but this native payload was not downloaded or validated in this runtime."
+  },
+  "planet_nine_published_candidate_pair": {
+    "paper_doi": "10.1017/pasa.2025.10024",
+    "iras_source": {
+      "name": "F02211-4844",
+      "ra_deg": 35.74075,
+      "dec_deg": -48.5125
+    },
+    "akari_source": {
+      "name": "AKARI-MUSL J0220440-491247",
+      "ra_deg": 35.18379,
+      "dec_deg": -49.2135
+    },
+    "published_pair_separation_arcmin": 47.4586,
+    "orbit_status": "PAPER_EXPLICITLY_SAYS_TWO_DETECTIONS_ARE_INSUFFICIENT_FOR_FULL_ORBIT",
+    "new_object_discovery": false,
+    "validated_ephemeris": false
+  },
+  "local_execution": {
+    "fits_files_found": 0,
+    "astropy_available": false,
+    "photutils_available": false,
+    "astroquery_available": false,
+    "pyvo_available": false,
+    "network_dns_to_irsa_and_pypi": "FAILED_TEMPORARY_NAME_RESOLUTION",
+    "package_install_attempted": true,
+    "package_install_succeeded": false
+  }
+}

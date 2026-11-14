@@ -1,0 +1,13 @@
+# Required for archive queries, FITS/WCS processing, and numerical analysis
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+requests>=2.31
+astropy>=6.0
+
+# Required only for rendering oversampled SPHEREx ePSFs as native-pixel stamps
+photutils>=1.9
+
+# For the documented IRSA TAP native-MEF query/download helper
+astroquery>=0.4.7
+pyvo>=1.5

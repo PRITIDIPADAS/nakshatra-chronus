@@ -1,0 +1,80 @@
+[
+ {
+  "key": "demo",
+  "name": "Practice field",
+  "kind": "field",
+  "traits": [],
+  "ra": 150.11917,
+  "dec": 2.20583,
+  "note": "A quiet patch with one of each kind of change planted."
+ },
+ {
+  "key": "barnard",
+  "name": "Barnard's Star",
+  "kind": "target",
+  "traits": [
+   "fast",
+   "bright"
+  ],
+  "ra": 269.4459052203537,
+  "dec": 4.772883015586132,
+  "note": null
+ },
+ {
+  "key": "epsindib",
+  "name": "Epsilon Indi B",
+  "kind": "target",
+  "traits": [
+   "fast",
+   "pair"
+  ],
+  "ra": 331.09944526790434,
+  "dec": -56.80196228524349,
+  "note": null
+ },
+ {
+  "key": "wise0855",
+  "name": "WISE 0855",
+  "kind": "target",
+  "traits": [
+   "fast",
+   "faint"
+  ],
+  "ra": 133.75619991163668,
+  "dec": -7.241930507747104,
+  "note": null
+ },
+ {
+  "key": "rwaur",
+  "name": "RW Aurigae",
+  "kind": "target",
+  "traits": [
+   "variable",
+   "pair"
+  ],
+  "ra": 76.95625,
+  "dec": 30.40139,
+  "note": null
+ },
+ {
+  "key": "rdra",
+  "name": "R Draconis",
+  "kind": "target",
+  "traits": [
+   "variable",
+   "bright"
+  ],
+  "ra": 248.16758,
+  "dec": 66.75498,
+  "note": null
+ },
+ {
+  "key": "quiet",
+  "name": "Control field (nothing planted)",
+  "kind": "field",
+  "traits": [],
+  "ra": 210.8,
+  "dec": 54.35,
+  "note": "Stars only. Any candidate here is a false alarm."
+ }
+]

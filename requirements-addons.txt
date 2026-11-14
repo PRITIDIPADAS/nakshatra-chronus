@@ -1,0 +1,7 @@
+# Original CHRONOS requirements already include these, but listed for standalone use.
+numpy>=1.26
+scipy>=1.11
+astropy>=6.0
+fastapi>=0.110
+pydantic>=2.0
+pytest>=8.0

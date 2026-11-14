@@ -1,0 +1,57 @@
+name: real data injection
+# Plants known sources in real SPHEREx exposures from NASA IRSA, scores CHRONOS on real noise and retrains the engine.
+# Run it from the Actions tab (Run workflow). The results are kept as an artifact named real-injection.
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: target keys, comma separated
+        default: barnard,epsindib,wise0855,rwaur,rdra
+      fields:
+        description: extra fields name:ra:dec, comma separated (deep fields near the ecliptic poles)
+        default: nep:270.0:66.56,nepw:262.0:64.0,sep:90.0:-66.56,sepw:98.0:-64.0
+      collection:
+        description: SPHEREx collection
+        default: spherex_dr1+spherex_qr3
+      trials:
+        description: planting trials per field
+        default: "4"
+      practice:
+        description: practice fields mixed in when retraining
+        default: "120"
+jobs:
+  inject:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Check the live archive
+        run: |
+          python - <<'PY' 2>&1 | tee doctor.log
+          import json, sys, warnings
+          warnings.filterwarnings("ignore")
+          sys.path.insert(0, "backend")
+          import app, connectors, observatory
+          for k in "${{ inputs.targets }}".split(","):
+              print(k, json.dumps(connectors.doctor(observatory.TARGETS[k], "${{ inputs.collection }}"), default=str))
+          PY
+      - name: Plant, score and retrain
+        run: python scripts/inject_real.py --retrain --targets "${{ inputs.targets }}" --fields "${{ inputs.fields }}" --coll "${{ inputs.collection }}" --trials "${{ inputs.trials }}" --practice "${{ inputs.practice }}" 2>&1 | tee inject.log
+      - name: Print the results
+        if: always()
+        run: |
+          python -c "import json; print('RESULT_JSON ' + json.dumps(json.load(open('data/real_injection.json'))))" || true
+          python -c "import json; print('ENGINE_JSON ' + json.dumps(json.load(open('data/engine_real.json'))))" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-injection
+          path: |
+            data/real_injection.json
+            data/engine_real.json
+            doctor.log
+            inject.log

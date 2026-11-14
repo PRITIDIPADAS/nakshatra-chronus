@@ -1,0 +1,29 @@
+name: real data
+# Runs the CHRONOS 4D real-data case studies against NASA IRSA, JPL Horizons and SPLICES, then commits data/real_data_run.json.
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy astropy requests
+      - run: python scripts/real_data_run.py
+      - name: Commit the results
+        run: |
+          cp data/real_data_run.json site/data/real_data_run.json
+          git config user.name PRITIDIPADAS
+          git config user.email PRITIDIPADAS@users.noreply.github.com
+          git add data/real_data_run.json site/data/real_data_run.json
+          git commit -m "Real data run results" || true
+          git push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-data-run
+          path: data/real_data_run.json

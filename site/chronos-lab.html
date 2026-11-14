@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CHRONOS measurement-first research laboratories for infrared spectra, instrument diagnostics, validation and reproducible evidence.">
+  <title>CHRONOS Research Laboratories</title><link rel="stylesheet" href="chronos-lab.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="index.html"><span class="mark">✦</span> NAKSHATRA <b>CHRONOS</b></a><nav><a href="index.html">Main observatory</a><a href="https://github.com/PRITIDIPADAS/nakshatra-chronus">Source repository</a></nav></header>
+<main>
+  <section class="hero"><div class="eyebrow">RESEARCH EXTENSIONS · 0.1.0</div><h1>Investigate the evidence.<br><em>Challenge the conclusion.</em></h1><p>A measurement-first laboratory for infrared spectra, instrument forensics, observation planning, validation and reproducible candidate records.</p><div class="statusrow"><span id="runtime-status" class="pill">Checking optional API…</span><span class="note">Demonstration data are synthetic unless explicitly imported from real observations.</span></div></section>
+  <section class="principles"><article><b>01 · Measurements first</b><p>Every diagnostic exposes inputs, assumptions and limits.</p></article><article><b>02 · Uncertainty stays visible</b><p>No significance claim when validated uncertainty is unavailable.</p></article><article><b>03 · Reproduce, then trust</b><p>Evidence packages are content-addressed and independently checkable.</p></article></section>
+
+  <section class="lab" id="spectral"><div class="head"><div><div class="eyebrow">LAB 01</div><h2>Time-resolved spectral comparison</h2></div><span class="tag">102-channel compatible</span></div>
+    <p>Compare two spectra on their native overlapping wavelength samples. The tool reports flux differences without significance unless both spectra contain valid uncertainty arrays.</p>
+    <div class="cols"><label>Reference spectrum · JSON<textarea id="spec-a" spellcheck="false"></textarea></label><label>Comparison spectrum · JSON<textarea id="spec-b" spellcheck="false"></textarea></label></div>
+    <div class="actions"><button id="load-spec" class="secondary">Load synthetic example</button><button id="compare-spec">Compare spectra</button></div>
+    <div class="chart"><canvas id="spec-chart" width="1100" height="350" aria-label="Reference and comparison spectrum plot"></canvas><div class="legend"><span>● Reference</span><span>● Comparison</span></div></div><div id="spec-result" class="result">Paste two measured spectra or load the clearly labelled synthetic example.</div>
+    <p class="fine">All-Sky Cube NHITS is a contributor count, not variance. Channels marked blank remain missing. For individual spectral-image science wavelengths, use the separate CWAVE/CBAND calibration map.</p>
+  </section>
+
+  <section class="lab" id="feature"><div class="head"><div><div class="eyebrow">LAB 02</div><h2>Spectral feature measurement</h2></div><span class="tag">Equivalent width</span></div>
+    <p>Measure a user-specified absorption/emission feature against two continuum sidebands. This routine measures a feature; it does not identify a molecule.</p>
+    <div class="formgrid"><label>Feature lower wavelength (µm)<input id="ew-lo" type="number" step="0.001" value="1.35"></label><label>Feature upper wavelength (µm)<input id="ew-hi" type="number" step="0.001" value="1.65"></label><label>Blue continuum lower (µm)<input id="ew-blo" type="number" step="0.001" value="1.05"></label><label>Blue continuum upper (µm)<input id="ew-bhi" type="number" step="0.001" value="1.25"></label><label>Red continuum lower (µm)<input id="ew-rlo" type="number" step="0.001" value="1.75"></label><label>Red continuum upper (µm)<input id="ew-rhi" type="number" step="0.001" value="1.95"></label></div>
+    <div class="actions"><button id="measure-ew">Measure feature in reference spectrum</button></div><div id="ew-result" class="result">Load or paste a spectrum in Lab 01 first.</div>
+  </section>
+
+  <section class="lab" id="forensics"><div class="head"><div><div class="eyebrow">LAB 03</div><h2>Instrument forensics</h2></div><span class="tag">Transparent rules, not AI</span></div>
+    <p>Enter measured diagnostics from the relevant exposure, detector and calibration version. These checks generate review leads, not an automatic artefact verdict.</p>
+    <div class="formgrid"><label>Candidate S/N<input id="f-snr" type="number" min="0" step="0.1" value="7.2"></label><label>Flagged footprint fraction (0–1)<input id="f-flags" type="number" min="0" max="1" step="0.01" value="0.08"></label><label>PSF reduced χ²<input id="f-psf" type="number" min="0" step="0.1" value="1.3"></label><label>Empirical / nominal noise scale<input id="f-noise" type="number" min="0" step="0.1" value="1.1"></label><label>Partner-array S/N<input id="f-partner" type="number" min="0" step="0.1" value="6"></label><label>Detector-position scatter (pixels)<input id="f-scatter" type="number" min="0" step="0.1" value="2.4"></label><label>Maximum template overlap (0–1)<input id="f-template" type="number" min="0" max="1" step="0.01" value="0.05"></label><label class="check"><input id="f-release" type="checkbox"> Release/calibration mismatch detected</label></div>
+    <div class="actions"><button id="run-forensics">Run instrument checks</button></div><div id="forensics-result" class="result">Run checks on measurements from a real candidate.</div>
+    <p class="fine">Template overlap is meaningful only when the product is from the correct detector, processing version and pixel grid. Review official flag definitions.</p>
+  </section>
+
+  <section class="lab" id="planner"><div class="head"><div><div class="eyebrow">LAB 04</div><h2>Next-observation optimizer</h2></div><span class="tag">Expected information gain</span></div>
+    <p>Rank feasible follow-up opportunities by expected ability to distinguish competing hypotheses. Supply forecasts from physical models and a real visibility calculation.</p>
+    <div class="formgrid"><label>Measurement uncertainty<input id="p-noise" type="number" min="0.0001" step="0.05" value="0.5"></label><label>Prior: moving<input id="p-move" type="number" min="0.001" step="0.05" value="0.34"></label><label>Prior: variable<input id="p-var" type="number" min="0.001" step="0.05" value="0.33"></label><label>Prior: artefact<input id="p-art" type="number" min="0.001" step="0.05" value="0.33"></label></div>
+    <label class="wide">Candidate observation forecasts · JSON<textarea id="plan-json" spellcheck="false"></textarea></label><div class="actions"><button id="load-plan" class="secondary">Load illustrative forecasts</button><button id="run-plan">Rank observations</button></div><div id="plan-result" class="result">Illustrative forecasts will not be represented as real ephemerides.</div>
+  </section>
+
+  <section class="lab" id="validation"><div class="head"><div><div class="eyebrow">LAB 05</div><h2>Injection and recovery accounting</h2></div><span class="tag">Independent field validation</span></div>
+    <p>Calculate one-to-one recovery precision, completeness and false candidates per field. For a benchmark, split by independent sky field and publish recovery by brightness, detector, wavelength, coverage and crowding.</p>
+    <div class="formgrid"><label>Injected sources<input id="v-truth" type="number" min="0" step="1" value="120"></label><label>Recovered injected sources<input id="v-tp" type="number" min="0" step="1" value="29"></label><label>Unmatched detections<input id="v-fp" type="number" min="0" step="1" value="4"></label><label>Independent fields<input id="v-fields" type="number" min="1" step="1" value="5"></label></div><div class="actions"><button id="run-validation">Calculate metrics</button></div><div id="validation-result" class="result">Example numbers are illustrative. Replace with measured blind-test results.</div>
+  </section>
+
+  <section class="lab" id="crossmatch"><div class="head"><div><div class="eyebrow">LAB 06</div><h2>Catalogue cross-match</h2></div><span class="tag">Spherical geometry</span></div>
+    <p>Find the nearest positional catalogue entry inside an angular radius. A positional match is a lead, not proof of a physical counterpart. Coordinates are decimal degrees.</p>
+    <div class="cols"><label>Candidate rows · JSON<textarea id="cat-candidates" spellcheck="false">[{"candidate_id":"C1","ra":359.9999,"dec":0.0}]</textarea></label><label>Catalogue rows · JSON<textarea id="cat-rows" spellcheck="false">[{"id":"S1","ra":0.0001,"dec":0.0,"note":"synthetic example"}]</textarea></label></div>
+    <label class="short">Match radius (arcseconds)<input id="cat-radius" type="number" min="0.01" step="0.5" value="2"></label><div class="actions"><button id="run-crossmatch">Cross-match</button></div><div id="cat-result" class="result">No catalogue match run yet.</div>
+  </section>
+
+  <section class="lab" id="passport"><div class="head"><div><div class="eyebrow">LAB 07</div><h2>Scientific evidence passport</h2></div><span class="tag">SHA-256 integrity seal</span></div>
+    <p>Record source data, calibration, measurements, methods and limitations. This seal detects later content changes; it is not a digital signature, identity proof or independent scientific validation.</p>
+    <div class="formgrid"><label>Project<input id="e-project" value="Nakshatra CHRONOS"></label><label>Candidate/source ID<input id="e-id" placeholder="Actual source or candidate ID"></label><label>Actual analyst / creator<input id="e-creator" placeholder="Actual analyst name"></label><label>Data source and release<input id="e-source" placeholder="e.g. SPHEREx DR1; obs IDs; detector"></label></div>
+    <label class="wide">Notes, calibration versions, uncertainties, tests and limitations<textarea id="e-notes" rows="4"></textarea></label><div class="actions"><button id="create-passport">Create and seal</button><button id="verify-passport" class="secondary" disabled>Verify current passport</button><button id="download-passport" class="secondary" disabled>Download JSON</button></div><div id="passport-result" class="result">No passport created.</div>
+  </section>
+  <section class="final"><div class="eyebrow">DATA INTEGRITY PROMISE</div><h2>Unknown is a valid scientific result.</h2><p>This page does not download NASA data or assert discoveries. The Python adapters read the documented FITS layouts when you provide matching files and calibration products. Synthetic examples remain labelled synthetic.</p><p>References: <a href="https://caltech-ipac.github.io/spherex-archive-documentation/spherex-data-products/">SPHEREx archive data products</a> · <a href="https://irsa.ipac.caltech.edu/data/SPHEREx/docs/overview_dr1.html">DR1 overview</a>.</p></section>
+</main><footer>NAKSHATRA CHRONOS · Local research extension · No GitHub changes are made by this page.</footer><script src="chronos-lab.js"></script>
+</body></html>

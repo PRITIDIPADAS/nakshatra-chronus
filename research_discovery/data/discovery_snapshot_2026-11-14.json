@@ -1,0 +1,92 @@
+{
+  "snapshot_date_utc": "2026-11-14",
+  "project": "Nakshatra CHRONOS real-data research discovery",
+  "network_execution": {
+    "irsa_dns_resolution": "failed in this runtime",
+    "caltechdata_dns_resolution": "failed in this runtime",
+    "raw_spherex_fits_downloaded": false,
+    "raw_planet_nine_csv_downloaded": false,
+    "synthetic_demo_observations_replaced": false
+  },
+  "spherex": {
+    "official_dr1_release_date": "2026-11-12",
+    "current_spectral_image_releases": ["dr1", "qr3"],
+    "sia2_endpoint": "https://irsa.ipac.caltech.edu/SIA",
+    "sia2_collections": [
+      "spherex_dr1",
+      "spherex_dr1_deep",
+      "spherex_dr1_cube",
+      "spherex_qr3",
+      "spherex_qr3_deep"
+    ],
+    "level2_mef": {
+      "native_image_shape": [2040, 2040],
+      "hdu_names": ["IMAGE", "FLAGS", "VARIANCE", "ZODI", "EPSF", "WCS-WAVE"],
+      "image_unit": "MJy/sr",
+      "variance_unit": "(MJy/sr)^2",
+      "science_wavelength_calibration_hdus": ["CWAVE", "CBAND"],
+      "wavelength_unit": "micron",
+      "zodiacal_subtracted": false
+    },
+    "all_sky_cube": {
+      "tile_count": 12288,
+      "healpix_order": 5,
+      "ordering": "NESTED",
+      "tile_shape": [512, 512, 102],
+      "image_unit": "MJy/sr",
+      "zodiacal_subtracted": true,
+      "nhits_semantics": "count of contributing input pixels; not variance",
+      "blank_channels": [51, 52]
+    },
+    "calibration_root": "https://irsa.ipac.caltech.edu/ibe/data/spherex/",
+    "calibration_directory_convention": "release/product/version-or-processing-date/numeric-detector-number/filename",
+    "official_tutorial_observation": {
+      "release_path": "dr1/level2/2025W18_1B/l2b-v27-2026-196/4/level2_2025W18_1B_0023_2D4_spx_l2b-v27-2026-196.fits",
+      "ra_deg": 305.59875000000005,
+      "dec_deg": 41.14888888888889,
+      "cutout_size_deg": 0.01,
+      "tutorial_result_image_shape": [6, 6],
+      "purpose": "FITS structure and ePSF extraction smoke-test only; too small for real-sky completeness benchmarking"
+    },
+    "official_sources": [
+      "https://caltech-ipac.github.io/spherex-archive-documentation/spherex-data-access/",
+      "https://caltech-ipac.github.io/spherex-archive-documentation/spherex-data-products/",
+      "https://caltech-ipac.github.io/irsa-tutorials/spherex-psf/"
+    ]
+  },
+  "planet_nine": {
+    "reference_population": "Planet Nine reference population, Version 3.0",
+    "caltechdata_record": "https://data.caltech.edu/records/8fjad-x7y61",
+    "doi": "10.22002/8fjad-x7y61",
+    "published_date": "2023-04-05",
+    "sample_count": 100000,
+    "data_semantics": "synthetic orbital-element and physical-property samples drawn from Brown & Batygin (2021a), incorporating ZTF, DES and Pan-STARRS constraints",
+    "ephemeris_status": "no validated ephemeris; only a model-conditional candidate sky ensemble is scientifically defensible",
+    "nasa_status": "Planet Nine has not been discovered; existence remains debated",
+    "2026_targeted_search": {
+      "field_area_sq_deg": 98,
+      "sensitivity_r_mag": [21.0, 21.4],
+      "confidence_percent": 85,
+      "average_sensitivity_r_mag": 21.3,
+      "credible_candidates": 0
+    },
+    "official_sources": [
+      "https://science.nasa.gov/solar-system/planet-x/",
+      "https://data.caltech.edu/records/8fjad-x7y61",
+      "https://doi.org/10.33232/001c.155004"
+    ]
+  },
+  "software_verification": {
+    "automated_tests_passed": 39,
+    "test_scope": "synthetic arrays and fixtures; no real-sky scientific validation",
+    "coordinate_frame_guard": "requires explicit detector-native assertion; rejects conflicting DETCOORD metadata"
+  },
+  "scientific_status": {
+    "official_data_discovery": "completed from public documentation and archive metadata",
+    "real_file_byte_inspection": "not completed",
+    "detector_template_alignment_empirical_validation": "not completed",
+    "held_out_real_sky_benchmark": "not completed",
+    "citizen_science_participant_study": "designed, not launched; no participants or responses",
+    "planet_nine_ephemeris": "not scientifically available as a validated object ephemeris"
+  }
+}

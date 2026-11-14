@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nakshatra CHRONOS · an observatory for change in the SPHEREx sky</title>
+<meta name="description" content="CHRONOS finds what changed in the SPHEREx infrared sky, tests whether the change is real, and explains every claim with a measurement.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23f5f0e6' stroke='%232e2a33' stroke-width='2'/%3E%3Ccircle cx='12' cy='14' r='3' fill='%23937aa6'/%3E%3Ccircle cx='20' cy='19' r='2' fill='%23c4a061'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the observatory</a>
+<header class="top">
+  <div class="brand"><span class="mark" aria-hidden="true">✷</span><div><b>Nakshatra CHRONOS</b><small>an observatory for change in the SPHEREx sky</small></div></div>
+  <form class="ask" id="askForm" role="search" autocomplete="off">
+    <label for="ask" class="sr">Ask the sky</label>
+    <input id="ask" placeholder="Ask: show moving candidates · explain C03 · evidence against C01 · 269.45 4.74" aria-describedby="askOut">
+    <button type="submit">Ask</button>
+  </form>
+  <span class="stamp" id="stamp">SIMULATION</span>
+</header>
+
+<section class="hero" id="hero">
+  <div class="hero-text">
+    <p class="kicker">NASA Space Apps · Planet X and SPHEREx</p>
+    <h1>Same sky. Same color.<br><em>Then ask what changed.</em></h1>
+    <p class="lede">A young man blinked two photographic plates and found Pluto. You cannot blink SPHEREx. Each pixel of each exposure sees a different color of infrared light, so two pictures of one star can differ even when nothing in the sky changed.</p>
+    <p class="lede">CHRONOS compares only fair pairs, then asks five questions of every change. <b>What changed? Where? Is it real? What is it? What would prove us wrong?</b> Three independent methods look for change. Where they disagree, CHRONOS investigates the disagreement.</p>
+    <p class="quiet">For watchers of the changing sky like Radhagobinda Chandra of Jessore, who recorded variable stars by eye for decades, and for anyone who wants to check a claim instead of trusting it.</p>
+  </div>
+  <div class="hero-card">
+    <h2 class="sr">Choose a place in the sky</h2>
+    <div class="row"><label for="field">Field</label><select id="field"></select></div>
+    <div class="row"><label for="coord">Coordinates</label><input id="coord" placeholder="RA Dec in degrees, or 17h57m48s +04d44m36s"></div>
+    <div class="row two">
+      <div><label for="fov">Field of view</label><select id="fov"><option value="33">3.4 arcmin</option><option value="49" selected>5.0 arcmin</option><option value="65">6.7 arcmin</option></select></div>
+      <div><label for="mode">Data</label><select id="mode"><option value="sim">Practice sky</option><option value="live">Live SPHEREx</option></select></div>
+    </div>
+    <button class="go" id="go">Investigate this field</button>
+    <p class="note" id="goNote">The practice sky follows the SPHEREx rules and hides a known truth, so every method can be scored. Live mode reads the IRSA archive.</p>
+    <a class="storylink" href="story.html" id="storyLink">The five minute story of one star, in English and Bangla →</a>
+  </div>
+</section>
+
+<div class="app" id="main">
+  <nav class="rail" aria-label="Chapters">
+    <ol>
+      <li><a href="#ch-sky">I · Sky and time</a></li>
+      <li><a href="#ch-fair">II · Fair pairs</a></li>
+      <li><a href="#ch-micro">III · Difference microscope</a></li>
+      <li><a href="#ch-cands">IV · Candidates</a></li>
+      <li><a href="#ch-dossier">V · Dossier</a></li>
+      <li><a href="#ch-motion">VI · Motion map</a></li>
+      <li><a href="#ch-valid">VII · Validation</a></li>
+      <li><a href="#ch-questions">VIII · Open questions</a></li>
+      <li><a href="#ch-planet">IX · Planet X lab</a></li>
+      <li><a href="#ch-citizen">X · Citizen lab</a></li>
+      <li><a href="#ch-box">XI · Black box</a></li>
+      <li><a href="#ch-tiles">XII · Whole sky</a></li>
+      <li><a href="#ch-method">XIII · How it works</a></li>
+      <li><a href="lab.html"><b>CHRONOS 4D · ten laboratories →</b></a></li>
+      <li><a href="chronos-lab.html">Research laboratories (spectra, triage, planner) →</a></li>
+    </ol>
+    <div class="railnote" id="railnote"></div>
+  </nav>
+
+  <main>
+    <div class="answer" id="askOut" aria-live="polite" hidden></div>
+    <div class="status" id="status" aria-live="polite">Choose a field and press Investigate.</div>
+
+    <section id="ch-sky" class="chapter">
+      <header><span class="num">I</span><h2>The sky and its time</h2><p>Every exposure, put on one grid. Move through time, blink, and click any pixel.</p></header>
+      <div class="sky-grid">
+        <div class="plate-wrap">
+          <canvas id="sky" width="490" height="490" aria-label="Sky image. Click a pixel to read it."></canvas>
+          <div class="plate-tools">
+            <label>Layer <select id="layer">
+              <option value="white">White light (all six arrays)</option>
+              <option value="a1">Array 1 · 0.75 to 1.11 micron</option><option value="a2">Array 2 · 1.11 to 1.64 micron</option>
+              <option value="a3">Array 3 · 1.64 to 2.42 micron</option><option value="a4">Array 4 · 2.42 to 3.82 micron</option>
+              <option value="a5">Array 5 · 3.82 to 4.42 micron</option><option value="a6">Array 6 · 4.42 to 5.00 micron</option>
+              <option value="cube">Single exposures (time machine)</option>
+              <option value="deep">Deep co add</option><option value="anomaly">Anomaly score</option><option value="coverage">Coverage count</option>
+              <option value="depth">Depth (5 sigma, one visit)</option><option value="pos">Position error map</option>
+            </select></label>
+            <label class="grow">Time <input type="range" id="tslider" min="0" max="3" value="0"></label>
+            <button id="play" aria-pressed="false">Blink</button>
+            <span class="elapsed" id="elapsed">day 0</span>
+          </div>
+          <div class="plate-tools">
+            <label><input type="checkbox" id="ovCand" checked> Candidates</label>
+            <label><input type="checkbox" id="ovCat" checked> Gaia catalog</label>
+            <label><input type="checkbox" id="ovWise"> AllWISE (live mode)</label>
+            <label>Zoom <select id="zoom"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option></select></label>
+          </div>
+        </div>
+        <div class="side">
+          <div class="card" id="pix"><h3>Pixel reading</h3><p class="muted">Click the image.</p></div>
+          <div class="card"><h3>Space and time slice</h3><p class="muted small">One row of pixels through the selected place, stacked for every exposure in time order. A fixed star draws a straight column. A moving source leans.</p><canvas id="kymo" width="300" height="220"></canvas></div>
+          <div class="card"><h3>Temporal cube I(α, δ, t)</h3><canvas id="cube3" width="300" height="250"></canvas><label class="small">Turn <input type="range" id="cubeTurn" min="0" max="100" value="35"></label></div>
+        </div>
+      </div>
+      <details class="meta"><summary>Exposure metadata and contamination flags</summary><div id="metaTable" class="scroll"></div></details>
+    </section>
+
+    <section id="ch-fair" class="chapter">
+      <header><span class="num">II</span><h2>Fair pairs: the SPHEREx rule</h2><p>A linear variable filter gives each pixel its own color. Brightness can only be compared between exposures of the same array at nearly the same color. Each dot is one exposure. A line joins two visits that form a fair pair.</p></header>
+      <div class="two-col">
+        <div class="card"><canvas id="plane" width="560" height="320" aria-label="Coverage plane: wavelength against time"></canvas><p id="planeNote" class="small"></p></div>
+        <div class="card"><h3>Calibration guardian</h3><p class="small muted">Release of every visit on every array, and the gain that the catalog stars measure. A release change or a gain step must not become a discovery.</p><div id="guardian" class="scroll short"></div></div>
+      </div>
+    </section>
+
+    <section id="ch-micro" class="chapter">
+      <header><span class="num">III</span><h2>The difference microscope</h2><p>One pair of exposures, then the same pair with one more correction at each layer. Watch the false changes fall away. Only what survives honest noise in a fair pair counts.</p></header>
+      <div class="micro">
+        <div class="micro-controls"><label>Pair <select id="pairSel"></select></label><div id="layerBtns" class="seg" role="tablist"></div></div>
+        <div class="micro-grid">
+          <figure><canvas id="mA" width="245" height="245"></canvas><figcaption>Exposure A, original data on the common grid</figcaption></figure>
+          <figure><canvas id="mB" width="245" height="245"></canvas><figcaption>Exposure B, original data on the common grid</figcaption></figure>
+          <figure><canvas id="mZ" width="245" height="245"></canvas><figcaption id="mZcap">Significance</figcaption></figure>
+          <figure class="funnel"><canvas id="funnel" width="300" height="245"></canvas><figcaption>Spots above 5 sigma, layer by layer</figcaption></figure>
+        </div>
+        <p id="microNote" class="small"></p>
+      </div>
+    </section>
+
+    <section id="ch-cands" class="chapter">
+      <header><span class="num">IV</span><h2>Candidates</h2><p>Every place where at least one method saw change. P is the catalog method, D the difference method, A the anomaly ensemble. Bars show the five hypotheses. Sorted by the next observation oracle.</p></header>
+      <div class="two-col wide-left">
+        <div class="card"><div id="candTable" class="scroll"></div></div>
+        <div class="card"><h3>Where change was found</h3><canvas id="popmap" width="320" height="320"></canvas><div id="popNote" class="small"></div></div>
+      </div>
+    </section>
+
+    <section id="ch-dossier" class="chapter">
+      <header><span class="num">V</span><h2>Dossier <span id="dosId"></span></h2><p id="dosStatus">Choose a candidate.</p></header>
+      <div id="dossier" class="dossier"></div>
+    </section>
+
+    <section id="ch-motion" class="chapter">
+      <header><span class="num">VI</span><h2>The motion cartographer</h2><p>Every measured track on the deep image, drawn larger than life. Ellipses show one sigma position errors. μ = √((Δα cos δ)² + Δδ²) / Δt.</p></header>
+      <div class="two-col"><div class="card"><canvas id="mmap" width="490" height="490"></canvas><label class="small">Exaggerate tracks <input type="range" id="exag" min="1" max="60" value="20"></label></div><div class="card"><div id="motionList"></div></div></div>
+    </section>
+
+    <section id="ch-valid" class="chapter">
+      <header><span class="num">VII</span><h2>Validation: how often is CHRONOS wrong?</h2><p>Hundreds of practice fields with a hidden truth. The engine never saw the test fields. Intervals are 95 percent Wilson intervals.</p></header>
+      <div id="valid" class="valid-grid"></div>
+    </section>
+
+    <section id="ch-questions" class="chapter">
+      <header><span class="num">VIII</span><h2>Open questions</h2><p>Suggestions from patterns in the data. Each one has a test that could prove it wrong. None of them is a finding.</p></header>
+      <div id="questions" class="qgrid"></div>
+    </section>
+
+    <section id="ch-planet" class="chapter">
+      <header><span class="num">IX</span><h2>The Planet X laboratory</h2><p>Choose a hypothetical distant planet and see whether SPHEREx could see it and how it would move. NASA states that Planet X (Planet Nine) has not been discovered and that its existence is debated.</p></header>
+      <div class="two-col"><div class="card" id="pxControls"></div><div class="card"><canvas id="pxChart" width="520" height="300"></canvas><div id="pxOut"></div></div></div>
+      <div class="ladder" id="ladder"></div>
+    </section>
+
+    <section id="ch-citizen" class="chapter">
+      <header><span class="num">X</span><h2>The citizen lab</h2><p>Judge a change before you see what the machine thinks. Your answers stay in this browser. Agreement is recorded, not called validation.</p></header>
+      <div class="card" id="study"></div>
+      <div class="two-col"><div class="card" id="citizen"></div><div class="card" id="archive"></div></div>
+    </section>
+
+    <section id="ch-box" class="chapter">
+      <header><span class="num">XI</span><h2>The black box recorder</h2><p>Every input, threshold, version and output of this investigation, sealed with SHA 256.</p></header>
+      <div class="card" id="box"></div>
+    </section>
+
+    <section id="ch-tiles" class="chapter">
+      <header><span class="num">XII</span><h2>The whole sky, in tiles</h2><p>A change map corrected for coverage. The sky is cut into equal area tiles. Each tile counts the changes the engine calls real, removes the false alarms of a null twin, and divides by the completeness measured with planted sources. Practice sky.</p></header>
+      <div class="card" id="tiles"></div>
+    </section>
+
+    <section id="ch-method" class="chapter">
+      <header><span class="num">XIII</span><h2>How it works</h2><p>From archive files to an evidence report.</p></header>
+      <div class="card"><object id="arch" data="architecture.svg" type="image/svg+xml" aria-label="Architecture diagram">Architecture diagram</object></div>
+      <div class="methods" id="methods"></div>
+    </section>
+    <footer class="foot">Nakshatra CHRONOS · candidate language only: nothing here is a confirmed discovery · data from NASA IRSA SPHEREx, ESA Gaia, NASA WISE · <a href="https://github.com/PRITIDIPADAS/nakshatra-chronus">source code</a></footer>
+  </main>
+</div>
+<script src="mode.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+<script src="next.js"></script>
+</body>
+</html>

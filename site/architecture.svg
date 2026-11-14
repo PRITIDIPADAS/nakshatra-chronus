@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 860" font-family="EB Garamond, Garamond, Georgia, serif">
+<rect width="1200" height="860" fill="#f5f0e6"/>
+<style>@font-face{font-family:"EB Garamond";src:url(fonts/eb-garamond-latin-400-normal.woff2) format("woff2");font-weight:400}@font-face{font-family:"EB Garamond";src:url(fonts/eb-garamond-latin-600-normal.woff2) format("woff2");font-weight:600}</style>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5d5763"/></marker></defs>
+<text x="44" y="38" font-size="28" fill="#2e2a33">Nakshatra CHRONOS: from archive files to an evidence report</text>
+<text x="18" y="120.0" font-size="15" font-style="italic" fill="#937aa6" transform="rotate(-90 18 120.0)" text-anchor="middle">inputs</text>
+<line x1="34" y1="60" x2="34" y2="180" stroke="#ddd3c2" stroke-width="2"/>
+<rect x="44" y="60" width="330" height="120" rx="12" fill="#fbf8f2" stroke="#7489ad" stroke-width="1.6"/>
+<text x="56" y="84" font-size="18" font-weight="600" fill="#2e2a33">SPHEREx QR2 and QR3 at IRSA</text>
+<text x="56" y="106" font-size="15" fill="#5d5763">SIA2 search, cutout service</text>
+<text x="56" y="125" font-size="15" fill="#5d5763">IMAGE · FLAGS · VARIANCE · ZODI</text>
+<text x="56" y="144" font-size="15" fill="#5d5763">PSF · WCS-WAVE · WCS A detector map</text>
+<text x="56" y="163" font-size="15" fill="#5d5763">six arrays, 102 channels, 0.75 to 5 micron</text>
+<rect x="390" y="60" width="230" height="120" rx="12" fill="#fbf8f2" stroke="#7d9a8a" stroke-width="1.6"/>
+<text x="402" y="84" font-size="18" font-weight="600" fill="#2e2a33">Gaia DR3</text>
+<text x="402" y="106" font-size="15" fill="#5d5763">positions, motions, parallaxes</text>
+<text x="402" y="125" font-size="15" fill="#5d5763">star anchors and gains</text>
+<text x="402" y="144" font-size="15" fill="#5d5763">catalog cross match</text>
+<rect x="636" y="60" width="230" height="120" rx="12" fill="#fbf8f2" stroke="#7d9a8a" stroke-width="1.6"/>
+<text x="648" y="84" font-size="18" font-weight="600" fill="#2e2a33">AllWISE and JPL</text>
+<text x="648" y="106" font-size="15" fill="#5d5763">AllWISE overlay (IRSA TAP)</text>
+<text x="648" y="125" font-size="15" fill="#5d5763">known small bodies</text>
+<text x="648" y="144" font-size="15" fill="#5d5763">(JPL sb_ident) in live mode</text>
+<rect x="882" y="60" width="290" height="120" rx="12" fill="#fbf8f2" stroke="#937aa6" stroke-width="1.6"/>
+<text x="894" y="84" font-size="18" font-weight="600" fill="#2e2a33">Practice sky with a hidden truth</text>
+<text x="894" y="106" font-size="15" fill="#5d5763">same SPHEREx rules, planted movers,</text>
+<text x="894" y="125" font-size="15" fill="#5d5763">variables, transients and camera</text>
+<text x="894" y="144" font-size="15" fill="#5d5763">effects: glitch, hot pixel, crosstalk</text>
+<text x="18" y="260.0" font-size="15" font-style="italic" fill="#937aa6" transform="rotate(-90 18 260.0)" text-anchor="middle">prepare</text>
+<line x1="34" y1="200" x2="34" y2="320" stroke="#ddd3c2" stroke-width="2"/>
+<rect x="44" y="200" width="175" height="100" rx="12" fill="#fbf8f2" stroke="#c4a061" stroke-width="1.6"/>
+<text x="56" y="224" font-size="18" font-weight="600" fill="#2e2a33">Noise check</text>
+<text x="56" y="246" font-size="15" fill="#5d5763">VARIANCE against</text>
+<text x="56" y="265" font-size="15" fill="#5d5763">empty sky</text>
+<rect x="233" y="200" width="175" height="100" rx="12" fill="#fbf8f2" stroke="#c4a061" stroke-width="1.6"/>
+<text x="245" y="224" font-size="18" font-weight="600" fill="#2e2a33">Star anchors</text>
+<text x="245" y="246" font-size="15" fill="#5d5763">Gaia shift of</text>
+<text x="245" y="265" font-size="15" fill="#5d5763">every exposure</text>
+<path d="M219 250L231 250" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="422" y="200" width="175" height="100" rx="12" fill="#fbf8f2" stroke="#c4a061" stroke-width="1.6"/>
+<text x="434" y="224" font-size="18" font-weight="600" fill="#2e2a33">One grid</text>
+<text x="434" y="246" font-size="15" fill="#5d5763">resample all</text>
+<text x="434" y="265" font-size="15" fill="#5d5763">exposures</text>
+<path d="M408 250L420 250" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="611" y="200" width="175" height="100" rx="12" fill="#fbf8f2" stroke="#c4a061" stroke-width="1.6"/>
+<text x="623" y="224" font-size="18" font-weight="600" fill="#2e2a33">Star gain</text>
+<text x="623" y="246" font-size="15" fill="#5d5763">ensemble ratio</text>
+<text x="623" y="265" font-size="15" fill="#5d5763">per exposure</text>
+<path d="M597 250L609 250" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="800" y="200" width="175" height="100" rx="12" fill="#fbf8f2" stroke="#c4a061" stroke-width="1.6"/>
+<text x="812" y="224" font-size="18" font-weight="600" fill="#2e2a33">Guardian</text>
+<text x="812" y="246" font-size="15" fill="#5d5763">release and</text>
+<text x="812" y="265" font-size="15" fill="#5d5763">gain steps</text>
+<path d="M786 250L798 250" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<rect x="989" y="200" width="175" height="100" rx="12" fill="#fbf8f2" stroke="#c4a061" stroke-width="1.6"/>
+<text x="1001" y="224" font-size="18" font-weight="600" fill="#2e2a33">Fair pairs</text>
+<text x="1001" y="246" font-size="15" fill="#5d5763">same array, color</text>
+<text x="1001" y="265" font-size="15" fill="#5d5763">within 0.35 channel</text>
+<path d="M975 250L987 250" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M209 182L209 198" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M505 182L505 198" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M751 182L751 198" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M1027 182L1027 198" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<text x="18" y="415.0" font-size="15" font-style="italic" fill="#937aa6" transform="rotate(-90 18 415.0)" text-anchor="middle">detect</text>
+<line x1="34" y1="340" x2="34" y2="490" stroke="#ddd3c2" stroke-width="2"/>
+<rect x="44" y="340" width="360" height="150" rx="12" fill="#fbf8f2" stroke="#7d9a8a" stroke-width="1.6"/>
+<text x="56" y="364" font-size="18" font-weight="600" fill="#2e2a33">P · catalog method</text>
+<text x="56" y="386" font-size="15" fill="#5d5763">matched filter in each visit</text>
+<text x="56" y="405" font-size="15" fill="#5d5763">PSF centroids, link across visits</text>
+<text x="56" y="424" font-size="15" fill="#5d5763">motion court, brightness, presence</text>
+<text x="56" y="443" font-size="15" fill="#5d5763">astrometric and photometric floors</text>
+<rect x="420" y="340" width="360" height="150" rx="12" fill="#fbf8f2" stroke="#7489ad" stroke-width="1.6"/>
+<text x="432" y="364" font-size="18" font-weight="600" fill="#2e2a33">D · difference method</text>
+<text x="432" y="386" font-size="15" fill="#5d5763">fair co adds of two visits</text>
+<text x="432" y="405" font-size="15" fill="#5d5763">Z = (I2 − I1) / √(σ1² + σ2² + (f s)²)</text>
+<text x="432" y="424" font-size="15" fill="#5d5763">f measured on stars, summed over arrays</text>
+<text x="432" y="443" font-size="15" fill="#5d5763">dipoles mark small motions</text>
+<rect x="796" y="340" width="376" height="150" rx="12" fill="#fbf8f2" stroke="#937aa6" stroke-width="1.6"/>
+<text x="808" y="364" font-size="18" font-weight="600" fill="#2e2a33">A · anomaly ensemble</text>
+<text x="808" y="386" font-size="15" fill="#5d5763">each exposure against fair partners</text>
+<text x="808" y="405" font-size="15" fill="#5d5763">eight time features per pixel</text>
+<text x="808" y="424" font-size="15" fill="#5d5763">isolation forest, local outlier factor,</text>
+<text x="808" y="443" font-size="15" fill="#5d5763">robust covariance; spread kept</text>
+<path d="M224 302L224 338" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M600 302L600 338" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M984 302L984 338" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<text x="18" y="595.0" font-size="15" font-style="italic" fill="#937aa6" transform="rotate(-90 18 595.0)" text-anchor="middle">reason</text>
+<line x1="34" y1="510" x2="34" y2="680" stroke="#ddd3c2" stroke-width="2"/>
+<rect x="44" y="510" width="250" height="170" rx="12" fill="#fbf8f2" stroke="#2e2a33" stroke-width="1.6"/>
+<text x="56" y="534" font-size="18" font-weight="600" fill="#2e2a33">Candidates</text>
+<text x="56" y="556" font-size="15" fill="#5d5763">union of P, D and A</text>
+<text x="56" y="575" font-size="15" fill="#5d5763">agreement pattern kept</text>
+<text x="56" y="594" font-size="15" fill="#5d5763">fingerprint of 22 features</text>
+<rect x="310" y="510" width="250" height="170" rx="12" fill="#fbf8f2" stroke="#937aa6" stroke-width="1.6"/>
+<text x="322" y="534" font-size="18" font-weight="600" fill="#2e2a33">Five hypotheses</text>
+<text x="322" y="556" font-size="15" fill="#5d5763">H1 moving · H2 variable</text>
+<text x="322" y="575" font-size="15" fill="#5d5763">H3 transient · H4 artefact</text>
+<text x="322" y="594" font-size="15" fill="#5d5763">H5 no change or unknown</text>
+<text x="322" y="613" font-size="15" fill="#5d5763">calibrated on 400 fields</text>
+<rect x="576" y="510" width="290" height="170" rx="12" fill="#fbf8f2" stroke="#b56f5e" stroke-width="1.6"/>
+<text x="588" y="534" font-size="18" font-weight="600" fill="#2e2a33">Self questioning</text>
+<text x="588" y="556" font-size="15" fill="#5d5763">tests not used to decide:</text>
+<text x="588" y="575" font-size="15" fill="#5d5763">star drift, leave one visit out,</text>
+<text x="588" y="594" font-size="15" fill="#5d5763">catalog motion, dichroic partner,</text>
+<text x="588" y="613" font-size="15" fill="#5d5763">detector position, crosstalk</text>
+<rect x="882" y="510" width="290" height="170" rx="12" fill="#fbf8f2" stroke="#c08a86" stroke-width="1.6"/>
+<text x="894" y="534" font-size="18" font-weight="600" fill="#2e2a33">Counterfactuals and debate</text>
+<text x="894" y="556" font-size="15" fill="#5d5763">rerun with other choices:</text>
+<text x="894" y="575" font-size="15" fill="#5d5763">flags, background, noise, anchors,</text>
+<text x="894" y="594" font-size="15" fill="#5d5763">PSF, each visit out, threshold</text>
+<text x="894" y="613" font-size="15" fill="#5d5763">three analysts with their own data</text>
+<path d="M224 492L169 508" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M600 492L600 508" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M984 492L984 508" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M296 595L308 595" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M562 595L574 595" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M868 595L880 595" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<text x="18" y="770.0" font-size="15" font-style="italic" fill="#937aa6" transform="rotate(-90 18 770.0)" text-anchor="middle">deliver</text>
+<line x1="34" y1="700" x2="34" y2="840" stroke="#ddd3c2" stroke-width="2"/>
+<rect x="44" y="700" width="560" height="140" rx="12" fill="#fbf8f2" stroke="#7489ad" stroke-width="1.6"/>
+<text x="56" y="724" font-size="18" font-weight="600" fill="#2e2a33">Evidence report and observatory</text>
+<text x="56" y="746" font-size="15" fill="#5d5763">every sentence points to a measurement</text>
+<text x="56" y="765" font-size="15" fill="#5d5763">sky and time explorer, temporal cube, difference microscope,</text>
+<text x="56" y="784" font-size="15" fill="#5d5763">dossier, motion map, population map, Planet X lab, citizen lab</text>
+<rect x="620" y="700" width="552" height="140" rx="12" fill="#fbf8f2" stroke="#7d9a8a" stroke-width="1.6"/>
+<text x="632" y="724" font-size="18" font-weight="600" fill="#2e2a33">Validation and black box</text>
+<text x="632" y="746" font-size="15" fill="#5d5763">completeness, confusion, calibration, adversarial artefacts,</text>
+<text x="632" y="765" font-size="15" fill="#5d5763">empty fields, static stars, time shuffle, alignment stress</text>
+<text x="632" y="784" font-size="15" fill="#5d5763">SHA 256 seal of inputs, thresholds, versions, outputs</text>
+<path d="M169 682L169 698" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M1027 682L1027 698" stroke="#5d5763" stroke-width="1.4" fill="none" marker-end="url(#ar)"/>
+<path d="M1172 120 C1195 300 1195 560 1172 610" stroke="#937aa6" stroke-width="1.4" fill="none" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+<text x="1180" y="380" font-size="14" fill="#937aa6" transform="rotate(90 1180 380)">trains and scores</text>
+</svg>

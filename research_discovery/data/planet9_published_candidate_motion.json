@@ -1,0 +1,69 @@
+{
+  "analysis_type": "reproducible angular separation and baseline sensitivity calculation from published IRAS/AKARI coordinates",
+  "iras_source": {
+    "name": "IRAS F02211-4844",
+    "ra_deg": 35.74075,
+    "dec_deg": -48.5125
+  },
+  "akari_source": {
+    "name": "AKARI-MUSL J0220440-491247",
+    "ra_deg": 35.18379,
+    "dec_deg": -49.2135
+  },
+  "published_iras_scan_window": [
+    "1983-06-26",
+    "1983-09-01"
+  ],
+  "akari_scan_date_used": "2006-12-26",
+  "separation_arcmin": 47.458561060628426,
+  "position_angle_deg_from_north_eastward": 207.38601817793787,
+  "east_component_arcsec": -1309.8738213739823,
+  "north_component_arcsec": -2528.4201307390103,
+  "east_rate_arcsec_per_year_midpoint": -55.95034653921729,
+  "north_rate_arcsec_per_year_midpoint": -107.99970211114766,
+  "baseline_sensitivity": [
+    {
+      "epoch_assumption": "earliest_IRAS_survey_date",
+      "iras_date_assumed": "1983-06-26",
+      "akari_date_assumed": "2006-12-26",
+      "baseline_days": 8584,
+      "baseline_julian_years": 23.50171115674196,
+      "mean_angular_rate_arcsec_per_year": 121.16197176650418,
+      "heuristic_distance_au_from_paper_scaling_NOT_A_FIT": 654.589379830737
+    },
+    {
+      "epoch_assumption": "midpoint_approximation",
+      "iras_date_assumed": "1983-07-29",
+      "akari_date_assumed": "2006-12-26",
+      "baseline_days": 8551,
+      "baseline_julian_years": 23.411362080766597,
+      "mean_angular_rate_arcsec_per_year": 121.62955977589428,
+      "heuristic_distance_au_from_paper_scaling_NOT_A_FIT": 652.910650888031
+    },
+    {
+      "epoch_assumption": "latest_IRAS_survey_date",
+      "iras_date_assumed": "1983-09-01",
+      "akari_date_assumed": "2006-12-26",
+      "baseline_days": 8517,
+      "baseline_julian_years": 23.318275154004105,
+      "mean_angular_rate_arcsec_per_year": 122.11510692070823,
+      "heuristic_distance_au_from_paper_scaling_NOT_A_FIT": 651.178791126641
+    }
+  ],
+  "angular_rate_range_arcsec_per_year": [
+    121.16197176650418,
+    122.11510692070823
+  ],
+  "heuristic_distance_range_au_NOT_A_FIT": [
+    651.178791126641,
+    654.589379830737
+  ],
+  "scientific_interpretation": "The angular separation reproduces the published pair separation. The mean motion depends on the assumed IRAS epoch within its multi-week scan window. The distance range merely inverts a simplified assumed Planet Nine motion scaling; it is not astrometric parallax, a Keplerian orbit, a new discovery, or a validated ephemeris.",
+  "why_no_orbit": [
+    "Only two survey-era catalogue positions are available for this pair.",
+    "The IRAS source was co-added across an observing interval rather than at a single documented instantaneous epoch.",
+    "The paper flags uncertainty in an AKARI flux measurement and explicitly says the pair does not determine a full orbit.",
+    "The authors call for follow-up and discuss nine detections for reliable linked-orbit evaluation."
+  ],
+  "status": "PUBLISHED_CANDIDATE_PAIR_DIAGNOSTIC_ONLY_NOT_CONFIRMED_PLANET_NINE"
+}

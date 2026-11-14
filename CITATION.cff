@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Nakshatra CHRONOS: an observatory for change in the SPHEREx infrared sky"
+version: "4.0.0"
+license: Apache-2.0
+repository-code: "https://github.com/PRITIDIPADAS/nakshatra-chronus"
+url: "https://pritidipadas.github.io/nakshatra-chronus/"
+abstract: >-
+  CHRONOS finds change between SPHEREx visits using fair pairs (same array, matched color, one release), three independent
+  detectors whose disagreement is calibrated as a signal, a five hypothesis engine that may answer unknown, self questioning
+  tests, counterfactual reanalysis and an evidence linked report. Built for the NASA Space Apps challenge Planet X and SPHEREx.
+keywords:
+  - SPHEREx
+  - time domain astronomy
+  - change detection
+  - anomaly detection
+  - Planet X
+  - reproducibility
+authors:
+  - name: "Nakshatra CHRONOS team"
+references:
+  - type: data
+    title: "SPHEREx Quick Release Spectral Images QR2"
+    doi: "10.26131/IRSA652"
+    authors:
+      - name: "SPHEREx Team"
+  - type: data
+    title: "Gaia Data Release 3"
+    authors:
+      - name: "Gaia Collaboration"

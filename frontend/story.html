@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CHRONOS. The fair blink for the SPHEREx sky.</title>
+<style>
+@font-face{font-family:"EB Garamond";src:url(fonts/eb-garamond-latin-400-normal.woff2) format("woff2");font-weight:400}
+@font-face{font-family:"EB Garamond";src:url(fonts/eb-garamond-latin-600-normal.woff2) format("woff2");font-weight:600}
+@font-face{font-family:"EB Garamond";src:url(fonts/eb-garamond-latin-400-italic.woff2) format("woff2");font-weight:400;font-style:italic}
+:root{--glass:#f5f0e6;--ink:#2e2a33;--soft:#5d5763;--line:#ddd3c2;--panel:#fbf8f2;--fair:#4f6e5f;--warn:#8a6a2e;--bad:#a5523f;
+--b1:#8f84c2;--b2:#7d9fd0;--b3:#6fb1ad;--b4:#9cb77a;--b5:#d3ad6a;--b6:#cf8a72;
+--read:"EB Garamond",Garamond,"Noto Serif Bengali","Noto Sans Bengali","Hind Siliguri","Nirmala UI",Vrinda,Georgia,serif;
+--head:"EB Garamond",Garamond,"Noto Serif Bengali","Noto Sans Bengali",Georgia,serif}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--glass);color:var(--ink);font:18px/1.55 var(--read);font-variant-numeric:lining-nums}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--panel);border:1.5px solid var(--ink);padding:.5em 1em;border-radius:2em;cursor:pointer}
+button:hover{background:var(--ink);color:#fff}
+button.main{background:var(--ink);color:#fff}
+button.main:hover{background:#4a4352}
+button[aria-pressed=true]{background:var(--ink);color:#fff}
+select,input[type=text]{background:var(--panel);border:1.5px solid var(--line);padding:.45em .6em;border-radius:.4em}
+:focus-visible{outline:3px solid var(--b2);outline-offset:2px}
+h1,h2,h3{font-family:var(--head);font-weight:600;line-height:1.15;margin:0}
+p{margin:.5em 0;max-width:68ch}
+.top{position:sticky;top:0;z-index:5;display:flex;gap:1em;align-items:center;justify-content:space-between;padding:.45em 1.2em;background:var(--ink);color:#fff}
+.top b{font-family:var(--head);font-size:1.15em;letter-spacing:.04em}
+.top select{color:var(--ink);padding:.2em .4em}
+#stamp{font-size:.85em;padding:.15em .8em;border-radius:2em;background:#fff;color:var(--ink)}
+#stamp.real{background:#c9f0dd}#stamp.sim{background:#ffe2a8}
+.hero{padding:3.2em 1.2em 1.5em;max-width:1120px;margin:auto}
+.hero h1{font-size:clamp(2.2em,6.2vw,4.4em);max-width:13ch}
+.hero .rain{display:flex;height:.5em;max-width:27em;margin:1.1em 0 1.3em;border-radius:.3em;overflow:hidden}
+.hero .rain i{flex:1}
+.hero p{font-size:1.12em}
+.hero .aside{color:var(--soft);font-size:1em;border-left:.25em solid var(--b5);padding-left:.9em;margin-top:1.1em}
+.stars{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.7em;margin:1.4em 0 .6em}
+.stars button{text-align:left;border-radius:.6em;border-color:var(--line);padding:.8em .9em;display:grid;align-content:start}
+.stars button b{font-family:var(--head);font-size:1.15em;display:block}
+.stars button span{font-size:.86em;line-height:1.35;display:block;color:var(--soft);margin-top:.2em}
+.stars button:hover span,.stars button[aria-pressed=true] span{color:#dfe6ee}
+.pick{display:flex;flex-wrap:wrap;gap:.6em;align-items:center;font-size:.95em}
+main{max-width:1120px;margin:auto;padding:0 1.2em 4em}
+.step{display:grid;grid-template-columns:3.4em 1fr;gap:0 1em;padding:2.2em 0 1.2em;border-top:1.5px solid var(--line);scroll-margin-top:3em}
+.step>div{min-width:0}
+.step[hidden]{display:none}
+.num{font:600 2.6em/1 var(--head);color:var(--soft)}
+.step h2{font-size:clamp(1.4em,3.2vw,2em);margin-bottom:.25em}
+.box{background:var(--panel);border-radius:.7em;padding:1em;margin-top:.9em}
+canvas{display:block;width:100%;background:var(--panel);border-radius:.7em}
+#plane{cursor:pointer;margin-top:.9em;touch-action:manipulation}
+.key{display:flex;flex-wrap:wrap;gap:.3em 1.1em;font-size:.86em;color:var(--soft);margin-top:.5em}
+.key i{display:inline-block;width:.8em;height:.8em;border-radius:50%;margin-right:.35em;vertical-align:-.05em}
+.say{font-size:1.05em;margin-top:.8em;min-height:1.5em}
+.verdict{display:flex;flex-wrap:wrap;gap:1.2em;align-items:center}
+.verdict .word{font:600 clamp(1.8em,5vw,3em)/1 var(--head)}
+.fair .word{color:var(--fair)}.unfair .word{color:var(--bad)}
+.score{font-size:.95em;color:var(--soft)}
+ul.why{margin:.6em 0 0;padding-left:1.2em}
+.chips{display:flex;flex-wrap:wrap;gap:.4em;margin-top:.8em}
+.chip{font-size:.86em;padding:.15em .7em;border-radius:2em;border:1.5px solid;background:#fff}
+.chip.g{border-color:var(--fair);color:var(--fair)}.chip.a{border-color:var(--warn);color:var(--warn)}.chip.r{border-color:var(--bad);color:var(--bad)}
+.meter{margin-top:1em}
+.meter h3{font-size:1.15em}
+.plates{display:grid;grid-template-columns:repeat(3,1fr);gap:.8em;margin-top:.9em}
+.plate{position:relative;background:var(--panel);border-radius:.7em;padding:.5em;margin:0}
+.plate .img{position:relative;aspect-ratio:1;overflow:hidden;border-radius:.4em;background:#eef2f4;cursor:crosshair}
+.plate img{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+.plate figcaption{font-size:.86em;color:var(--soft);padding:.4em .2em 0}
+.mark{position:absolute;width:1.6em;height:1.6em;margin:-.8em 0 0 -.8em;border:2.5px solid var(--b5);border-radius:50%;pointer-events:none}
+.tools{display:flex;flex-wrap:wrap;gap:.5em;align-items:center;margin-top:.8em;font-size:.95em}
+.tabs{display:flex;flex-wrap:wrap;gap:.5em;margin-top:.9em}
+.result{font:600 1.5em/1.2 var(--head);margin:.2em 0 .4em}
+table{border-collapse:collapse;font-size:.9em;margin-top:.6em}
+td,th{padding:.2em .8em .2em 0;text-align:left;vertical-align:top}
+th{color:var(--soft);font-weight:500}
+details{margin-top:2.2em;border-top:1.5px solid var(--line);padding-top:1.2em}
+summary{font:600 1.4em var(--head);cursor:pointer}
+#labout{white-space:pre-wrap;font-size:.9em;max-height:28em;overflow:auto}
+footer{color:var(--soft);font-size:.86em;max-width:1120px;margin:auto;padding:0 1.2em 3em}
+@media (max-width:760px){body{font-size:16px}.step{grid-template-columns:1fr}.num{font-size:1.6em}.plates{grid-template-columns:1fr 1fr}.plates .plate:last-child{grid-column:1/3}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style></head><body>
+<div class="top"><b>CHRONOS</b><span id="stamp" role="status"></span>
+<select id="lang" aria-label="Language"><option value="en">English</option><option value="bn">বাংলা</option></select></div>
+
+<header class="hero">
+<h1 data-t="h1"></h1>
+<div class="rain" aria-hidden="true"><i style="background:var(--b1)"></i><i style="background:var(--b2)"></i><i style="background:var(--b3)"></i><i style="background:var(--b4)"></i><i style="background:var(--b5)"></i><i style="background:var(--b6)"></i></div>
+<p data-t="lead1"></p><p data-t="lead2"></p>
+<p class="aside" data-t="aside"></p>
+<div class="stars" id="stars"></div>
+<div class="pick"><label><span data-t="src"></span> <select id="mode"><option value="sim" data-t="sim"></option><option value="live" data-t="live"></option></select></label>
+<label id="bandl" hidden><span data-t="band"></span> <select id="det"><option value="-1" data-t="bandauto"></option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option value="0" data-t="bandall"></option></select></label>
+<label id="rell" hidden><span data-t="rel"></span> <select id="rel"><option value="spherex_qr3+spherex_qr2">QR3 + QR2</option><option value="spherex_qr3">QR3</option><option value="spherex_qr2">QR2</option></select></label>
+<button id="tour" data-t="tour"></button></div>
+<p class="say" id="loadsay" role="status"></p>
+</header>
+
+<main>
+<section class="step" id="s1" hidden><div class="num">1</div><div>
+<h2 data-t="s1h"></h2><p data-t="s1p"></p>
+<canvas id="plane" height="360" tabindex="0" role="img"></canvas>
+<div class="key" id="key"></div>
+<div class="tools"><button id="best" class="main" data-t="best"></button><span id="picksay" role="status"></span></div>
+</div></section>
+
+<section class="step" id="s2" hidden><div class="num">2</div><div>
+<h2 data-t="s2h"></h2><p data-t="s2p"></p>
+<div class="box"><div class="verdict" id="verdict"><span class="word" id="vword"></span><span class="score" id="vscore"></span></div>
+<ul class="why" id="why"></ul><div class="chips" id="chips"></div>
+<div class="meter"><h3 data-t="fch"></h3><p id="fcsay"></p><canvas id="fc" height="120" role="img"></canvas></div></div>
+</div></section>
+
+<section class="step" id="s3" hidden><div class="num">3</div><div>
+<h2 data-t="s3h"></h2><p data-t="s3p"></p>
+<div class="plates">
+<figure class="plate"><div class="img" id="p1"><img id="ia" alt=""><img id="ia2" alt="" style="opacity:0"></div><figcaption id="c1"></figcaption></figure>
+<figure class="plate"><div class="img" id="p2"><img id="ib" alt=""></div><figcaption id="c2"></figcaption></figure>
+<figure class="plate"><div class="img" id="p3"><img id="iz" alt=""></div><figcaption data-t="c3"></figcaption></figure></div>
+<div class="tools"><button id="blink" aria-pressed="false" data-t="blink"></button>
+<label><span data-t="wipe"></span> <input id="wipe" type="range" min="0" max="100" value="0"></label>
+<label><input type="checkbox" id="fl"> <span data-t="flags"></span></label></div>
+<p class="say" id="witsay" role="status"></p>
+</div></section>
+
+<section class="step" id="s4" hidden><div class="num">4</div><div>
+<h2 data-t="s4h"></h2><p data-t="s4p"></p>
+<div class="tabs" role="tablist"><button id="tmo" role="tab" data-t="tmo"></button><button id="tsp" role="tab" data-t="tsp"></button><button id="tno" role="tab" data-t="tno"></button><button id="trc" role="tab" data-t="trc"></button></div>
+<div class="box"><p class="result" id="chk"></p><p id="chksay" role="status"></p><canvas id="plot" height="300" role="img"></canvas><div id="chkmore"></div></div>
+</div></section>
+
+<section class="step" id="s5" hidden><div class="num">5</div><div>
+<h2 data-t="s5h"></h2><p data-t="s5p"></p>
+<div class="box"><p class="result" id="beh"></p><p id="plain"></p></div>
+<div class="tools"><button id="dl" class="main" data-t="dl"></button><button id="lk" data-t="lk"></button></div>
+</div></section>
+
+<details id="lab"><summary data-t="lab"></summary><p data-t="labp"></p><div class="tools" id="labbar"></div><div class="box"><div id="labout" role="status"></div><div id="labx"></div></div></details>
+</main>
+<footer><p data-t="foot"></p></footer>
+
+<script>
+const $=id=>document.getElementById(id);
+const BAND=['#5b3fbf','#2f6fd0','#1a969b','#5f9320','#cf8412','#c4432b'],EDGE=[[.75,1.09],[1.10,1.62],[1.63,2.41],[2.42,3.82],[3.83,4.41],[4.42,5.0]];
+const L={en:{
+h1:'Same sky. Same color. Then compare.',
+lead1:'Long ago, a young man blinked two photographs of the night sky and found Pluto. Today the SPHEREx telescope photographs the whole sky again and again. But it looks through a rainbow window. Each picture shows a star in one color only.',
+lead2:'Blink two pictures with different colors and the star seems to change. It did not. CHRONOS finds two pictures with the same color first. Then it shows what changed, and how sure it is.',
+aside:'In Jessore, Radhagobinda Chandra watched stars change with his own eyes and sent tens of thousands of measurements to astronomers across the world. CHRONOS does the same work with a space telescope.',
+src:'Data',sim:'Practice sky (works with no internet)',live:'Live SPHEREx archive',band:'Band',bandauto:'Best for this star',bandall:'All bands, fewer pictures',rel:'Release',tour:'Play the full story',
+stamp_sim:'Practice sky. Simulated data.',stamp_live:'Real SPHEREx data.',stamp_none:'No data loaded',
+s1h:'When did SPHEREx look, and in which color?',s1p:'Each dot is one picture of your star. Left to right is time. Bottom to top is color. Pick a dot. The pictures that match its color light up in green. Those are its fair partners.',
+best:'Pick the best fair pair for me',
+s2h:'Is this a fair comparison?',s2p:'A fair pair has the same detector, the same color at the star and clean pixels. The meter shows how much false change a color mismatch makes.',
+fch:'False change meter',
+s3h:'What changed?',s3p:'The first picture is lined up with the second. In the difference picture, red means brighter and blue means fainter. Click a spot to ask if it is real.',
+c3:'Difference. Stars that did not change stay pale.',blink:'Blink',wipe:'Wipe',flags:'Show bad pixels',
+s4h:'How sure are we?',s4p:'Four checks. Each one can fail. That is the point.',
+tmo:'Does it move?',tsp:'Does it change brightness?',tno:'Are the error bars honest?',trc:'What is the faintest thing we can find?',
+s5h:'The verdict',s5p:'Plain words, made only from the numbers above.',dl:'Download the case file',lk:'Copy a link to this view',
+lab:'Lab: more tools',labp:'Extra tools for the curious. The lab uses the star that you loaded.',
+foot:'CHRONOS uses the words candidate and consistent. It never claims a discovery. Every result carries a label: real data, injected test source, or simulation.',
+T:{barnard:'The fastest star in our sky. It moves about one and a half pixels each year. Very bright: some real pictures can be saturated.',
+epsindib:'Two brown dwarfs that SPHEREx sees as one dot. They move fast across the sky.',
+wise0855:'A very cold and very faint neighbor of the Sun. Expect to see nothing in most colors. That is a result too.',
+rwaur:'A young double star. It dims when dust passes in front. SPHEREx sees the two stars as one dot.',
+rdra:'A red giant that swells and shrinks. Its light rises and falls about every 8 months. Very bright: real pictures can be saturated.'},
+loading:'Loading the pictures.',
+loaded:(n,d,f,k,a)=>`${n} pictures over ${Math.round(d)} days. ${f} fair pairs exist. Noise check: the error in the files had to be multiplied by ${k.low.toFixed(2)} to ${k.high.toFixed(2)}. Each picture is held in place by about ${Math.round(a)} reference stars.`,
+nofair:'No two pictures of this star have the same color. The plot shows it. This is a valid result.',
+picked:(e,n)=>`Picture on day ${e.day.toFixed(0)}, ${e.lam.toFixed(3)} micron, detector ${e.det}. ${n?n+' fair partners are green. Pick one. Or pick a grey dot to see an unfair pair.':'It has no fair partner. Pick another dot.'}`,
+cap:(e)=>`Day ${e.day.toFixed(0)}, ${e.lam.toFixed(3)} micron, detector ${e.det}`,
+c1a:'First picture, lined up with the second. ',c1b:'Now showing the second picture. ',c2:'Second picture. ',
+fair:'Fair pair',unfair:'Not a fair pair',score:s=>`Score ${s} of 100`,
+why:{det:'The two pictures come from different detectors. They show different colors. Do not compare them.',
+ok:d=>`Same detector and matched color. The pictures are ${d} days apart.`,
+far:c=>`The colors differ by ${c.toFixed(2)} of one channel width. The limit is 0.50.`,
+near:c=>`The colors differ by ${c.toFixed(2)} of one channel width. That is close to the limit of 0.50.`,
+unk:'The file does not give the color at the star. The pair cannot be called fair.',
+flag:n=>`Bad pixels sit on the star in ${n} of the two pictures.`,
+rel:'The pictures come from different data releases. Brightness needs the flux correction first. Positions can still be compared.',
+zodi:'The sky background differs by more than 20 percent.'},
+chip:{color:v=>v==null?'Color unknown':`Color match ${v} of a channel`,signal:v=>`Signal ${v}`,flags:v=>v?`Bad pixels in ${v}`:'Clean pixels',baseline:v=>`${v} days apart`,release:v=>v=='same'?'Same release':'Different release',anchors:v=>`${v} reference stars`},
+dir:x=>x<0?'fainter':'brighter',
+fc0:'The meter needs three or more clean colors on this detector. It cannot run here.',
+fc:(p,m,real,fair)=>`Color alone makes the star look ${Math.abs(p).toFixed(1)} percent ${L.en.dir(p)}. `+(m==null?'':`The pictures show it ${Math.abs(m).toFixed(1)} percent ${L.en.dir(m)}. `+(real?'So a real change remains.':'So nothing real changed between these two pictures.'))+(fair?'':' An honest tool must not blink this pair without the warning.'),
+fcl:['Color alone','Measured'],fcx:'Brightness change in percent. Left is fainter, right is brighter.',
+wit:{ask:'Checking the other pictures.',sky:(s,n)=>`This spot is part of the sky. It appears again in ${s} of ${n} other pictures.`,single:n=>`This spot appears in this picture only, and in none of ${n} others. It is a camera glitch, a cosmic ray, or an object that moved away.`,mixed:(s,n)=>`This spot appears again in ${s} of ${n} other pictures. It is faint, or it shows in some colors only.`,none:'No other picture covers this place.'},
+mo:{'Motion model preferred':'It moves.','Fixed position preferred':'It stays in place.','Inconclusive':'The data cannot decide.'},
+mosay:(f,m)=>f.pm==null?(f.frames?'Too few pictures show the star for a motion measurement.':'The star was not seen in any picture. No motion can be measured. This is a nondetection.'):`Measured motion: ${f.pm.toFixed(2)} plus or minus ${f.err.toFixed(2)} arcseconds per year, from ${f.frames} pictures over ${Math.round(f.baseline_days)} days. `+(m.expected_arcsec_per_year>0.05?`The star catalog says ${m.expected_arcsec_per_year.toFixed(2)}. The difference is ${Math.abs(m.pull).toFixed(1)} times the error. `+(Math.abs(m.pull)<3?'The measurement passes this truth test.':'The measurement fails this truth test. Do not trust the motion.'):'The catalog says that this star does not move at this scale.')+(f.parallax!=null&&m.expected_parallax?` Yearly wobble from the orbit of the Earth (parallax): ${f.parallax.toFixed(2)} plus or minus ${f.parallax_err.toFixed(2)} arcseconds. The catalog says ${m.expected_parallax.toFixed(2)}.`:'')+(f.skipped?` ${f.skipped} pictures were left out: star too faint or bad pixels.`:''),
+moax:['Days since the first picture','Shift on the sky (arcseconds)'],mok:['East','North'],
+sp:{var:'The brightness changed.',flat:'The brightness did not change.',few:'Too few matched colors to decide.'},
+spsay:(v,n)=>n<3?'Fewer than three colors have a fair partner in a later visit.':`${n} colors were compared with a later visit at the same color. The reference stars removed calibration drift. `+(v.z>5?`The star is ${Math.abs(100*(v.mean_ratio-1)).toFixed(0)} percent ${L.en.dir(v.mean_ratio-1)} on average. `+(Math.abs(v.color_sigma)>3?'The change is stronger at one end of the spectrum. Dust or temperature does that. A calibration error does not.':'The change is the same at all colors.'):'All ratios agree with no change.'),
+spax:['Color (micron)','Later brightness divided by first brightness'],spax2:['Color (micron)','Brightness (microJy)'],
+no:{ok:'The error bars are honest now.',fix:'The files were too optimistic. CHRONOS corrected them.'},
+nosay:(lo,hi)=>`CHRONOS measures the real scatter of empty sky in every picture and compares it with the error in the file. 1.00 means the file is right. Here the factor runs from ${lo.toFixed(2)} to ${hi.toFixed(2)}. Every error bar on this page already uses the corrected value.`,
+noax:['Detector','Real noise divided by file noise'],
+rc:t=>`Sources brighter than about ${t} times the noise are found reliably.`,
+rcsay:(r)=>`CHRONOS hides fake stars of known brightness in empty sky and tries to find them again. The alarm level is ${r.threshold.toFixed(1)} times the noise. At ${r.control.places} empty places it raised ${r.control.alarms} false alarms.`,
+rcax:['Brightness of the fake star (times the noise)','Fraction found'],
+beh:{'Motion candidate':'This star moves.','Variable source candidate':'This star changes brightness.','Moving and variable candidate':'This star moves and changes brightness.','Approximately stable source':'This star is steady.','Inconclusive':'The data cannot decide yet.'},
+copied:'Link copied.',err:'Something did not work: '
+},bn:{
+h1:'একই আকাশ। একই রঙ। তারপর তুলনা।',
+lead1:'অনেক বছর আগে এক তরুণ রাতের আকাশের দুটি ছবি পালা করে দেখে প্লুটো খুঁজে পেয়েছিলেন। আজ SPHEREx টেলিস্কোপ পুরো আকাশের ছবি বারবার তোলে। কিন্তু সে দেখে রংধনু রঙের এক জানালা দিয়ে। প্রতিটি ছবিতে একটি তারা শুধু একটি রঙে ধরা পড়ে।',
+lead2:'ভিন্ন রঙের দুটি ছবি পালা করে দেখলে মনে হয় তারাটি বদলে গেছে। আসলে বদলায়নি। CHRONOS আগে একই রঙের দুটি ছবি খুঁজে বের করে। তারপর দেখায় কী বদলেছে, আর সে কতটা নিশ্চিত।',
+aside:'যশোরে রাধাগোবিন্দ চন্দ্র খালি চোখে তারার বদল দেখতেন এবং হাজার হাজার পর্যবেক্ষণ সারা বিশ্বের জ্যোতির্বিদদের কাছে পাঠাতেন। CHRONOS সেই একই কাজ করে একটি মহাকাশ টেলিস্কোপ দিয়ে।',
+src:'তথ্য',sim:'অনুশীলনের আকাশ (ইন্টারনেট ছাড়াই চলে)',live:'SPHEREx এর আসল আর্কাইভ',band:'ব্যান্ড',bandauto:'এই তারার জন্য সেরা',bandall:'সব ব্যান্ড, কম ছবি',rel:'রিলিজ',tour:'পুরো গল্পটি চালান',
+stamp_sim:'অনুশীলনের আকাশ। সিমুলেশন তথ্য।',stamp_live:'SPHEREx এর আসল তথ্য।',stamp_none:'কোনো তথ্য লোড হয়নি',
+s1h:'SPHEREx কখন তাকিয়েছিল, কোন রঙে?',s1p:'প্রতিটি বিন্দু আপনার তারার একটি ছবি। বাম থেকে ডানে সময়। নিচ থেকে উপরে রঙ। একটি বিন্দু বেছে নিন। যে ছবিগুলোর রঙ মেলে সেগুলো সবুজ হয়ে জ্বলবে। ওরাই ন্যায্য সঙ্গী।',
+best:'আমার জন্য সেরা ন্যায্য জোড়া বেছে দিন',
+s2h:'এই তুলনা কি ন্যায্য?',s2p:'ন্যায্য জোড়া মানে একই ডিটেক্টর, তারার জায়গায় একই রঙ, আর পরিষ্কার পিক্সেল। মিটারটি দেখায় রঙ না মিললে কতটা ভুয়া পরিবর্তন তৈরি হয়।',
+fch:'ভুয়া পরিবর্তন মিটার',
+s3h:'কী বদলেছে?',s3p:'প্রথম ছবিটি দ্বিতীয় ছবির সাথে মিলিয়ে বসানো হয়েছে। পার্থক্যের ছবিতে লাল মানে উজ্জ্বল হয়েছে, নীল মানে ম্লান হয়েছে। কোনো দাগ আসল কি না জানতে তার উপর ক্লিক করুন।',
+c3:'পার্থক্য। যে তারা বদলায়নি সেগুলো ফ্যাকাশে থাকে।',blink:'ব্লিঙ্ক',wipe:'ওয়াইপ',flags:'খারাপ পিক্সেল দেখান',
+s4h:'আমরা কতটা নিশ্চিত?',s4p:'চারটি পরীক্ষা। প্রতিটিতে ফেল করা সম্ভব। সেটাই আসল কথা।',
+tmo:'এটি কি সরছে?',tsp:'উজ্জ্বলতা কি বদলাচ্ছে?',tno:'ত্রুটিসীমা কি সৎ?',trc:'সবচেয়ে ম্লান কী খুঁজে পাওয়া যায়?',
+s5h:'রায়',s5p:'সহজ ভাষায়, শুধু উপরের সংখ্যাগুলো থেকে তৈরি।',dl:'কেস ফাইল নামান',lk:'এই দৃশ্যের লিংক কপি করুন',
+lab:'ল্যাব: আরও টুল',labp:'কৌতূহলীদের জন্য বাড়তি টুল। ল্যাব আপনার লোড করা তারাটি ব্যবহার করে।',
+foot:'CHRONOS প্রার্থী এবং সঙ্গতিপূর্ণ শব্দ ব্যবহার করে। এটি কখনো আবিষ্কারের দাবি করে না। প্রতিটি ফলাফলে লেবেল থাকে: আসল তথ্য, ঢোকানো পরীক্ষামূলক উৎস, অথবা সিমুলেশন।',
+T:{barnard:'আমাদের আকাশের সবচেয়ে দ্রুতগামী তারা। বছরে প্রায় দেড় পিক্সেল সরে। খুব উজ্জ্বল, তাই কিছু আসল ছবি স্যাচুরেটেড হতে পারে।',
+epsindib:'দুটি বাদামি বামন, SPHEREx যাদের একটি বিন্দু হিসেবে দেখে। এরা আকাশে দ্রুত সরে।',
+wise0855:'সূর্যের খুব ঠান্ডা ও খুব ম্লান এক প্রতিবেশী। বেশির ভাগ রঙে কিছুই দেখা যাবে না। সেটাও একটি ফলাফল।',
+rwaur:'একটি তরুণ জোড়া তারা। সামনে দিয়ে ধুলো গেলে এটি ম্লান হয়। SPHEREx দুটি তারাকে একটি বিন্দু হিসেবে দেখে।',
+rdra:'একটি লাল দানব তারা যা ফোলে ও সংকুচিত হয়। প্রায় ৮ মাস পরপর এর আলো বাড়ে ও কমে। খুব উজ্জ্বল, তাই আসল ছবি স্যাচুরেটেড হতে পারে।'},
+loading:'ছবিগুলো লোড হচ্ছে।',
+loaded:(n,d,f,k,a)=>`${Math.round(d)} দিনে ${n}টি ছবি। ${f}টি ন্যায্য জোড়া আছে। নয়েজ পরীক্ষা: ফাইলের ত্রুটিকে ${k.low.toFixed(2)} থেকে ${k.high.toFixed(2)} দিয়ে গুণ করতে হয়েছে। প্রতিটি ছবি প্রায় ${Math.round(a)}টি রেফারেন্স তারা দিয়ে ঠিক জায়গায় বসানো।`,
+nofair:'এই তারার কোনো দুটি ছবির রঙ এক নয়। গ্রাফেই তা দেখা যাচ্ছে। এটিও একটি বৈধ ফলাফল।',
+picked:(e,n)=>`${e.day.toFixed(0)} নম্বর দিনের ছবি, ${e.lam.toFixed(3)} মাইক্রন, ডিটেক্টর ${e.det}। ${n?n+'টি ন্যায্য সঙ্গী সবুজ। একটি বেছে নিন। অন্যায্য জোড়া দেখতে চাইলে ধূসর বিন্দু বেছে নিন।':'এর কোনো ন্যায্য সঙ্গী নেই। অন্য বিন্দু বেছে নিন।'}`,
+cap:(e)=>`দিন ${e.day.toFixed(0)}, ${e.lam.toFixed(3)} মাইক্রন, ডিটেক্টর ${e.det}`,
+c1a:'প্রথম ছবি, দ্বিতীয়টির সাথে মিলিয়ে বসানো। ',c1b:'এখন দ্বিতীয় ছবি দেখাচ্ছে। ',c2:'দ্বিতীয় ছবি। ',
+fair:'ন্যায্য জোড়া',unfair:'ন্যায্য জোড়া নয়',score:s=>`স্কোর ১০০ এর মধ্যে ${s}`,
+why:{det:'ছবি দুটি ভিন্ন ডিটেক্টরের। এরা ভিন্ন রঙ দেখায়। এদের তুলনা করবেন না।',
+ok:d=>`একই ডিটেক্টর এবং রঙ মিলেছে। ছবি দুটির মধ্যে ${d} দিনের ব্যবধান।`,
+far:c=>`রঙের পার্থক্য এক চ্যানেল প্রস্থের ${c.toFixed(2)} ভাগ। সীমা 0.50।`,
+near:c=>`রঙের পার্থক্য এক চ্যানেল প্রস্থের ${c.toFixed(2)} ভাগ। এটি 0.50 সীমার কাছাকাছি।`,
+unk:'ফাইলে তারার জায়গার রঙ দেওয়া নেই। এই জোড়াকে ন্যায্য বলা যায় না।',
+flag:n=>`দুটি ছবির ${n}টিতে তারার উপর খারাপ পিক্সেল আছে।`,
+rel:'ছবি দুটি ভিন্ন ডেটা রিলিজের। উজ্জ্বলতার জন্য আগে ফ্লাক্স সংশোধন দরকার। অবস্থানের তুলনা করা যায়।',
+zodi:'আকাশের পটভূমির আলো ২০ শতাংশের বেশি আলাদা।'},
+chip:{color:v=>v==null?'রঙ অজানা':`রঙের মিল: চ্যানেলের ${v} ভাগ`,signal:v=>`সংকেত ${v}`,flags:v=>v?`${v}টি ছবিতে খারাপ পিক্সেল`:'পরিষ্কার পিক্সেল',baseline:v=>`${v} দিনের ব্যবধান`,release:v=>v=='same'?'একই রিলিজ':'ভিন্ন রিলিজ',anchors:v=>`${v}টি রেফারেন্স তারা`},
+dir:x=>x<0?'ম্লান':'উজ্জ্বল',
+fc0:'মিটারের জন্য এই ডিটেক্টরে তিন বা তার বেশি পরিষ্কার রঙ দরকার। এখানে এটি চলবে না।',
+fc:(p,m,real,fair)=>`শুধু রঙের কারণেই তারাটি ${Math.abs(p).toFixed(1)} শতাংশ বেশি ${L.bn.dir(p)} দেখায়। `+(m==null?'':`ছবিতে দেখা যায় ${Math.abs(m).toFixed(1)} শতাংশ বেশি ${L.bn.dir(m)}। `+(real?'অর্থাৎ একটি আসল পরিবর্তন থেকে যায়।':'অর্থাৎ এই দুটি ছবির মধ্যে আসলে কিছুই বদলায়নি।'))+(fair?'':' সতর্কবার্তা ছাড়া এই জোড়া ব্লিঙ্ক করা একটি সৎ টুলের কাজ নয়।'),
+fcl:['শুধু রঙের কারণে','মাপা পরিবর্তন'],fcx:'উজ্জ্বলতার পরিবর্তন, শতাংশে। বামে ম্লান, ডানে উজ্জ্বল।',
+wit:{ask:'অন্য ছবিগুলো দেখা হচ্ছে।',sky:(s,n)=>`এই দাগটি আকাশের অংশ। অন্য ${n}টি ছবির ${s}টিতে এটি আবার দেখা যায়।`,single:n=>`এই দাগটি শুধু এই ছবিতেই আছে, অন্য ${n}টির কোনোটিতে নেই। এটি ক্যামেরার ত্রুটি, মহাজাগতিক রশ্মি, অথবা সরে যাওয়া কোনো বস্তু।`,mixed:(s,n)=>`অন্য ${n}টি ছবির ${s}টিতে এই দাগটি আবার দেখা যায়। এটি ম্লান, অথবা শুধু কিছু রঙে দেখা যায়।`,none:'অন্য কোনো ছবিতে এই জায়গাটি নেই।'},
+mo:{'Motion model preferred':'এটি সরছে।','Fixed position preferred':'এটি এক জায়গায় আছে।','Inconclusive':'তথ্য থেকে সিদ্ধান্ত নেওয়া যায় না।'},
+mosay:(f,m)=>f.pm==null?(f.frames?'গতি মাপার জন্য খুব কম ছবিতে তারাটি দেখা গেছে।':'কোনো ছবিতেই তারাটি দেখা যায়নি। গতি মাপা সম্ভব নয়। এটি একটি অশনাক্তকরণ।'):`মাপা গতি: বছরে ${f.pm.toFixed(2)} ± ${f.err.toFixed(2)} আর্কসেকেন্ড, ${Math.round(f.baseline_days)} দিনে ${f.frames}টি ছবি থেকে। `+(m.expected_arcsec_per_year>0.05?`তারার ক্যাটালগ বলে ${m.expected_arcsec_per_year.toFixed(2)}। পার্থক্য ত্রুটিসীমার ${Math.abs(m.pull).toFixed(1)} গুণ। `+(Math.abs(m.pull)<3?'মাপটি এই সত্য পরীক্ষায় পাস করেছে।':'মাপটি এই সত্য পরীক্ষায় ফেল করেছে। এই গতির উপর ভরসা করবেন না।'):'ক্যাটালগ বলে এই মাপে তারাটি সরে না।')+(f.parallax!=null&&m.expected_parallax?` পৃথিবীর কক্ষপথের কারণে বার্ষিক দোলন (প্যারালাক্স): ${f.parallax.toFixed(2)} ± ${f.parallax_err.toFixed(2)} আর্কসেকেন্ড। ক্যাটালগ বলে ${m.expected_parallax.toFixed(2)}।`:'')+(f.skipped?` ${f.skipped}টি ছবি বাদ পড়েছে: তারা খুব ম্লান অথবা পিক্সেল খারাপ।`:''),
+moax:['প্রথম ছবির পর থেকে দিন','আকাশে সরণ (আর্কসেকেন্ড)'],mok:['পূর্ব','উত্তর'],
+sp:{var:'উজ্জ্বলতা বদলেছে।',flat:'উজ্জ্বলতা বদলায়নি।',few:'সিদ্ধান্তের জন্য মিলে যাওয়া রঙ খুব কম।'},
+spsay:(v,n)=>n<3?'তিনটির কম রঙের জন্য পরের পর্যবেক্ষণে ন্যায্য সঙ্গী আছে।':`${n}টি রঙ পরের পর্যবেক্ষণের একই রঙের সাথে তুলনা করা হয়েছে। রেফারেন্স তারাগুলো ক্যালিব্রেশনের বিচ্যুতি সরিয়েছে। `+(v.z>5?`তারাটি গড়ে ${Math.abs(100*(v.mean_ratio-1)).toFixed(0)} শতাংশ বেশি ${L.bn.dir(v.mean_ratio-1)}। `+(Math.abs(v.color_sigma)>3?'বর্ণালির এক প্রান্তে পরিবর্তন বেশি। ধুলো বা তাপমাত্রা এমন করে। ক্যালিব্রেশনের ভুল এমন করে না।':'সব রঙে পরিবর্তন সমান।'):'সব অনুপাত কোনো পরিবর্তন না হওয়ার সাথে মেলে।'),
+spax:['রঙ (মাইক্রন)','পরের উজ্জ্বলতা ভাগ প্রথম উজ্জ্বলতা'],spax2:['রঙ (মাইক্রন)','উজ্জ্বলতা (মাইক্রোজানস্কি)'],
+no:{ok:'ত্রুটিসীমা এখন সৎ।',fix:'ফাইলগুলো বেশি আশাবাদী ছিল। CHRONOS তা ঠিক করেছে।'},
+nosay:(lo,hi)=>`CHRONOS প্রতিটি ছবিতে ফাঁকা আকাশের আসল বিক্ষেপ মাপে এবং ফাইলের ত্রুটির সাথে তুলনা করে। 1.00 মানে ফাইল ঠিক আছে। এখানে গুণকটি ${lo.toFixed(2)} থেকে ${hi.toFixed(2)}। এই পাতার প্রতিটি ত্রুটিসীমায় সংশোধিত মান ব্যবহার করা হয়েছে।`,
+noax:['ডিটেক্টর','আসল নয়েজ ভাগ ফাইলের নয়েজ'],
+rc:t=>`নয়েজের প্রায় ${t} গুণের চেয়ে উজ্জ্বল উৎস নির্ভরযোগ্যভাবে খুঁজে পাওয়া যায়।`,
+rcsay:(r)=>`CHRONOS ফাঁকা আকাশে জানা উজ্জ্বলতার নকল তারা লুকিয়ে রাখে এবং আবার খুঁজে বের করার চেষ্টা করে। সতর্কসীমা নয়েজের ${r.threshold.toFixed(1)} গুণ। ${r.control.places}টি ফাঁকা জায়গায় এটি ${r.control.alarms}টি ভুল সতর্কসংকেত দিয়েছে।`,
+rcax:['নকল তারার উজ্জ্বলতা (নয়েজের গুণ)','খুঁজে পাওয়ার ভগ্নাংশ'],
+beh:{'Motion candidate':'এই তারাটি সরছে।','Variable source candidate':'এই তারার উজ্জ্বলতা বদলায়।','Moving and variable candidate':'এই তারাটি সরছে এবং এর উজ্জ্বলতা বদলায়।','Approximately stable source':'এই তারাটি স্থির।','Inconclusive':'তথ্য থেকে এখনো সিদ্ধান্ত নেওয়া যায় না।'},
+copied:'লিংক কপি হয়েছে।',err:'কিছু একটা কাজ করেনি: '
+}};
+let lang='en',names={},ex=[],SA=null,SB=null,part={},P=null,card={},key='',blinkT=null,busy=false,tab='';
+const t=()=>L[lang];
+async function api(u,o){const r=await fetch(u,o),j=await r.json();if(!r.ok)throw new Error(j.detail||r.status);return j}
+function show(id){const s=$(id);s.hidden=false;return s}
+function go(id){$(id).scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}
+const num=v=>(v<0?(lang=='bn'?'মাইনাস ':'minus '):'')+Math.abs(v);
+
+function words(){document.documentElement.lang=lang;document.querySelectorAll('[data-t]').forEach(e=>e.textContent=t()[e.dataset.t]);
+$('stars').innerHTML=Object.keys(names).map(k=>`<button data-k="${k}" aria-pressed="${k==key}"><b>${names[k].name}</b><span>${t().T[k]||''}</span></button>`).join('');
+$('stars').querySelectorAll('button').forEach(b=>b.onclick=()=>load(b.dataset.k).catch(fail));
+$('key').innerHTML=EDGE.map((e,i)=>`<span><i style="background:${BAND[i]}"></i>${lang=='bn'?'ডিটেক্টর':'Detector'} ${i+1}</span>`).join('')+(lang=='bn'?'<span>ভরাট বিন্দু: তারা দেখা যাওয়ার কথা। ফাঁপা বিন্দু: দেখা না যাওয়ার কথা।</span>':'<span>Filled dot: the star is expected to show. Hollow dot: it is expected to be invisible.</span>');
+stamp();if(ex.length){drawPlane();if(P)renderPair();if(tab)check(tab).catch(fail);if(!$('s5').hidden)verdict().catch(fail)}}
+function stamp(){const s=$('stamp'),m=card.label;s.className=m=='REAL SPHEREx'?'real':m?'sim':'';s.textContent=m=='REAL SPHEREx'?t().stamp_live:m?t().stamp_sim:t().stamp_none}
+function fail(e){$('loadsay').textContent=t().err+e.message+($('mode').value=='live'?(lang=='bn'?' অনুশীলনের আকাশ এখনো কাজ করে।':' The practice sky still works.'):'');busy=false}
+
+function fit(cv){const d=devicePixelRatio||1,w=cv.clientWidth,h=+cv.getAttribute('height');cv.width=w*d;cv.height=h*d;cv.style.height=h+'px';const g=cv.getContext('2d');g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,w,h);g.font='13px '+getComputedStyle(document.body).fontFamily;return[g,w,h]}
+const ink='#14233b',soft='#52617a';
+function ticks(a,b,n){const s=(b-a)/n,p=Math.pow(10,Math.floor(Math.log10(s))),q=s/p,st=(q<1.5?1:q<3.5?2:q<7.5?5:10)*p,o=[];for(let v=Math.ceil(a/st)*st;v<=b+1e-9;v+=st)o.push(+v.toPrecision(10));return o}
+
+function drawPlane(){const cv=$('plane'),[g,w,h]=fit(cv);if(!ex.length)return;
+const x1=Math.max(...ex.map(e=>e.day))||1,X=d=>58+d/x1*(w-84),Y=l=>h-40-(Math.log(l)-Math.log(.72))/(Math.log(5.15)-Math.log(.72))*(h-58);
+EDGE.forEach((e,i)=>{g.globalAlpha=.11;g.fillStyle=BAND[i];g.fillRect(46,Y(e[1]),w-58,Y(e[0])-Y(e[1]));g.globalAlpha=1});
+g.fillStyle=soft;g.textAlign='right';[.8,1,1.5,2,3,4,5].forEach(l=>g.fillText(l,40,Y(l)+4));
+g.textAlign='center';ticks(0,x1,7).forEach(d=>g.fillText(d,X(d),h-20));
+g.textAlign='left';g.fillText(lang=='bn'?'প্রথম ছবির পর থেকে দিন':'Days since the first picture',58,h-4);
+g.save();g.translate(12,h-44);g.rotate(-Math.PI/2);g.fillText(lang=='bn'?'রঙ (মাইক্রন)':'Color (micron)',0,0);g.restore();
+ex.forEach(e=>{e.px=X(e.day);e.py=Y(e.lam);const p=part[e.i],on=SA==null||e.i==SA||e.i==SB||(p&&p.fair),c=BAND[e.det-1]||soft;
+g.globalAlpha=on?1:.42;g.lineWidth=2;g.strokeStyle=c;g.fillStyle=c;g.beginPath();g.arc(e.px,e.py,5,0,7);
+if(e.forecast=='not visible'){g.fillStyle='#fff';g.fill();g.stroke()}else{if(e.forecast=='marginal')g.globalAlpha*=.6;g.fill()}
+g.globalAlpha=1;if(SA!=null&&p&&p.fair&&e.i!=SB){g.strokeStyle='#1c7a5a';g.lineWidth=3;g.beginPath();g.arc(e.px,e.py,9.5,0,7);g.stroke()}
+if(e.flags&&e.flags.length){g.strokeStyle='#b3261e';g.lineWidth=1.5;g.beginPath();g.moveTo(e.px-4,e.py-4);g.lineTo(e.px+4,e.py+4);g.stroke()}});
+[[SA,'1'],[SB,'2']].forEach(([i,n])=>{if(i==null)return;const e=ex[i];g.fillStyle=ink;g.beginPath();g.arc(e.px,e.py,11,0,7);g.fill();g.fillStyle='#fff';g.textAlign='center';g.font='bold 13px sans-serif';g.fillText(n,e.px,e.py+4.5)});
+cv.setAttribute('aria-label',`${ex.length} ${lang=='bn'?'টি ছবি। তীর চিহ্ন দিয়ে বিন্দু বদলান, এন্টার দিয়ে বেছে নিন।':'pictures. Use the arrow keys to move between dots and Enter to pick one.'}`)}
+let cur=0;
+function nearest(ev){const r=$('plane').getBoundingClientRect(),x=ev.clientX-r.left,y=ev.clientY-r.top;let b=null,d=22;ex.forEach(e=>{const q=Math.hypot(e.px-x,e.py-y);if(q<d){d=q;b=e}});return b}
+$('plane').onclick=ev=>{const e=nearest(ev);if(e)pick(e.i).catch(fail)};
+$('plane').onkeydown=ev=>{if(!ex.length)return;if(ev.key=='ArrowRight'||ev.key=='ArrowUp')cur=(cur+1)%ex.length;else if(ev.key=='ArrowLeft'||ev.key=='ArrowDown')cur=(cur+ex.length-1)%ex.length;else if(ev.key=='Enter'||ev.key==' '){ev.preventDefault();return pick(cur).catch(fail)}else return;ev.preventDefault();$('picksay').textContent=t().cap(ex[cur])};
+
+async function load(k){if(busy)return;busy=true;key=k;stopBlink();$('loadsay').textContent=t().loading;['s1','s2','s3','s4','s5'].forEach(s=>$(s).hidden=true);
+document.querySelectorAll('#stars button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k==k));
+const j=await api(`/api/load?t=${k}&mode=${$('mode').value}&coll=${encodeURIComponent($('rel').value)}&det=${$('det').value}`);
+ex=j.exposures;SA=SB=null;part={};P=null;tab='';card={label:j.label,target:j.target,key:k,fair_pairs:j.fair_pairs,noise:j.noise,brightness_model:j.brightness_model,archive_report:j.report};
+stamp();$('loadsay').textContent=t().loaded(ex.length,j.span_days,j.fair_pairs,j.noise,j.anchors)+(j.fair_pairs?'':' '+t().nofair);
+show('s1');drawPlane();$('picksay').textContent='';url();busy=false;go('s1')}
+async function pick(i){if(SA==null||SB!=null||i==SA){SA=i;SB=null;P=null;const r=await api('/api/partners?ref='+i);part={};r.forEach(p=>part[p.i]=p);drawPlane();
+$('picksay').textContent=t().picked(ex[i],r.filter(p=>p.fair).length)}else{SB=i;drawPlane();await compare()}}
+async function compare(){if(ex[SA].mjd>ex[SB].mjd)[SA,SB]=[SB,SA];P=await api(`/api/pair?a=${SA}&b=${SB}`);card.pair=P;drawPlane();show('s2');show('s3');show('s4');show('s5');renderPair();url();go('s2');
+if(!tab)check('mo').catch(fail);verdict().catch(fail)}
+function reasons(){const p=P.parts,w=t().why,o=[];if(P.score==0&&p.color==null&&ex[SA].det!=ex[SB].det)return[w.det];
+if(P.fair)o.push(w.ok(Math.round(p.days)));if(p.color==null)o.push(w.unk);else if(p.color>.5)o.push(w.far(p.color));else if(p.color>.3)o.push(w.near(p.color));
+if(p.flags.length)o.push(w.flag(p.flags.length));if(!p.release)o.push(w.rel);if(p.zodi>.2)o.push(w.zodi);return o}
+function renderPair(){$('verdict').className='verdict '+(P.fair?'fair':'unfair');$('vword').textContent=P.fair?t().fair:t().unfair;$('vscore').textContent=t().score(P.score);
+$('why').innerHTML=reasons().map(r=>`<li>${r}</li>`).join('');$('chips').innerHTML=P.chips.map(c=>`<span class="chip ${c.c}">${t().chip[c.k](c.v)}</span>`).join('');
+const f=P.false_change;if(!f){$('fcsay').textContent=t().fc0;fit($('fc'))}else{const real=f.excess_sigma!=null&&Math.abs(f.excess_sigma)>3;
+$('fcsay').textContent=t().fc(100*f.predicted,f.measured==null?null:100*f.measured,real,P.fair);meter(f)}
+const fl=$('fl').checked?1:0;$('ia').src=`/api/frame/${SA}.png?to=${SB}`;$('ia2').src=`/api/frame/${SB}.png`;$('ib').src=`/api/frame/${SB}.png?flags=${fl}`;$('iz').src=`/api/z/${SA}/${SB}.png`;
+$('c1').textContent=t().c1a+t().cap(ex[SA]);$('c2').textContent=t().c2+t().cap(ex[SB]);$('ia').alt=$('c1').textContent;$('ib').alt=$('c2').textContent;$('iz').alt=t().c3;
+$('wipe').value=0;$('ia2').style.opacity=0;$('witsay').textContent='';document.querySelectorAll('.mark').forEach(m=>m.remove())}
+function meter(f){const[g,w,h]=fit($('fc')),v=[100*f.predicted,f.measured==null?0:100*f.measured],e=[100*f.predicted_err,100*(f.measured_err||0)],m=Math.max(2,...v.map((x,i)=>Math.abs(x)+e[i]))*1.25,X=x=>w/2+x/m*(w/2-150);
+g.strokeStyle='#b9c5cf';g.lineWidth=1;g.beginPath();g.moveTo(w/2,8);g.lineTo(w/2,h-26);g.stroke();g.fillStyle=soft;g.textAlign='center';g.fillText('0',w/2,h-12);
+ticks(-m,m,6).forEach(x=>{if(x)g.fillText(Math.abs(x),X(x),h-12)});g.textAlign='left';
+[[0,'#cf8412',26],[1,ink,62]].forEach(([i,c,y])=>{if(i&&f.measured==null)return;g.fillStyle=c;g.strokeStyle=c;g.lineWidth=3;g.fillRect(Math.min(w/2,X(v[i])),y-7,Math.abs(X(v[i])-w/2),14);
+g.beginPath();g.moveTo(X(v[i]-e[i]),y);g.lineTo(X(v[i]+e[i]),y);g.stroke();g.fillStyle=ink;g.fillText(t().fcl[i],8,y+4)});
+$('fc').setAttribute('aria-label',t().fcx)}
+
+function stopBlink(){if(blinkT){clearInterval(blinkT);blinkT=null}$('blink').setAttribute('aria-pressed','false');$('ia2').style.opacity=$('wipe').value/100;if(P)$('c1').textContent=t().c1a+t().cap(ex[SA])}
+$('blink').onclick=()=>{if(blinkT)return stopBlink();if(!P)return;let f=0;$('blink').setAttribute('aria-pressed','true');
+blinkT=setInterval(()=>{f^=1;$('ia2').style.opacity=f;$('c1').textContent=(f?t().c1b+t().cap(ex[SB]):t().c1a+t().cap(ex[SA]))},1000)};
+$('wipe').oninput=()=>{stopBlink();$('ia2').style.opacity=$('wipe').value/100};
+$('fl').onchange=()=>{if(P)$('ib').src=`/api/frame/${SB}.png?flags=${$('fl').checked?1:0}`};
+['p1','p2','p3'].forEach(id=>$(id).onclick=async ev=>{if(!P)return;const r=$(id).getBoundingClientRect(),fx=(ev.clientX-r.left)/r.width,fy=(ev.clientY-r.top)/r.height;
+document.querySelectorAll('.mark').forEach(m=>m.remove());['p1','p2','p3'].forEach(q=>{const m=document.createElement('div');m.className='mark';m.style.left=fx*100+'%';m.style.top=fy*100+'%';$(q).appendChild(m)});
+$('witsay').textContent=t().wit.ask;try{const w=await api(`/api/witness?i=${SB}&x=${fx*P.size[0]-.5}&y=${fy*P.size[1]-.5}`);card.spot=w;
+$('witsay').textContent=w.frames==0?t().wit.none:w.kind=='sky'?t().wit.sky(w.seen,w.frames):w.kind=='single'?t().wit.single(w.frames):t().wit.mixed(w.seen,w.frames)}catch(e){$('witsay').textContent=t().err+e.message}});
+
+function chart(o){const[g,w,h]=fit($('plot')),xs=[],ys=[];o.s.forEach(s=>s.p.forEach(p=>{xs.push(p.x);ys.push(p.y-(p.e||0),p.y+(p.e||0))}));if(o.h!=null)ys.push(o.h);if(!xs.length)return;
+let x0=Math.min(...xs),x1=Math.max(...xs),y0=o.y0!=null?o.y0:Math.min(...ys),y1=o.y1!=null?o.y1:Math.max(...ys);if(x1==x0)x1=x0+1;if(y1==y0)y1=y0+1;const px=(x1-x0)*.04,py=(y1-y0)*.08;x0-=px;x1+=px;if(o.y0==null)y0-=py;if(o.y1==null)y1+=py;
+const X=v=>64+(v-x0)/(x1-x0)*(w-84),Y=v=>h-46-(v-y0)/(y1-y0)*(h-66);
+g.strokeStyle='#dbe2e8';g.fillStyle=soft;g.lineWidth=1;g.textAlign='right';ticks(y0,y1,5).forEach(v=>{g.beginPath();g.moveTo(64,Y(v));g.lineTo(w-20,Y(v));g.stroke();g.fillText(num(v),58,Y(v)+4)});
+g.textAlign='center';(o.xt||ticks(x0,x1,7)).forEach(v=>g.fillText(num(v),X(v),h-26));g.fillText(o.ax[0],64+(w-84)/2,h-6);
+g.save();g.translate(14,h-46-(h-66)/2);g.rotate(-Math.PI/2);g.fillText(o.ax[1],0,0);g.restore();
+if(o.h!=null){g.strokeStyle=soft;g.setLineDash([5,4]);g.beginPath();g.moveTo(64,Y(o.h));g.lineTo(w-20,Y(o.h));g.stroke();g.setLineDash([])}
+let lx=72;o.s.forEach(s=>{g.strokeStyle=g.fillStyle=s.c;g.lineWidth=2;if(s.l){g.beginPath();s.l.forEach((p,i)=>i?g.lineTo(X(p.x),Y(p.y)):g.moveTo(X(p.x),Y(p.y)));g.stroke()}
+s.p.forEach(p=>{g.fillStyle=g.strokeStyle=p.c||s.c;if(p.e){g.lineWidth=1.5;g.beginPath();g.moveTo(X(p.x),Y(p.y-p.e));g.lineTo(X(p.x),Y(p.y+p.e));g.stroke()}g.beginPath();g.arc(X(p.x),Y(p.y),3.5,0,7);g.fill()});
+if(s.n){g.fillStyle=s.c;g.beginPath();g.arc(lx,12,5,0,7);g.fill();g.fillStyle=ink;g.textAlign='left';g.fillText(s.n,lx+9,16);lx+=g.measureText(s.n).width+34}});
+$('plot').setAttribute('aria-label',o.ax[1]+' / '+o.ax[0])}
+async function check(k){tab=k;['mo','sp','no','rc'].forEach(q=>$('t'+q).setAttribute('aria-pressed',q==k));$('chkmore').innerHTML='';const T=t();
+if(k=='mo'){const m=await api('/api/motion'),f=m.fit;card.motion=m;$('chk').textContent=T.mo[f.verdict];$('chksay').textContent=T.mosay(f,m);
+if(f.points){const q=f.points,x0=q.fX[0],y0=q.fY[0],mk=(v,e,f0)=>q.day.map((d,i)=>({x:d,y:v[i]-f0,e:e[i]})),ln=(v,f0)=>q.day.map((d,i)=>({x:d,y:v[i]-f0}));
+chart({ax:T.moax,s:[{n:T.mok[0],c:'#2f6fd0',p:mk(q.X,q.eX,x0),l:ln(q.fX,x0)},{n:T.mok[1],c:'#c4432b',p:mk(q.Y,q.eY,y0),l:ln(q.fY,y0)}]})}else fit($('plot'))}
+if(k=='sp'){const s=await api('/api/spectrum'),v=s.variability,n=s.ratio.length;card.spectrum={ratio:s.ratio,variability:v};
+$('chk').textContent=n<3?T.sp.few:v.z>5?T.sp.var:T.sp.flat;$('chksay').textContent=T.spsay(v,n);
+if(n)chart({ax:T.spax,h:1,s:[{c:ink,p:s.ratio.map(r=>({x:r.lam,y:r.corrected,e:r.err,c:BAND[ex[r.a].det-1]}))}]});
+else chart({ax:T.spax2,s:[{c:ink,p:s.rows.filter(r=>r.f!=null).map(r=>({x:r.lam,y:r.f,e:r.e,c:BAND[r.det-1]}))}]})}
+if(k=='no'){const n=await api('/api/noise'),ks=n.rows.map(r=>r.k),lo=Math.min(...ks),hi=Math.max(...ks);card.noise_check=n.rows;
+$('chk').textContent=hi>1.12?T.no.fix:T.no.ok;$('chksay').textContent=T.nosay(lo,hi);
+chart({ax:T.noax,h:1,y0:Math.min(.6,lo-.1),y1:Math.max(1.6,hi+.1),xt:[1,2,3,4,5,6],s:[{c:ink,p:n.rows.map(r=>({x:r.det+(r.i%9-4)*.035,y:r.k,c:BAND[r.det-1]}))}]})}
+if(k=='rc'){const r=await api('/api/recovery');card.recovery=r;if(!r.curve.length){$('chk').textContent=r.why;$('chksay').textContent='';return fit($('plot'))}
+const lim=(r.curve.find(c=>c.completeness>=.9)||{snr:'12+'}).snr;$('chk').textContent=T.rc(lim);$('chksay').textContent=T.rcsay(r);
+chart({ax:T.rcax,y0:0,y1:1.05,s:[{c:ink,p:r.curve.map(c=>({x:c.snr,y:c.completeness,e:(c.hi-c.lo)/2})),l:r.curve.map(c=>({x:c.snr,y:c.completeness}))}]})}}
+['mo','sp','no','rc'].forEach(k=>$('t'+k).onclick=()=>check(k).catch(fail));
+async function verdict(){const b=await api('/api/behavior');card.behavior=b;if(!card.motion)card.motion=await api('/api/motion');
+$('beh').textContent=t().beh[b.label]||b.label;const r=await api('/api/explain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card,lang})});card.plain_words=r.text;$('plain').textContent=r.text}
+$('best').onclick=async()=>{try{const b=await api('/api/bestpair');SA=b.a;SB=b.b;const r=await api('/api/partners?ref='+SA);part={};r.forEach(p=>part[p.i]=p);await compare()}catch(e){$('picksay').textContent=e.message}};
+function url(){history.replaceState(null,'',`?t=${key}&mode=${$('mode').value}&lang=${lang}`+(SB!=null?`&pair=${SA},${SB}`:''))}
+$('dl').onclick=()=>{const o=Object.assign({tool:'CHRONOS',view:location.href,pictures:ex.map(e=>({id:e.id,mjd:e.mjd,micron:e.lam,detector:e.det,release:e.rel,data:e.label,color_source:e.lam_src,noise_factor:e.noise_k,notes:e.notes}))},card),a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([JSON.stringify(o,null,1)],{type:'application/json'}));a.download='chronos_case_file.json';a.click()};
+$('lk').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(location.href);$('lk').textContent=t().copied;setTimeout(()=>$('lk').textContent=t().lk,1500)};
+$('mode').onchange=()=>{const l=$('mode').value=='live';$('bandl').hidden=$('rell').hidden=!l};
+$('lang').onchange=()=>{lang=$('lang').value;words();if(key)url()};
+$('tour').onclick=async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms)),set=async(a,b)=>{SA=a;SB=b;const r=await api('/api/partners?ref='+SA);part={};r.forEach(p=>part[p.i]=p);await compare();return r};
+try{await load(key||'barnard');await w(2500);const b=await api('/api/bestpair'),r=await api('/api/partners?ref='+b.a),u=r.filter(p=>!p.fair&&p.days<20&&p.color!=null).sort((x,y)=>y.color-x.color)[0];
+if(u){await set(b.a,u.i);await w(7000)}await set(b.a,b.b);await w(5000);go('s3');await w(1200);$('blink').click();await w(5000);stopBlink();
+go('s4');for(const k of['mo','sp','no','rc']){await check(k);await w(3800)}go('s5')}catch(e){fail(e)}};
+addEventListener('resize',()=>{if(ex.length){drawPlane();if(P&&P.false_change)meter(P.false_change)}});
+(async()=>{names=await api('/api/targets');const p=new URLSearchParams(location.search);if(p.get('lang')&&L[p.get('lang')])lang=$('lang').value=p.get('lang');if(p.get('mode')){$('mode').value=p.get('mode');$('mode').onchange()}
+words();if(p.get('t')&&names[p.get('t')]){await load(p.get('t'));if(p.get('pair')){const[a,b]=p.get('pair').split(',').map(Number);if(ex[a]&&ex[b]){SA=a;SB=b;const r=await api('/api/partners?ref='+SA);part={};r.forEach(q=>part[q.i]=q);await compare()}}}})().catch(fail);
+</script><script src="/extras.js"></script></body></html>
