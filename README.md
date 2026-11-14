@@ -175,6 +175,10 @@ Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Methods: [docs/MET
 
 CHRONOS uses candidate language only. Nothing here is a discovery. NASA states that Planet X (Planet Nine) has not been discovered and that its existence is debated; the Planet X lab teaches the difference between a prediction, a candidate, a statistically supported detection and a confirmed discovery. IRSA already offers a Moving Object Search Tool and a spectrophotometry tool; CHRONOS does not replace them. To my knowledge, the fair pair rule, the use of disagreement between three detectors as a calibrated signal, and the self questioning tests are new in this combination for SPHEREx.
 
+## Use of Super Intelligence (SI) tools                                                                                                                  
+
+No  Assistance from AI in any ways.No image, video or audio in the project is SI-generated: every figure is drawn by the project code from simulated data or NASA archive data. No NASA logo or branding is generated or modified. No scientific result is produced by a language model.
+
 ## Cite and license
 
 Citation metadata: [CITATION.cff](CITATION.cff). Code: Apache License 2.0 ([LICENSE](LICENSE)). Font: EB Garamond, SIL Open Font License ([frontend/fonts/OFL.txt](frontend/fonts/OFL.txt)).
