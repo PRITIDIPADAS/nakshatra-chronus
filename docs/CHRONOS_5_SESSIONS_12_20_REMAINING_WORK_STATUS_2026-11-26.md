@@ -30,3 +30,13 @@ This status note distinguishes implemented software from real-data acceptance an
 - [Independent astronomical reproduction protocol](CHRONOS_5_INDEPENDENT_REPRODUCTION_PROTOCOL.md)
 
 **Release decision:** Keep Session 18, Session 19 scientific acceptance and Session 20 open. Do not tag a validated scientific release or claim a YSO discovery.
+
+
+
+## Additional real-field audit evidence (run 45695824124)
+
+The \`spherex-real-field\` job completed successfully for the M101 DR1 D2 engineering pilot. It verified a 2040×2040 science MEF and linked spectral-WCS, solid-angle and absolute-gain products against live archive provenance, with 14 input relations and native file hashes. A calibrated-Jy injection pilot used 60 injections over three flux levels (20 per level). Invalid absolute-gain pixels were explicitly masked rather than interpolated.
+
+This does not establish a real YSO source sample or a population selection function. The audit leaves the source-photon-noise/electron-conversion human review pending, records \`independent_human_reviewed=false\`, and includes an Astropy SIP/CTYPE consistency warning. See [the run and audit artifact](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45695824124).
+
+The same workflow's main test job reported 387 passing tests and 5 failures at the time of the first post-extractor run. Four were legacy multidimensional-selection fixtures missing the newly required preregistration/recovery/quality evidence; one was a scaled-FITS flag-plane memmap error. A newer commit updated the selection fixtures and addressed the scaled-flag read; this audit-binding update adds the actual audit JSON verification. A fresh workflow run is required before recording a full test-suite pass.

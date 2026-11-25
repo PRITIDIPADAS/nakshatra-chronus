@@ -515,3 +515,9 @@ The blind four-baseline evaluation on real held-out fields, independently review
 See [the detailed remaining-work status](CHRONOS_5_SESSIONS_12_20_REMAINING_WORK_STATUS_2026-11-26.md). The code path now includes an IRSA source-photometry export adapter and native source-series verifier, a field-cluster multidimensional selection model tied to production-recovery diagnostics and field-level counts, and a strict independent astronomical reproduction protocol.
 
 These are implementation and synthetic-test deliverables only. Real source-level epochs still require an IRSA export plus exact native product/calibration files. The four-baseline blind evaluation still requires an independent custodian and held-out real fields. The YSO population remains unreported until the source sample, selection/contamination model, preregistration and null controls are empirical. No independent astronomical reproduction has been obtained. The CHRONOS scientific release gate remains closed.
+
+
+
+## 26 November 2026 — native ePSF and real-field pilot update
+
+The branch contains a native single-exposure ePSF Jy extractor and a verifier that opens the actual native-MEF audit JSON, checks its digest and the linked science/spectral-WCS/solid-angle products, and binds the embedded calibration decision. The M101 DR1 D2 real-field engineering job passed with a 60-injection, three-flux-level pilot; this is not source discovery or calibration sign-off. The electron-conversion human review remains pending and the audit log carries an unresolved SIP/CTYPE warning. See [remaining Sessions 12–20 status](CHRONOS_5_SESSIONS_12_20_REMAINING_WORK_STATUS_2026-11-26.md).

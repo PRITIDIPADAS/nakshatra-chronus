@@ -54,6 +54,68 @@ def _file_record(record: Mapping[str, Any], label: str) -> dict:
     return {"uri": uri, "local_path": str(path), "sha256": actual}
 
 
+
+def _canonical_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False, default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _verify_native_audit(
+    audit_file: Mapping[str, Any],
+    *,
+    science_sha256: str,
+    spectral_wcs_sha256: str,
+    solid_angle_sha256: str,
+    compatibility_decision: Mapping[str, Any],
+) -> dict:
+    """Verify the actual native-MEF audit bytes and the exact products it audited."""
+    record = _file_record(audit_file, "native_mef_audit")
+    try:
+        report = json.loads(Path(record["local_path"]).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"native MEF audit report is unreadable: {exc}") from exc
+    if not isinstance(report, Mapping):
+        raise ValueError("native MEF audit report must be a JSON object")
+    if report.get("status") != "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS":
+        raise ValueError("native MEF audit report is not STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS")
+    if str(report.get("science_sha256", "")).lower() != science_sha256:
+        raise ValueError("native MEF audit report refers to different science MEF bytes")
+    if str(report.get("spectral_wcs_sha256", "")).lower() != spectral_wcs_sha256:
+        raise ValueError("native MEF audit report refers to different spectral-WCS bytes")
+    solid_angle = report.get("solid_angle") or {}
+    if str(solid_angle.get("sha256", "")).lower() != solid_angle_sha256:
+        raise ValueError("native MEF audit report refers to different solid-angle bytes")
+    checks = report.get("checks") or {}
+    for name in ("cwave_cband", "wavelength_units", "solid_angle"):
+        if (checks.get(name) or {}).get("status") != "pass":
+            raise ValueError(f"native MEF audit check {name} did not pass")
+    audited_decision = report.get("calibration_compatibility")
+    if not isinstance(audited_decision, Mapping):
+        raise ValueError("native MEF audit report has no calibration_compatibility decision")
+    if audited_decision.get("status") != "compatible":
+        raise ValueError("native MEF audit calibration compatibility is not compatible")
+    expected_decision = {
+        key: value for key, value in compatibility_decision.items() if key != "sha256"
+    }
+    if _canonical_sha256(audited_decision) != _canonical_sha256(expected_decision):
+        raise ValueError("supplied calibration decision does not match the decision embedded in the native audit")
+    compatibility_sha256 = _canonical_sha256(expected_decision)
+    supplied_decision_sha = compatibility_decision.get("sha256")
+    if supplied_decision_sha is not None and _sha(
+        supplied_decision_sha, "compatibility_decision.sha256"
+    ) != compatibility_sha256:
+        raise ValueError("compatibility decision SHA-256 does not match its canonical contents")
+    return {
+        "file": record,
+        "report": report,
+        "audit_sha256": record["sha256"],
+        "compatibility_sha256": compatibility_sha256,
+    }
+
+
 def fit_psf_flux_jy(
     image: np.ndarray,
     variance: np.ndarray,
@@ -140,7 +202,7 @@ def extract_source_photometry(
     product_record: Mapping[str, Any],
     source_record: Mapping[str, Any],
     source_catalogue_file: Mapping[str, Any],
-    native_mef_audit_sha256: str,
+    native_mef_audit_file: Mapping[str, Any],
     compatibility_decision: Mapping[str, Any],
     code_commit: str,
     output_dir: str | Path,
@@ -176,14 +238,17 @@ def extract_source_photometry(
         "solid_angle": _file_record(solid_angle_file, "solid_angle"),
         "source_catalogue": _file_record(source_catalogue_file, "source_catalogue"),
     }
-    audit_sha = _sha(native_mef_audit_sha256, "native_mef_audit_sha256")
     if not isinstance(compatibility_decision, Mapping) or compatibility_decision.get("status") != "compatible":
         raise ValueError("source photometry requires an explicit compatible native MEF audit")
-    compatibility_sha = _sha(compatibility_decision.get("sha256"), "compatibility_decision.sha256")
-    for role in ("science", "spectral_wcs", "solid_angle"):
-        digest_key = f"{role}_sha256"
-        if compatibility_decision.get(digest_key) != files[role]["sha256"]:
-            raise ValueError(f"compatibility decision {digest_key} does not match native {role} bytes")
+    audit_proof = _verify_native_audit(
+        native_mef_audit_file,
+        science_sha256=files["science"]["sha256"],
+        spectral_wcs_sha256=files["spectral_wcs"]["sha256"],
+        solid_angle_sha256=files["solid_angle"]["sha256"],
+        compatibility_decision=compatibility_decision,
+    )
+    audit_sha = audit_proof["audit_sha256"]
+    compatibility_sha = audit_proof["compatibility_sha256"]
 
     source_id = str(source_record.get("source_id", "")).strip()
     product_id = str(product_record.get("archive_product_id", "")).strip()
@@ -215,8 +280,8 @@ def extract_source_photometry(
     science_path = Path(files["science"]["local_path"])
     with (
         fits.open(science_path, memmap=False) as science_hdul,
-        fits.open(files["solid_angle"]["local_path"], memmap=True) as area_hdul,
-        fits.open(files["spectral_wcs"]["local_path"], memmap=True) as spectral_hdul,
+        fits.open(files["solid_angle"]["local_path"], memmap=False) as area_hdul,
+        fits.open(files["spectral_wcs"]["local_path"], memmap=False) as spectral_hdul,
     ):
         for name in ("IMAGE", "VARIANCE", "FLAGS"):
             if name not in science_hdul:
@@ -363,12 +428,18 @@ def extract_source_photometry(
         "epsf": dict(science_record),
         "solid_angle": dict(files["solid_angle"]),
         "native_mef_audit_sha256": audit_sha,
-        "compatibility_decision": {**dict(compatibility_decision), "sha256": compatibility_sha},
+        "compatibility_decision": {
+            **{key: value for key, value in compatibility_decision.items() if key != "sha256"},
+            "science_sha256": files["science"]["sha256"],
+            "spectral_wcs_sha256": files["spectral_wcs"]["sha256"],
+            "solid_angle_sha256": files["solid_angle"]["sha256"],
+            "sha256": compatibility_sha,
+        },
         "epsf_embedding_note": "native EPSF table embedded in science MEF; rendered position-specific stamp is separately retained",
     }
     extractor_record = {
         "name": "chronos-native-spherex-psf-photometry",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "code_commit": commit,
         "configuration_sha256": config_sha,
     }
@@ -381,6 +452,8 @@ def extract_source_photometry(
         "products": [product],
         "measurements": [measurement],
         "extraction_artifacts": {
+            "native_mef_audit_file": audit_proof["file"],
+            "native_mef_audit_status": audit_proof["report"]["status"],
             "epsf_stamp_path": str(stamp_path),
             "epsf_stamp_sha256": sha256_file(stamp_path),
             "epsf_extraction": epsf_meta,

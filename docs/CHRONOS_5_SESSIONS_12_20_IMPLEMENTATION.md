@@ -216,3 +216,17 @@ This is a conditional selection-function model, not a full hierarchical model. T
 The independent-reproduction protocol now specifies the package, original-data checks, blind benchmark, source-level measurement reproduction, selection curve reproduction, discrepancies and signed report needed for external acceptance. No independent astronomer report was obtained or generated. Session 20 and the scientific release gate remain **NOT SATISFIED**.
 
 See [the source-series import guide](SPHEREX_SOURCE_TIMESERIES_IMPORT_2026-11-26.md), [selection-function specification](CHRONOS_5_SELECTION_FUNCTION_SPEC.md), [independent reproduction protocol](CHRONOS_5_INDEPENDENT_REPRODUCTION_PROTOCOL.md) and [Sessions 12–20 remaining-work status](CHRONOS_5_SESSIONS_12_20_REMAINING_WORK_STATUS_2026-11-26.md).
+
+
+
+## 26 November 2026 — native ePSF extraction and M101 real-field audit
+
+The branch includes \`research_discovery.spherex.source_photometry\`, a native Level-2 single-exposure extractor. It samples the native ePSF at the supplied source position, fits the PSF amplitude plus a local planar background by inverse-variance weighted least squares, uses the native solid-angle map to report integrated Jy, and propagates the delivered pixel variance to a formal fit uncertainty. It applies named detector-quality flags and configurable reduced-\(\chi^2\)/conditioning gates. A sky-coordinate/WCS consistency check is performed and the function requires two minimum epochs for any source-series usability claim.
+
+The extractor now opens the actual native-MEF audit JSON and verifies its file digest, exact science/spectral-WCS/solid-angle byte hashes, CWAVE/CBAND, wavelength-unit and solid-angle pass states, and the embedded compatibility decision. The assembler handoff contains the actual file hashes; a caller-supplied status or free-standing digest alone is insufficient.
+
+The extractor returns one source in one exposure. Its one-epoch output is **not** a time series. A usable \(F(\lambda,t)\) requires repeated independent observations for the same source with distinct observation/LVF identity and per-exposure MJD, then assembly through the multi-epoch path.
+
+GitHub Actions run [45695824124](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45695824124) completed its \`spherex-real-field\` job successfully on commit \`df2d13e\`. It verified a SPHEREx DR1 M101 D2 2040×2040 native science MEF (pipeline 7.0.5), live archive provenance for linked spectral-WCS, solid-angle and absolute-gain calibrations, 14 input relations, and a 60-injection calibrated-Jy pilot (three flux levels, 20 each). The [audit artifact](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45695824124/artifacts/15061331948) is 91,225,924 bytes (SHA-256 \`7d4ed6686632a330f685be21802073b0b898e0518b0ed85bd98be5f418db85a7\`).
+
+This is a real-field engineering validation using injected signals, not a real YSO source sample or calibration sign-off. The workflow output leaves source-photon-noise/electron-conversion human review pending, records \`independent_human_reviewed=false\`, and emits an Astropy SIP/CTYPE consistency warning. These remain open acceptance items.

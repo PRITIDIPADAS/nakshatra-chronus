@@ -83,27 +83,28 @@ def _photometry_inputs(tmp_path):
     product_id = "ivo://irsa.ipac/spherex_dr1?OBS-1/D2"
     compatibility = {
         "status": "compatible",
-        "sha256": "a" * 64,
+        "compatibility_group": "DR1:D2:7.0.5:2025-001",
+        "checks": {
+            "release": {"status": "pass"},
+            "detector": {"status": "pass"},
+            "native_mef_audit": {"status": "pass"},
+        },
+    }
+    audit_report = {
+        "status": "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS",
         "science_sha256": files["science_file"]["sha256"],
         "spectral_wcs_sha256": files["spectral_wcs_file"]["sha256"],
-        "solid_angle_sha256": files["solid_angle_file"]["sha256"],
+        "solid_angle": {"sha256": files["solid_angle_file"]["sha256"]},
+        "checks": {
+            "cwave_cband": {"status": "pass"},
+            "wavelength_units": {"status": "pass"},
+            "solid_angle": {"status": "pass"},
+        },
+        "calibration_compatibility": compatibility,
     }
-    product = {
-        "archive_product_id": product_id,
-        "observation_id": "OBS-1",
-        "mjd": 60000.0,
-        "release": "DR1",
-        "detector": "D2",
-        "calibration_group": "DR1-D2-CAL-1",
-    }
-    sky = WCS(image_header).pixel_to_world(source_x, source_y)
-    source = {
-        "source_id": "S1",
-        "ra_deg": float(sky.ra.deg),
-        "dec_deg": float(sky.dec.deg),
-        "sample_class": "young_stellar_object",
-        "classification_reference": "https://catalogue.example/S1",
-    }
+    audit_path = tmp_path / "native_mef_audit.json"
+    audit_path.write_text(json.dumps(audit_report, sort_keys=True), encoding="utf-8")
+    files["native_mef_audit_file"] = _record(audit_path)
     return files, product, source, compatibility
 
 
@@ -136,7 +137,6 @@ def test_native_source_photometry_fits_integrated_jy_and_reverifies_native_wavel
         **files,
         product_record=product,
         source_record=source,
-        native_mef_audit_sha256="b" * 64,
         compatibility_decision=compatibility,
         code_commit="1" * 40,
         output_dir=tmp_path / "out",
@@ -169,7 +169,6 @@ def test_native_source_photometry_rejects_incompatible_or_unhashed_inputs(tmp_pa
     with pytest.raises(ValueError, match="compatible native MEF audit"):
         extract_source_photometry(
             **files, product_record=product, source_record=source,
-            native_mef_audit_sha256="b" * 64,
             compatibility_decision=compatibility,
             code_commit="1" * 40, output_dir=tmp_path / "out",
             epsf_extractor=_fake_epsf_extractor,
@@ -193,3 +192,49 @@ def test_psf_flux_fit_uses_delivered_variance_and_rejects_bad_flags():
     flags[0, 0] = 1 << 7
     with pytest.raises(ValueError, match="excluded SPHEREx flag"):
         fit_psf_flux_jy(image, variance, omega, flags, psf, excluded_flag_bits=1 << 7)
+
+
+
+def test_native_source_photometry_rejects_failed_cwave_audit_and_mismatched_decision(tmp_path):
+    from research_discovery.spherex.source_photometry import extract_source_photometry
+
+    files, product, source, compatibility = _photometry_inputs(tmp_path)
+    audit_path = Path(files["native_mef_audit_file"]["local_path"])
+    report = json.loads(audit_path.read_text(encoding="utf-8"))
+    report["checks"]["cwave_cband"]["status"] = "review_required"
+    audit_path.write_text(json.dumps(report, sort_keys=True), encoding="utf-8")
+    files["native_mef_audit_file"] = _record(audit_path)
+    with pytest.raises(ValueError, match="native MEF audit check cwave_cband did not pass"):
+        extract_source_photometry(
+            **files, product_record=product, source_record=source,
+            compatibility_decision=compatibility,
+            code_commit="1" * 40, output_dir=tmp_path / "failed-cwave",
+            epsf_extractor=_fake_epsf_extractor,
+        )
+
+    forged_dir = tmp_path / "forged"
+    forged_dir.mkdir()
+    files, product, source, compatibility = _photometry_inputs(forged_dir)
+    forged = {**compatibility, "compatibility_group": "DIFFERENT-GROUP"}
+    with pytest.raises(ValueError, match="does not match the decision embedded in the native audit"):
+        extract_source_photometry(
+            **files, product_record=product, source_record=source,
+            compatibility_decision=forged,
+            code_commit="1" * 40, output_dir=tmp_path / "forged-decision",
+            epsf_extractor=_fake_epsf_extractor,
+        )
+
+
+def test_native_source_photometry_rejects_tampered_audit_file_bytes(tmp_path):
+    from research_discovery.spherex.source_photometry import extract_source_photometry
+
+    files, product, source, compatibility = _photometry_inputs(tmp_path)
+    audit_path = Path(files["native_mef_audit_file"]["local_path"])
+    audit_path.write_text(audit_path.read_text(encoding="utf-8") + "\n ", encoding="utf-8")
+    with pytest.raises(ValueError, match="local SHA-256 does not match its archive manifest"):
+        extract_source_photometry(
+            **files, product_record=product, source_record=source,
+            compatibility_decision=compatibility,
+            code_commit="1" * 40, output_dir=tmp_path / "tampered-audit",
+            epsf_extractor=_fake_epsf_extractor,
+        )

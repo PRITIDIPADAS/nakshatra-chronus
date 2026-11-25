@@ -143,3 +143,11 @@ Important boundaries:
 - \`research_discovery/spherex/flag_policy.py\`
 - \`research_discovery/tests/test_irsa_spectrophotometry.py\`
 - \`research_discovery/tests/test_source_timeseries.py\`
+
+
+
+## Native ePSF source extraction
+
+The repository also provides \`research_discovery.spherex.source_photometry.extract_source_photometry\` for a native single-exposure measurement from a supplied catalogue source position. It extracts the detector ePSF, fits amplitude plus a local planar background using the delivered VARIANCE plane, applies the solid-angle map and reports integrated Jy with a formal variance-weighted uncertainty.
+
+Before accepting the result, it verifies the actual local native-MEF audit JSON bytes and exact science, CWAVE/CBAND and solid-angle file digests. The output is one source in one exposure. Do not call this a light curve; repeat across independent exposures and combine only after source identity, observation/LVF ID, MJD and calibration grouping have been validated. The fit uncertainty is conditional on the delivered variance and PSF/background model; it does not automatically include correlated calibration or PSF-model systematics.
