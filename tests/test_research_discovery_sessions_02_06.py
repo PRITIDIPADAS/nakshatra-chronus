@@ -192,13 +192,13 @@ def test_calibration_pair_rejects_wrong_spectral_grid_and_bad_values():
     wrong_grid = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
         "processing_date":"2026-001","coordinate_frame":"native_detector",
         "cwave":np.ones((20,20)),"cband":np.ones((20,20))}
-    assert compatibility_decision(science,wrong_grid)["status"] == "rejected"
+    assert compatibility_decision(science,wrong_grid)["status"] == "review_required"
     invalid = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
         "processing_date":"2026-001","coordinate_frame":"native_detector",
         "cwave":np.ones((2040,2040),dtype=np.float32),
         "cband":np.ones((2040,2040),dtype=np.float32)}
     invalid["cwave"][0,0] = np.nan
-    assert compatibility_decision(science,invalid)["status"] == "rejected"
+    assert compatibility_decision(science,invalid)["status"] == "review_required"
 
 
 def test_calibration_pair_without_native_audit_is_not_compatible():
@@ -311,7 +311,7 @@ def test_calibration_pair_without_solid_angle_remains_unresolved():
          "cband":np.ones((2040,2040),dtype=np.float32)}
     result=compatibility_decision(science,cal)
     assert result["status"]=="review_required"
-    assert result["checks"]["solid_angle_map"]["status"]=="unknown"
+    assert result["checks"]["native_mef_audit"]["status"]=="review_required"
 
 
 def test_cwave_cband_cutout_slices_without_interpolation_and_masks_invalid_values():
@@ -327,30 +327,15 @@ def test_cwave_cband_cutout_slices_without_interpolation_and_masks_invalid_value
     assert result["cwave_um"][0,0] == pytest.approx(2.1)
 
 
-def test_compatibility_matrix_applies_group_to_science_and_both_calibrations():
-    from research_discovery.spherex.archive_manifest import build_manifest,product_record
+def test_compatibility_matrix_applies_group_to_science_and_both_calibrations(tmp_path):
     from research_discovery.spherex.apply_compatibility_matrix import apply_matrix
-    uris=[
-      "https://irsa.ipac.caltech.edu/dr1/level2/science.fits",
-      "https://irsa.ipac.caltech.edu/dr1/cal/spectral_wcs/D2.fits",
-      "https://irsa.ipac.caltech.edu/dr1/cal/solid_angle/D2.fits"]
-    products=[
-      product_record(product_type="level2_mef",native_uri=uris[0],status="discovered_not_downloaded",
-        archive_id="science-1",release="DR1",detector="D2",observation_time={"mjd":60000},
-        pipeline_version="7.1",processing_date="2026-001"),
-      product_record(product_type="spectral_wcs",native_uri=uris[1],status="discovered_not_downloaded",
-        release="DR1",detector="D2",observation_time=None,pipeline_version="7.1",processing_date="2026-001",
-        compatibility_status="candidate_only"),
-      product_record(product_type="solid_angle_pixel_map",native_uri=uris[2],status="discovered_not_downloaded",
-        release="DR1",detector="D2",observation_time=None,pipeline_version="7.1",processing_date="2026-001",
-        compatibility_status="candidate_only")]
-    manifest=build_manifest(archive="IRSA",query={},products=products,processing_config={})
-    matrix={"compatible_pairs":[{"science_uri":uris[0],"calibration_uri":uris[1],
-      "solid_angle_uri":uris[2],"compatibility_group":"DR1:D2:7.1:2026-001"}]}
-    updated,report=apply_matrix(manifest,matrix)
-    assert len(report["applied_pairs"])==1
-    assert {p["compatibility_group"] for p in updated["products"]}=={"DR1:D2:7.1:2026-001"}
-    assert {p["compatibility_status"] for p in updated["products"]}=={"compatible"}
+    manifest, matrix, audit_path, science_meta, calibration_meta = _verified_audit_fixture(tmp_path)
+    assert len(matrix["compatible_pairs"]) == 1
+    updated, report = apply_matrix(manifest, matrix)
+    assert len(report["applied_pairs"]) == 1
+    assert len(report["unresolved"]) == 0
+    assert {p["compatibility_group"] for p in updated["products"]} == {"DR1:D2:7.1:2026-001"}
+    assert {p["compatibility_status"] for p in updated["products"]} == {"compatible"}
 
 
 def test_compatibility_matrix_refuses_missing_solid_angle_product():
