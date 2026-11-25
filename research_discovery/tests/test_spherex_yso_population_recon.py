@@ -357,3 +357,53 @@ def test_label_concordance_keeps_ml_only_candidates_separate_from_published_labe
     assert summary["non_ml_label_without_ml_yso_count"] == 1
     assert "not independent validation" in summary["interpretation"]
 
+
+def test_source_match_rejects_duplicate_id_with_conflicting_catalogue_coordinates():
+    region = {"name": "Test_Field", "ra_deg": 65.7, "dec_deg": 26.0,
+              "radius_deg": 2.0, "role": "control"}
+    candidates = [
+        {"source_id": "DUP-1", "ra": 65.8, "dec": 26.1},
+        {"source_id": "DUP-1", "ra": 66.4, "dec": 26.1},
+    ]
+    product = {
+        "obs_id": "OBS-1",
+        "obs_publisher_did": "ivo:product-1",
+        "access_url": "https://irsa.example/dr1/level2/a.fits",
+        "s_region": "POLYGON ICRS 64.0 25.0 67.0 25.0 67.0 28.0 64.0 28.0",
+    }
+    collections = {
+        name: {"error": None, "query_complete_below_row_cap": True}
+        for name in recon.SIA_COLLECTIONS
+    }
+    matched, summaries, product_matches, report = recon.match_candidates_to_sia_footprints(
+        region, candidates, [product], candidate_query_complete=True,
+        collection_results=collections,
+    )
+    assert matched == []
+    assert summaries == []
+    assert product_matches == []
+    assert report["candidate_sources_with_conflicting_coordinates"] == 1
+    assert report["conflicting_source_coordinate_ids"] == ["DUP-1"]
+    assert report["coordinate_inventory_complete"] is False
+    assert report["source_footprint_matching_complete"] is False
+    assert report["status"] == "observed_lower_bound"
+
+
+def test_source_match_rejects_out_of_range_icrs_coordinates():
+    region = {"name": "Test_Field", "ra_deg": 65.7, "dec_deg": 26.0,
+              "radius_deg": 2.0, "role": "control"}
+    candidates = [{"source_id": "BAD-DEC", "ra": 65.8, "dec": 91.0}]
+    collections = {
+        name: {"error": None, "query_complete_below_row_cap": True}
+        for name in recon.SIA_COLLECTIONS
+    }
+    matched, summaries, product_matches, report = recon.match_candidates_to_sia_footprints(
+        region, candidates, [], candidate_query_complete=True,
+        collection_results=collections,
+    )
+    assert matched == []
+    assert summaries == []
+    assert product_matches == []
+    assert report["candidate_rows_with_invalid_coordinates"] == 1
+    assert report["coordinate_inventory_complete"] is False
+    assert report["source_footprint_matching_complete"] is False
