@@ -796,6 +796,14 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
           "threshold_snr": float(snr_threshold),
           "baseline_and_post_injection_maps_use_same_detection_validity_mask": True,
           "does_not_change_recovery_or_peak_matching": True,
+          "isolated_source_response_available": True,
+          "isolated_source_response_method": (
+              "matched-filter SNR on the realized injected-component image "
+              "(post-injection image minus pre-injection image), evaluated "
+              "with the original pre-injection VARIANCE map"
+          ),
+          "source_only_uses_original_variance": True,
+          "source_only_peak_list_recovery_is_diagnostic_not_primary": True,
       },
       "flux_summary":injected,"new_unmatched_peak_summary":all_detected,"injections":rows,
       "interpretation":"Completeness is measured conditional on this field, PSF, masks, flux levels and threshold. It is not all-sky performance.",
