@@ -62,9 +62,20 @@ def search(ra, dec, rad=SEARCH_RADIUS, coll="spherex_dr1", maxrec=2000):
     return [{c: (None if np.ma.is_masked(r[c]) else r[c]) for c in t.colnames} for r in t]
 
 
+def _row_value(row, key, default=None):
+    """Read a value from either an Astropy Row or the dict rows returned by search()."""
+    try:
+        columns = getattr(row, "colnames", None)
+        if columns is not None:
+            return row[key] if key in columns else default
+        return row.get(key, default)
+    except (KeyError, TypeError, AttributeError):
+        return default
+
+
 def row_detector(row):
     """Detector number from the file name (for example 1D2_spx means detector 2) or from the band name."""
-    for txt in (str(row.get("access_url") or ""), str(row.get("energy_bandpassname") or ""), str(row.get("obs_id") or "")):
+    for txt in (str(_row_value(row, "access_url") or ""), str(_row_value(row, "energy_bandpassname") or ""), str(_row_value(row, "obs_id") or "")):
         m = re.search(r"D([1-6])_spx", txt) or re.search(r"D([1-6])\b", txt)
         if m:
             return int(m.group(1))
@@ -189,7 +200,7 @@ def load(row, ra, dec, size, coll):
     det = int(hd.get("DETECTOR", 0) or row_detector(row))
     notes = ["No compatible CWAVE/CBAND calibration was paired with this exposure. WCS-WAVE and nominal band centres are display-only; scientific wavelength comparisons are disabled."]
     lam_ok, src = False, "WCS-WAVE display only; CWAVE/CBAND not paired"
-    raw_exptime = row["t_exptime"] if "t_exptime" in row.colnames else hd.get("EXPTIME", 0.0)
+    raw_exptime = _row_value(row, "t_exptime", hd.get("EXPTIME", 0.0))
     try:
         source_exptime = 0.0 if np.ma.is_masked(raw_exptime) else float(raw_exptime)
     except (TypeError, ValueError):
@@ -224,11 +235,13 @@ def load(row, ra, dec, size, coll):
         dxy = (float(p[0]), float(p[1]))
     except Exception:
         notes.append("Detector position (WCS A) not read.")
-    return Exp(str(hd.get("OBSID") or row.get("obs_id") or row["access_url"][-40:]) + (f"_D{det}" if det else ""), float(row["t_min"]), lam, bw, det,
+    archive_observation_id = _row_value(row, "obs_id") or _row_value(row, "obs_publisher_did") or ""
+    access_url = str(_row_value(row, "access_url", ""))
+    return Exp(str(hd.get("OBSID") or archive_observation_id or access_url[-40:]) + (f"_D{det}" if det else ""), float(_row_value(row, "t_min")), lam, bw, det,
                coll, "REAL SPHEREx", img, var, flags, zod, w, (x, y), psf=psf, bits=bits, lam_src=src, lam_ok=lam_ok, notes=notes,
                dxy=dxy, frame=f"{float(row['t_min']):.5f}", source_uri=str(row["access_url"]),
                source_sha256=cutout_sha256, image_unit=str(hd.get("BUNIT", "")),
-               source_observation_id=str(hd.get("OBSID") or row.get("obs_id") or row.get("obs_publisher_did") or ""),
+               source_observation_id=str(hd.get("OBSID") or archive_observation_id),
                source_exposure_time_s=source_exptime, detector_origin_xy=detector_origin)
 
 
