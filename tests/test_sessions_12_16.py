@@ -224,3 +224,85 @@ def test_catalogue_association_includes_parallax_uncertainty_in_position_error()
     assert with_error["matches"][0]["parallax_sigma_arcsec"] > 0
     assert with_error["matches"][0]["combined_sigma_arcsec"] > without_error["matches"][0]["combined_sigma_arcsec"]
     assert with_error["matches"][0]["survey_metadata"]["survey"] == "synthetic catalogue fixture"
+
+
+def test_observation_planner_labels_unverified_feasibility_and_prior_sensitivity():
+    from chronos_addons.planner import plan_observations
+
+    candidates = [
+        {
+            "time": "2027-01-01T00:00:00Z",
+            "wavelength_um": 2.1,
+            "detector_id": "D2",
+            "measurement_type": "spectral_epoch",
+            "predictions": {
+                "static": {"mean": 1.0, "sigma": 0.1},
+                "variable": {"mean": 2.0, "sigma": 0.1},
+            },
+        },
+        {
+            "time": "2027-01-02T00:00:00Z",
+            "wavelength_um": 3.0,
+            "detector_id": "D3",
+            "measurement_type": "partner_array",
+            "predictions": {
+                "static": {"mean": 1.0, "sigma": 0.1},
+                "variable": {"mean": 5.0, "sigma": 0.1},
+            },
+        },
+    ]
+    result = plan_observations(
+        candidates,
+        measurement_sigma=0.2,
+        alternative_priors={
+            "variable_favoured": {"static": 0.2, "variable": 0.8},
+            "static_favoured": {"static": 0.8, "variable": 0.2},
+        },
+    )
+    assert result["recommendation_status"] == "forecast_ranked_feasibility_unverified"
+    assert result["recommended"]["feasibility"]["status"] == "unverified"
+    assert set(result["prior_sensitivity"]) == {"variable_favoured", "static_favoured"}
+    assert result["recommended"]["measurement"]["wavelength_um"] == 3.0
+
+
+def test_observation_planner_preserves_verified_external_feasibility_record():
+    from chronos_addons.planner import plan_observations
+
+    candidate = {
+        "time": "2027-02-01T00:00:00Z",
+        "wavelength_um": 2.2,
+        "detector_id": "D2",
+        "predictions": {
+            "h1": {"mean": 0.0, "sigma": 0.1},
+            "h2": {"mean": 4.0, "sigma": 0.1},
+        },
+        "feasibility": {
+            "status": "verified",
+            "feasible": True,
+            "source_uri": "https://example.org/visibility-report/123",
+            "checked_utc": "2026-11-25T10:00:00Z",
+            "window_start_utc": "2027-02-01T00:00:00Z",
+            "window_end_utc": "2027-02-01T00:30:00Z",
+            "constraints": {"target_altitude_deg": 35.0},
+        },
+    }
+    result = plan_observations([candidate])
+    assert result["recommendation_status"] == "forecast_ranked_feasibility_verified"
+    assert result["recommended"]["feasibility"]["source_uri"] == candidate["feasibility"]["source_uri"]
+    assert result["recommended"]["feasibility"]["window"]["end_utc"] > result["recommended"]["feasibility"]["window"]["start_utc"]
+
+
+def test_observation_planner_rejects_malformed_verified_feasibility_timestamp():
+    from chronos_addons.planner import plan_observations
+
+    candidate = {
+        "time": "later",
+        "predictions": {"h1": {"mean": 0.0}, "h2": {"mean": 1.0}},
+        "feasibility": {
+            "status": "verified", "feasible": True,
+            "source_uri": "https://example.org/report",
+            "checked_utc": "2026-11-25T10:00:00",
+        },
+    }
+    with pytest.raises(ValueError, match="timezone"):
+        plan_observations([candidate])
