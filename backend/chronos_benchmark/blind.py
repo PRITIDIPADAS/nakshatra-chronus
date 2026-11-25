@@ -114,11 +114,11 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
                 )
             public_signature = dict(supplied_public_signature)
             _validate_signature(public_signature, truth)
-            for key in ("dataset_class", "truth_catalogue_sha256",
-                        "coordinate_frame", "coordinate_unit"):
-                if public_signature.get(key) != signature.get(key):
+            for signature_field in ("dataset_class", "truth_catalogue_sha256",
+                                   "coordinate_frame", "coordinate_unit"):
+                if public_signature.get(signature_field) != signature.get(signature_field):
                     raise ValueError(
-                        f"{field_id}: public_input_signature.{key} must match the private input signature"
+                        f"{field_id}: public_input_signature.{signature_field} must match the private input signature"
                     )
             if sorted(public_signature.get("exposure_ids") or []) != sorted(supplied_public_ids):
                 raise ValueError(
