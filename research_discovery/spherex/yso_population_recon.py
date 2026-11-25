@@ -352,7 +352,7 @@ def match_candidates_to_sia_footprints(
     *,
     candidate_query_complete: bool,
     collection_results: dict[str, dict],
-) -> tuple[list[dict], list[dict], dict]:
+) -> tuple[list[dict], list[dict], list[dict], dict]:
     """Match catalogue coordinates to SIAv2 s_region polygons with compact provenance."""
     centre_ra, centre_dec, radius = (
         float(region["ra_deg"]), float(region["dec_deg"]), float(region["radius_deg"])
@@ -401,10 +401,30 @@ def match_candidates_to_sia_footprints(
                 source_products[product_id] = product
                 product_pair_count += 1
 
+    product_match_rows = []
     matched_summaries, all_summaries = [], []
     for source_id, candidate in sorted(candidate_by_id.items()):
         products = list(products_by_source.get(source_id, {}).items())
         product_ids = sorted(product_id for product_id, _ in products)
+        for product_id, product_row in products:
+            product_match_rows.append({
+                "source_id": source_id,
+                "designation": candidate.get("designation"),
+                "region": region["name"],
+                "region_role": region["role"],
+                "archive_product_id": product_id,
+                "obs_publisher_did": product_row.get("obs_publisher_did"),
+                "obs_id": product_row.get("obs_id"),
+                "access_url": product_row.get("access_url"),
+                "collection": product_row.get("_chronos_collection"),
+                "data_release": product_row.get("_chronos_release") or release_from_uri(product_row.get("access_url")),
+                "energy_bandpassname": product_row.get("energy_bandpassname"),
+                "t_min": product_row.get("t_min"),
+                "t_max": product_row.get("t_max"),
+                "match_method": FOOTPRINT_MATCH_ALGORITHM,
+                "metadata_only": True,
+                "extracted_flux_available": False,
+            })
         observation_ids = sorted({
             str(row.get("obs_id") or "").strip()
             for _, row in products if row.get("obs_id") not in (None, "")
@@ -518,7 +538,7 @@ def match_candidates_to_sia_footprints(
             "and no temporal light curve or YSO identity was validated."
         ),
     }
-    return matched_summaries, all_summaries, report
+    return matched_summaries, all_summaries, product_match_rows, report
 
 
 def release_from_uri(uri: Any) -> str:
@@ -837,7 +857,7 @@ def inspect_region(region: dict) -> dict:
         collection_results[collection] = result
         if not result.get("error"):
             successful_sia_products.extend(result.get("rows", []))
-    matched_source_summaries, all_source_summaries, source_footprint_report = (
+    matched_source_summaries, all_source_summaries, source_product_match_rows, source_footprint_report = (
         match_candidates_to_sia_footprints(
             region, candidate_rows, successful_sia_products,
             candidate_query_complete=candidate_query_complete,
@@ -887,6 +907,12 @@ def inspect_region(region: dict) -> dict:
     counts["source_level_epoch_coverage_measured"] = False
     counts["source_level_calibrated_flux_measured"] = False
     counts["source_level_lightcurve_validated"] = False
+    query_results["candidate_source_product_matches"] = {
+        "method": FOOTPRINT_MATCH_ALGORITHM,
+        "rows": source_product_match_rows,
+        "row_count": len(source_product_match_rows),
+        "metadata_only": True,
+    }
     query_results["candidate_source_exposure_matches"] = {
         "method": FOOTPRINT_MATCH_ALGORITHM,
         "rows": matched_source_summaries,
@@ -1022,6 +1048,7 @@ def main() -> None:
     all_label_disagreements = []
     all_source_exposure_matches = []
     all_source_epoch_summaries = []
+    all_source_product_matches = []
     all_region_sia_footprints = []
     all_cube_metadata_rows = []
     cube_region_summaries = []
@@ -1055,6 +1082,9 @@ def main() -> None:
             all_source_exposure_matches.extend(
                 result["queries"]["candidate_source_exposure_matches"]["rows"]
             )
+            all_source_product_matches.extend(
+                result["queries"]["candidate_source_product_matches"]["rows"]
+            )
             all_source_epoch_summaries.extend(
                 result["queries"]["candidate_source_epoch_summary"]["rows"]
             )
@@ -1067,6 +1097,7 @@ def main() -> None:
                     "catalogue_sources", "candidate_sources", "class_distribution",
                     "label_disagreement_candidates", "dr1_level2_exposures",
                     "candidate_source_exposure_matches",
+                    "candidate_source_product_matches",
                     "candidate_source_epoch_summary"
                 } or name.startswith("region_footprints_sia_"):
                     write_csv(region_dir / f"{name}.csv", query_result["rows"])
@@ -1082,6 +1113,7 @@ def main() -> None:
     write_csv(OUTPUT / "class_distribution_all_regions.csv", all_classes)
     write_csv(OUTPUT / "label_disagreement_candidates_all_regions.csv", all_label_disagreements)
     write_csv(OUTPUT / "candidate_source_exposure_matches_all_regions.csv", all_source_exposure_matches)
+    write_csv(OUTPUT / "candidate_source_product_matches_all_regions.csv", all_source_product_matches)
     write_csv(OUTPUT / "candidate_source_epoch_summary_all_regions.csv", all_source_epoch_summaries)
     write_csv(OUTPUT / "region_intersecting_footprints_sia_all_regions.csv", all_region_sia_footprints)
     cube_errors = {}
@@ -1176,10 +1208,8 @@ def main() -> None:
         "class_distribution_record_count": len(all_classes),
         "label_disagreement_candidate_count": len(all_label_disagreements),
         "candidate_source_exposure_match_row_count": len(all_source_exposure_matches),
-        "candidate_source_archive_product_pair_match_count": sum(
-            int(row.get("matched_archive_product_count") or 0)
-            for row in all_source_exposure_matches
-        ),
+        "candidate_source_archive_product_pair_match_count": len(all_source_product_matches),
+        "candidate_source_product_match_manifest": "candidate_source_product_matches_all_regions.csv",
         "candidate_source_epoch_summary_row_count": len(all_source_epoch_summaries),
         "candidate_source_footprint_matching_method": FOOTPRINT_MATCH_ALGORITHM,
         "source_level_epoch_coverage_measured": False,

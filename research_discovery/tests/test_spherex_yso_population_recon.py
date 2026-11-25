@@ -247,6 +247,7 @@ def test_local_catalogue_summary_reports_exact_counts_when_below_cap(monkeypatch
     assert result["counts"]["candidate_source_exposure_query_complete"] is True
     assert result["counts"]["candidate_source_exposure_match_rows"] == 2
     assert result["counts"]["candidate_source_archive_product_pair_match_count"] == 2
+    assert result["queries"]["candidate_source_product_matches"]["row_count"] == 2
     assert result["counts"]["candidate_unique_source_ids_with_level2_footprint_match"] == 2
     assert len(result["queries"]["candidate_source_epoch_summary"]["rows"]) == 2
     assert len(result["queries"]["class_distribution"]["rows"]) == 3
@@ -316,11 +317,12 @@ def test_sia_source_match_fails_closed_when_product_polygon_is_missing():
         name: {"error": None, "query_complete_below_row_cap": True}
         for name in recon.SIA_COLLECTIONS
     }
-    matched, summaries, report = recon.match_candidates_to_sia_footprints(
+    matched, summaries, product_matches, report = recon.match_candidates_to_sia_footprints(
         region, candidates, [product], candidate_query_complete=True,
         collection_results=collections,
     )
     assert matched == []
+    assert product_matches == []
     assert len(summaries) == 1
     assert report["products_with_invalid_or_unsupported_s_region"] == 1
     assert report["source_footprint_matching_complete"] is False
