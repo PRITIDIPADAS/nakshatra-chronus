@@ -256,7 +256,7 @@ Statuses are:
 
 A rank-deficient model does not receive deceptively precise local parameter errors: those values are returned as unavailable. Extra-measurement proposals can provide a candidate Jacobian row and uncertainty. The report indicates whether the proposal improves rank or conditioning; it does not claim the proposed observation is feasible or guaranteed to break a global degeneracy.
 
-The covariance must be physically justified. covariance_verified is an explicit operator assertion, not an automatic validation. The audit is local and cannot prove global identifiability. Keep BIC differences and normalized BIC weights labelled as relative model comparisons, never calibrated posterior probabilities.
+The flux model-comparison likelihood also accepts a full covariance matrix. Its diagonal must agree with the supplied sigma values, and the matrix must be symmetric positive definite. Sky and detector coordinate fits remain independent per axis in this version. The covariance must be physically justified. covariance_verified is an explicit operator assertion, not an automatic validation. The audit is local and cannot prove global identifiability. Keep BIC differences and normalized BIC weights labelled as relative model comparisons, never calibrated posterior probabilities.
 
 ---
 
@@ -276,7 +276,7 @@ The suite fits the existing static, moving, achromatic, chromatic, transient, in
 
 The transient bootstrap repeats the full interval scan under each simulated null realization. This estimates a family-wise false-alarm probability conditional on the supplied null prediction and Gaussian uncertainties. It is not a substitute for a frozen real-field negative-control experiment.
 
-The current predictive bootstrap is conditional on supplied point predictions. It does not draw model parameters from a posterior and therefore is not a full Bayesian posterior-predictive check. Uncertainty rows must explicitly carry uncertainty_status equal to validated or calibrated before the suite can return a provisional survival verdict. Otherwise it returns unknown, even if residual plots look reassuring.
+The current predictive bootstrap is conditional on supplied point predictions. It does not draw model parameters from a posterior and therefore is not a full Bayesian posterior-predictive check. It can use the same supplied full flux covariance as the model comparison; its diagonal must match sigma squared. The report also returns observation-level residual records and conditional pointwise predictive intervals for plotting by epoch, wavelength, detector and brightness bin. Uncertainty rows must explicitly carry uncertainty_status equal to validated or calibrated before the suite can return a provisional survival verdict. Otherwise it returns unknown, even if residual plots look reassuring.
 
 Counterfactual challenges are measurement-level transformations. They do not edit or regenerate original FITS pixels. If an intervention plan is preregistered, hash its canonical JSON representation and supply that SHA-256 as challenge_plan_sha256; the report will distinguish a verified plan seal from an unsealed exploratory replay. Original observation rows are copied, not mutated.
 

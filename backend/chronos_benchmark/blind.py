@@ -41,11 +41,15 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
     """Create opaque field tokens and encrypt all identities, split labels and truth."""
     if not isinstance(fields, (list, tuple)) or len(fields) < 3:
         raise ValueError("at least three independent fields are required for a blind split")
-    ids = [str(item.get("field_id", "")) for item in fields]
+    ids = [
+        str(item.get("field_id") or (item.get("input_signature") or {}).get("field_id") or "")
+        for item in fields
+    ]
     if any(not item for item in ids) or len(set(ids)) != len(ids):
         raise ValueError("field_id values must be non-empty and unique")
     group_by_field = {
-        str(item["field_id"]): str(item.get("split_group_id") or item["field_id"])
+        str(item.get("field_id") or (item.get("input_signature") or {}).get("field_id")):
+        str(item.get("split_group_id") or item.get("field_id") or (item.get("input_signature") or {}).get("field_id"))
         for item in fields
     }
     groups = sorted(set(group_by_field.values()))
@@ -64,7 +68,7 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
         "shuffled_time_control", "detector_pattern_control",
     }
     for raw in fields:
-        field_id = str(raw["field_id"])
+        field_id = str(raw.get("field_id") or (raw.get("input_signature") or {}).get("field_id"))
         control_type = str(raw.get("control_type", "science"))
         if control_type not in allowed_controls:
             raise ValueError(f"{field_id}: unsupported control_type {control_type!r}")
@@ -88,15 +92,16 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
             "blind_field_token": token,
             "split_role": role,
             "dataset_class": signature.get("dataset_class"),
-            "control_type": control_type,
             "input_signature": public_signature,
-            "data_locator_token": str(raw.get("data_locator_token", token)),
+            "data_locator_token": token,
         })
+        private_field = dict(raw)
+        private_field.setdefault("field_id", field_id)
         private_fields.append({
             "blind_field_token": token,
             "split_role": role,
             "split_group_id": group_by_field[field_id],
-            "field": dict(raw),
+            "field": private_field,
             "original_field_id": field_id,
             "control_type": control_type,
             "injection_stratum": dict(raw.get("injection_stratum") or {}),
@@ -259,6 +264,13 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
     }
     report = compare_benchmark_package(package, bootstrap_draws=bootstrap_draws, seed=seed)
     report["blind_protocol"] = {
+        "unblinded_utc": _utc_now(),
+        "truth_access_record": {
+            "action": "unblind_and_evaluate",
+            "encrypted_truth_store_sha256": public_manifest["truth_store_sha256"],
+            "key_fingerprint": public_manifest["key_fingerprint"],
+            "heldout_field_tokens_processed": sorted(seen),
+        },
         "public_manifest_truth_sha256_verified": True,
         "configuration_freeze_verified": frozen_check,
         "source_commit": frozen_configuration["source_commit"],

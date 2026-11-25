@@ -21,7 +21,6 @@ def residual_checks(observed, predicted, sigma):
 
 
 """Residual diagnostics and parametric-bootstrap predictive challenges."""
-from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 import math
@@ -143,11 +142,13 @@ def parametric_bootstrap_checks(observed, predicted, sigma, *, groups=None,
               for label, stats in labels.items()}
         for key, labels in observed_group_stats.items()
     }
+    pointwise_samples = []
     for _ in range(int(draws)):
         if lower is None:
             simulated = mu + rng.normal(0.0, s)
         else:
             simulated = mu + lower @ rng.normal(size=y.size)
+        pointwise_samples.append(simulated.tolist())
         z = (simulated - mu) / s
         stats = _statistics(z)
         for name, value in stats.items():
@@ -183,6 +184,7 @@ def parametric_bootstrap_checks(observed, predicted, sigma, *, groups=None,
                     ],
                     "upper_tail_p_value": _tail_probability(values, observed_value, two_sided=(metric == "mean_z")),
                 }
+    pointwise = np.asarray(pointwise_samples, dtype=float)
     return {
         "method": "parametric bootstrap conditional on supplied predictions",
         "draws": int(draws),
@@ -191,6 +193,11 @@ def parametric_bootstrap_checks(observed, predicted, sigma, *, groups=None,
         "observed_statistics": observed_stats,
         "global_checks": summaries,
         "group_checks": group_summaries,
+        "pointwise_conditional_predictive_interval_95": {
+            "lower": np.percentile(pointwise, 2.5, axis=0).tolist(),
+            "median": np.percentile(pointwise, 50, axis=0).tolist(),
+            "upper": np.percentile(pointwise, 97.5, axis=0).tolist(),
+        },
         "warning": "These are not posterior probabilities or Bayesian posterior-predictive p-values. Validate the variance/covariance model and account for fitted-parameter uncertainty before confirmatory interpretation.",
     }
 

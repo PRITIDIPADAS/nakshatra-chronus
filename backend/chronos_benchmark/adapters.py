@@ -8,7 +8,7 @@ import numpy as np
 from scipy.ndimage import map_coordinates
 
 from chronos_addons.forensics import diagnose_candidate
-from .baselines import REQUIRED_METHODS
+from .runner import REQUIRED_METHODS
 
 
 def _signature(value: Mapping[str, Any]) -> dict[str, Any]:

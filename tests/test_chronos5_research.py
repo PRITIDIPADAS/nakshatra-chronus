@@ -31,6 +31,7 @@ def _field(field_id, split="blind_test", dataset_class="synthetic"):
     for method, detections in records.items():
         methods[method] = {"input_signature": dict(signature), "detections": detections}
     return {
+        "field_id": field_id,
         "input_signature": signature,
         "truth_catalogue": truth,
         "methods": methods,
@@ -173,6 +174,7 @@ def test_blind_truth_is_encrypted_and_unblinding_requires_frozen_config():
     )
     assert report["blind_protocol"]["truth_released_after_run_freeze"] is True
     assert report["blind_protocol"]["blind_field_count"] == len(test_tokens)
+    assert report["blind_protocol"]["truth_access_record"]["action"] == "unblind_and_evaluate"
     assert report["scientific_claim_eligible"] is False
 
 
@@ -452,4 +454,38 @@ def test_falsification_bootstrap_uses_covariance_and_retains_challenge_parameter
     assert report["parametric_bootstrap"]["noise_model"] == "full supplied covariance"
     assert report["challenge_plan"]["externally_sealed_plan_verified"] is True
     assert report["counterfactual_challenges"][0]["parameters"]["amplitude"] == 2.0
+    assert len(report["residual_records"]) == len(rows)
+    intervals = report["parametric_bootstrap"]["pointwise_conditional_predictive_interval_95"]
+    assert len(intervals["median"]) == len(rows)
     assert report["verdict"] == "unknown"
+
+
+
+def test_identifiability_refuses_to_mark_missing_covariance_as_verified():
+    from chronos_causal.identifiability import audit_forward_model_identifiability
+    with pytest.raises(ValueError, match="no covariance was supplied"):
+        audit_forward_model_identifiability(
+            [[1.0, 0.0], [0.0, 1.0]],
+            ["sky", "detector"],
+            covariance=None,
+            covariance_verified=True,
+        )
+
+
+
+def test_blind_control_labels_and_field_ids_stay_in_encrypted_store():
+    from cryptography.fernet import Fernet
+    from chronos_benchmark.blind import create_blind_store
+    from chronos_benchmark.runner import truth_catalogue_digest
+    key = Fernet.generate_key()
+    fields = [_field(f"SECRET-FIELD-{i}") for i in range(3)]
+    fields[0]["control_type"] = "empty_field"
+    fields[0]["truth_catalogue"] = []
+    fields[0]["input_signature"]["truth_catalogue_sha256"] = truth_catalogue_digest([])
+    blind = create_blind_store(fields, key, test_fraction=0.34, seed=6)
+    assert "SECRET-FIELD-0" not in json.dumps(blind["run_manifest"])
+    assert all("control_type" not in row for row in blind["run_manifest"]["fields"])
+    private = json.loads(Fernet(key).decrypt(blind["encrypted_truth_store"]).decode("utf-8"))
+    empty_row = next(row for row in private["fields"] if row["field"]["field_id"] == "SECRET-FIELD-0")
+    assert empty_row["control_type"] == "empty_field"
+    assert empty_row["field"]["truth_catalogue"] == []

@@ -34,7 +34,30 @@ def _groups(rows):
     }
 
 
-def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
+
+def _residual_records(rows, prediction, sigma, groups):
+    predicted = np.asarray(prediction, dtype=float)
+    observed = np.asarray([row["flux"] for row in rows], dtype=float)
+    errors = np.asarray(sigma, dtype=float)
+    z = (observed - predicted) / errors
+    brightness = groups["source_brightness_bin"]
+    return [
+        {
+            "observation_id": str(row.get("observation_id", index)),
+            "mjd": float(row["mjd"]),
+            "wavelength_um": float(row["wavelength_um"]),
+            "detector_id": str(row["detector_id"]),
+            "observed_flux": float(observed[index]),
+            "predicted_flux": float(predicted[index]),
+            "sigma": float(errors[index]),
+            "standardized_residual": float(z[index]),
+            "source_brightness_bin": brightness[index],
+        }
+        for index, row in enumerate(rows)
+    ]
+
+
+def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *
                             challenge_specs: Sequence[Mapping[str, Any]] | None = None,
                             challenge_plan_sha256: str | None = None,
                             flux_covariance=None,
@@ -75,6 +98,9 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
 
     descriptive = grouped_residual_checks(
         observed, best["flux_prediction"], sigma, group_labels
+    )
+    residual_records = _residual_records(
+        rows, best["flux_prediction"], sigma, group_labels
     )
     bootstrap = parametric_bootstrap_checks(
         observed, best["flux_prediction"], sigma,
@@ -178,6 +204,7 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
         "delta_bic_to_runner_up": analysis["delta_bic_to_runner_up"],
         "abstention_reasons": decision_reasons,
         "residual_checks": descriptive,
+        "residual_records": residual_records,
         "parametric_bootstrap": {
             **bootstrap,
             "status": predictive_status,
@@ -203,6 +230,8 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
             ],
             "all_challenge_results_preserved": True,
             "original_measurements_mutated": False,
+            "observation_level_residuals_preserved": True,
+            "conditional_predictive_intervals_preserved": True,
         },
         "interpretation": (
             "A surviving result is provisional and conditional on the declared measurements and noise model. "
