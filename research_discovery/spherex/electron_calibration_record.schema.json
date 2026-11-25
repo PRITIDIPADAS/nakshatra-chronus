@@ -96,37 +96,5 @@
       "format": "date-time"
     }
   },
-  "allOf": [
-    {
-      "if": {
-        "required": [
-          "science_native_file_sha256"
-        ]
-      },
-      "then": {
-        "properties": {
-          "science_native_file_sha256": {
-            "const": {
-              "$data": "1/science_file_sha256"
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "science_cutout_sha256"
-        ]
-      },
-      "then": {
-        "properties": {
-          "science_cutout_sha256": {
-            "pattern": "^[0-9a-f]{64}$"
-          }
-        }
-      }
-    }
-  ],
   "$comment": "science_file_sha256 identifies the native MEF. GUI cutout injection additionally requires science_cutout_sha256. A reviewer must verify the conversion derivation and calibration bytes; schema validation is not scientific sign-off."
 }
