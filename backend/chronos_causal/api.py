@@ -623,6 +623,7 @@ class SpectralExposureRequest(BaseModel):
     wavelength_map_um: Any = None
     calibration_nuisance: dict[str, float] = Field(default_factory=dict)
     parameter_provenance: dict[str, Any] = Field(default_factory=dict)
+    motion_integration_substeps: int = 1
     seed: int = 1
 
 class FalsificationRequest(BaseModel):
@@ -702,6 +703,7 @@ def causal_forward_exposure(request: SpectralExposureRequest):
         wavelength_map_um=request.wavelength_map_um,
         calibration_nuisance=request.calibration_nuisance,
         parameter_provenance=request.parameter_provenance,
+        motion_integration_substeps=request.motion_integration_substeps,
         seed=request.seed,
     ))
 
