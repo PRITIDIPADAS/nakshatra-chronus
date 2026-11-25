@@ -81,7 +81,14 @@ def region_predicate(region: dict, ra_col: str = "ra", dec_col: str = "dec") -> 
     )
 
 
-def inspect_region(region: dict) -> dict:
+def build_region_queries(region: dict) -> dict[str, str]:
+    """Return deterministic TAP SQL for the predeclared region.
+
+    YSO_PUB is an integer literature-reference identifier, CLASS_1 is the
+    published harmonised source class, and STYPE_ML is a separate ML label.
+    Keep their queries distinct so an ML assignment is never presented as a
+    literature classification.
+    """
     where = region_predicate(region)
     total_sql = f"SELECT COUNT(*) AS n FROM spherex.splices WHERE {where}"
     published_sql = (
@@ -102,7 +109,7 @@ def inspect_region(region: dict) -> dict:
         "GROUP BY class_1, yso_pub, stype_ml ORDER BY COUNT(*) DESC"
     )
     candidate_sql = (
-        "SELECT TOP 5000 source_id, designation, ra, dec, sel_type, class_1, yso_pub, "
+        f"SELECT TOP {CANDIDATE_LIMIT} source_id, designation, ra, dec, sel_type, class_1, yso_pub, "
         "stype_ml, stype_ml_prob1, stype_ml_prob2, mc, mc_los, mc_dist, av, "
         "plx, e_plx, gaiadist, e_dist_upper, e_dist_lower, "
         "w1, w1err, w2, w2err, w3, w3err, w4, w4err, "
@@ -112,18 +119,6 @@ def inspect_region(region: dict) -> dict:
         "AND (yso_pub IS NOT NULL OR UPPER(class_1) LIKE '%YSO%' "
         "OR UPPER(stype_ml) LIKE '%YSO%') ORDER BY source_id"
     )
-    query_results = {}
-    for name, sql in (
-        ("total", total_sql),
-        ("published_yso_label", published_sql),
-        ("class_1_yso", class1_yso_sql),
-        ("ml_yso", ml_yso_sql),
-        ("class_distribution", class_distribution_sql),
-        ("candidate_sources", candidate_sql),
-    ):
-        query_results[name] = query_rows(sql)
-
-    # Query real Level-2 archive coverage by detector band at the same sky region.
     exposure_sql = (
         "SELECT p.energy_bandpassname, COUNT(*) AS n_exposures, "
         "MIN(p.time_bounds_lower) AS first_time, MAX(p.time_bounds_upper) AS last_time "
@@ -135,15 +130,33 @@ def inspect_region(region: dict) -> dict:
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
         + ") GROUP BY p.energy_bandpassname ORDER BY p.energy_bandpassname"
     )
-    try:
-        query_results["dr1_level2_coverage_by_band"] = query_rows(exposure_sql)
-    except Exception as exc:
-        query_results["dr1_level2_coverage_by_band"] = {
-            "query": exposure_sql,
-            "error": f"{type(exc).__name__}: {exc}",
-            "row_count": 0,
-            "rows": [],
-        }
+    return {
+        "total": total_sql,
+        "published_yso_label": published_sql,
+        "class_1_yso": class1_yso_sql,
+        "ml_yso": ml_yso_sql,
+        "class_distribution": class_distribution_sql,
+        "candidate_sources": candidate_sql,
+        "dr1_level2_coverage_by_band": exposure_sql,
+    }
+
+
+def inspect_region(region: dict) -> dict:
+    query_results = {}
+    query_definitions = build_region_queries(region)
+    for name, sql in query_definitions.items():
+        if name == "dr1_level2_coverage_by_band":
+            try:
+                query_results[name] = query_rows(sql)
+            except Exception as exc:
+                query_results[name] = {
+                    "query": sql,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "row_count": 0,
+                    "rows": [],
+                }
+        else:
+            query_results[name] = query_rows(sql)
 
     counts = {}
     for name in ("total", "published_yso_label", "class_1_yso", "ml_yso"):
@@ -163,7 +176,6 @@ def inspect_region(region: dict) -> dict:
         "queries": query_results,
         "query_sha256": digest_json({k: v.get("query") for k, v in query_results.items()}),
     }
-
 
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
