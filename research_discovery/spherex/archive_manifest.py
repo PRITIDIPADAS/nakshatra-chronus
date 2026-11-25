@@ -127,7 +127,7 @@ def manifest_from_sia(rows:Sequence[Mapping[str,Any]],*,query_url,query_metadata
         products.append(product_record(
           archive_id=_text(row.get("obs_publisher_did")),product_type="level2_mef",
           release=_release(row.get("obs_collection"),uri),detector=f"D{mt.group('det')}" if mt else None,
-          observation_time={"start_mjd":_text(row.get("t_min")),"end_mjd":_text(row.get("t_max"))},
+          observation_time={"start_mjd":_text(row.get("t_min")),"end_mjd":_text(row.get("t_max")),"exposure_time_s":_text(row.get("t_exptime"))},
           pipeline_version=mt.group("ver") if mt else None,processing_date=mt.group("date") if mt else None,
           native_uri=uri,local_path=dl.get("local_path"),byte_count=dl.get("bytes"),sha256=dl.get("sha256"),
           status=status,compatibility_group=None,compatibility_status="unassigned",
