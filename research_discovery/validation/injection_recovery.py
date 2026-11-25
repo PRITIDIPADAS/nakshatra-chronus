@@ -31,7 +31,7 @@ def validate_electron_calibration_record(record, *, electrons_per_image_unit=Non
     if not isinstance(record, dict):
         raise ValueError("source Poisson noise requires an electron calibration record")
     required = ("verification_status", "electrons_per_image_unit", "science_file_sha256",
-                "science_observation_id", "detector", "image_unit", "calibration_uri",
+                "science_observation_id", "science_source_uri", "detector", "image_unit", "calibration_uri",
                 "calibration_file_path", "calibration_sha256", "conversion_method",
                 "verified_by", "verified_utc")
     missing = [key for key in required if record.get(key) in (None, "")]
@@ -313,6 +313,7 @@ def main():
                    help="Optional assertion that must equal the value in --electron-calibration-record")
     p.add_argument("--electron-calibration-record",type=Path,
                    help="Signed-off JSON record binding conversion to this exact science file and calibration bytes")
+    p.add_argument("--science-uri", help="Exact native HTTPS archive URI recorded for this science MEF; required for photon-noise mode")
     p.add_argument("--source-exclusion-radius",type=int,default=7,
                    help="Exclude positions near pre-existing >threshold peaks (pixels)")
     p.add_argument("--flux-unit",choices=("image_sum","Jy"),default="image_sum",
