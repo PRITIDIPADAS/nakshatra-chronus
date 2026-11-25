@@ -270,7 +270,7 @@ The flux model-comparison likelihood also accepts a full covariance matrix. Its 
 
 ## Session 11 — Falsification and predictive checks
 
-Endpoint: **POST /api/v5/causal/falsify**. The request may include **candidate_family**, a complete list of candidate ID, observations and optional flux covariance records for all candidates considered in the field-wide transient search.
+Endpoint: **POST /api/v5/causal/falsify**. The request may include **candidate_family**, a list of candidate ID, observations and optional flux covariance records, plus **candidate_family_complete=true** to declare that the list contains every candidate eligible for transient selection in the field. The report records the family SHA-256 and that completeness is an operator declaration, not independently verified fact.
 
 Python entry point: **chronos_causal.falsification.run_falsification_suite**.
 
@@ -282,7 +282,7 @@ The suite fits the existing static, moving, achromatic, chromatic, transient, in
 4. replays declared sky-only, detector-only and mixed measurement interventions;
 5. retains each intervention, parameter set, result and relative model score.
 
-The single-candidate transient bootstrap repeats the full interval scan under each simulated null realization. It corrects for the set of contiguous intervals scanned for that candidate, conditional on the supplied null prediction and Gaussian uncertainties. A second maximum-statistic bootstrap accepts the complete searched candidate family and corrects across every supplied candidate as well as its interval scan. A transient-leading interpretation is forced to unknown unless that complete family includes the current candidate and the family-wise false-alarm probability passes the declared alpha. The correction cannot account for candidates omitted from the family, upstream image-detection thresholds, field selection or other post-hoc search decisions. It is not a substitute for a frozen real-field negative-control experiment.
+The single-candidate transient bootstrap repeats the full interval scan under each simulated null realization. It corrects for the set of contiguous intervals scanned for that candidate, conditional on the supplied null prediction and Gaussian uncertainties. A second maximum-statistic bootstrap accepts the complete searched candidate family and corrects across every supplied candidate as well as its interval scan. A transient-leading interpretation is forced to unknown unless the caller declares the family complete, it includes the current candidate, and the family-wise false-alarm probability passes the declared alpha. The correction cannot account for candidates omitted from the family, upstream image-detection thresholds, field selection or other post-hoc search decisions. It is not a substitute for a frozen real-field negative-control experiment.
 
 The current predictive bootstrap is conditional on supplied point predictions. It does not draw model parameters from a posterior and therefore is not a full Bayesian posterior-predictive check. It can use the same supplied full flux covariance as the model comparison; its diagonal must match sigma squared. The report also returns observation-level residual records and conditional pointwise predictive intervals for plotting by epoch, wavelength, detector and brightness bin. Uncertainty rows must explicitly carry uncertainty_status equal to validated or calibrated before the suite can return a provisional survival verdict. Otherwise it returns unknown, even if residual plots look reassuring.
 
