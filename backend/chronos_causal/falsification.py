@@ -140,7 +140,7 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
         raise ValueError("challenge specs need unique, non-empty challenge_id values")
     from chronos_benchmark.runner import canonical_json
     plan_digest = hashlib.sha256(canonical_json(plan)).hexdigest()
-    plan_verified = challenge_plan_sha256 == plan_digest if challenge_plan_sha256 else False
+    plan_hash_matches = challenge_plan_sha256 == plan_digest if challenge_plan_sha256 else False
 
     challenges = []
     for item in plan:
@@ -179,18 +179,18 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
             "original_observations_mutated": False,
         })
 
-    if analysis["verdict"] == "unknown" or not predictive_pass or not uncertainties_verified or not plan_verified:
+    if analysis["verdict"] == "unknown" or not predictive_pass or not uncertainties_verified or not plan_hash_matches:
         verdict = "unknown"
         decision_reasons = list(analysis["abstention_reasons"])
         if not uncertainties_verified:
             decision_reasons.append("supplied uncertainties are not marked validated or calibrated")
         if not predictive_pass:
             decision_reasons.append("predeclared predictive checks did not pass")
-        if not plan_verified:
-            decision_reasons.append("challenge plan hash was not sealed or does not match")
+        if not plan_hash_matches:
+            decision_reasons.append("challenge plan SHA-256 is missing or does not match the supplied plan")
         result_status = "model_not_established"
     else:
-        verdict = "provisionally_survives_predeclared_checks"
+        verdict = "provisionally_survives_declared_checks"
         decision_reasons = []
         result_status = "provisional_only"
 
@@ -220,8 +220,12 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
         "counterfactual_challenges": challenges,
         "challenge_plan": {
             "sha256": plan_digest,
-            "externally_sealed_plan_verified": plan_verified,
-            "predeclared_claim_allowed": plan_verified,
+            "provided_sha256_matches": plan_hash_matches,
+            "external_timestamp_or_signature_verified": False,
+            "predeclaration_verified": False,
+            "note": (
+                "The supplied hash confirms plan-content integrity only. It does not prove that the plan was registered before inspecting the data."
+            ),
         },
         "evidence_to_preserve": {
             "failed_or_contradictory_checks": [
