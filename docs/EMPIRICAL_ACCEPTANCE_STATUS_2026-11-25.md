@@ -186,6 +186,12 @@ The source-Poisson pilot recovered 5/20, 14/20 and 17/20 sources at 54.198, 108.
 The live catalogue/footprint query is complete for five predeclared star-forming regions and one high-latitude control. Run [45619403576](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45619403576) returned 16,663 catalogue rows and 2,421 regional candidate-union rows below query caps. Literature-reference, harmonised-class and ML labels remain separate. This is a target-catalogue reconnaissance only; it does not satisfy the YSO population-discovery gate. Details and report/artifact checksums are in [the SPLICES/DR1 report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
 
 
+## Latest fail-closed M101 workflow verification — 25 November 2026
+
+The latest completed M101 workflow with the strict evidence validator is [run 45638162464](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45638162464). The full test job passed **304 tests with 12 warnings**; the companion pull-request test run [45638182131](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45638182131) passed **304 tests with 2 warnings**. Both JavaScript syntax checks passed in both runs.
+
+The push run completed the M101 DR1 D2 retrieval, native compatibility audit, machine-readable archive validator and artifact upload. Artifact 15033532053 contains 91,213,913 bytes and has ZIP SHA-256 `bfc7f21895f8192abc7ed70b1e95ea0af7ea8e331b7b67f06987db34fc0218be`. Its validator output confirms the native science hash/byte count, three detector-matched calibration files, archive MD5 checks, native MEF compatibility and three 20-injection Jy bins. The source-Poisson conversion still explicitly records pending independent human review; CI does not change that status.
+
 ## Six-region calibrated-Jy evidence — 25 November 2026
 
 The six-region pilot is completed as an exploratory evaluation. The post-hoc strict revalidation confirms six completed fields, zero incomplete fields, distinct science observation IDs and distinct native science hashes. Each field passed the native compatibility audit, exact WCS/gain provenance, archive MD5, invalid gain masking, source-Poisson and per-bin variance checks. The gain-derived electron conversion remains pending independent instrument/calibration review.
