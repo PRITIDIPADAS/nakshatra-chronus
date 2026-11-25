@@ -583,3 +583,20 @@ def test_native_map_crop_refuses_rotated_or_flipped_wcs_a():
     }
     with pytest.raises(ValueError, match="identity-aligned"):
         detector_origin_offset(header)
+
+
+
+def test_epsf_zone_lookup_uses_full_alternate_wcs_a_for_cutouts():
+    from research_discovery.spherex.extract_epsf_stamp import detector_position_from_cutout
+    header = {
+        "NAXIS1": 40, "NAXIS2": 30, "DETECTOR": "D2",
+        "CTYPE1A": "LINEAR", "CTYPE2A": "LINEAR", "WCSAXESA": 2,
+        "CRPIX1A": 1.0, "CRPIX2A": 1.0,
+        "CRVAL1A": 100.0, "CRVAL2A": 200.0,
+        "CDELT1A": 1.0, "CDELT2A": 1.0,
+        "PC1_1A": 0.0, "PC1_2A": -1.0,
+        "PC2_1A": 1.0, "PC2_2A": 0.0,
+    }
+    detector_x, detector_y = detector_position_from_cutout(3.0, 4.0, header)
+    assert detector_x == pytest.approx(96.0)
+    assert detector_y == pytest.approx(203.0)
