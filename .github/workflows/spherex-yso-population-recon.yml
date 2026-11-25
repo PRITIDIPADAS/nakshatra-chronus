@@ -5,7 +5,9 @@ on:
     branches: [chronos-5-causal-sky-twin]
     paths:
       - "research_discovery/spherex/yso_population_recon.py"
+      - "research_discovery/spherex/analyze_splices_candidate_inventory.py"
       - "research_discovery/tests/test_spherex_yso_population_recon.py"
+      - "research_discovery/tests/test_splices_candidate_inventory.py"
       - "research_discovery/requirements-research.txt"
       - ".github/workflows/spherex-yso-population-recon.yml"
   workflow_dispatch:
@@ -38,7 +40,13 @@ jobs:
         run: |
           set -o pipefail
           python -m research_discovery.spherex.yso_population_recon 2>&1 | tee yso-population-recon.log
-      - name: Upload catalogue snapshots, queries and field coverage
+      - name: Audit candidate label overlaps, source IDs and region-level archive coverage
+        run: |
+          set -euo pipefail
+          python -m py_compile research_discovery/spherex/analyze_splices_candidate_inventory.py
+          python -m research_discovery.spherex.analyze_splices_candidate_inventory \
+            --root data/yso_population_recon 2>&1 | tee candidate-inventory-audit.log
+      - name: Upload catalogue snapshots, queries, label audit and field coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -46,5 +54,6 @@ jobs:
           path: |
             data/yso_population_recon/
             yso-population-recon.log
+            candidate-inventory-audit.log
           if-no-files-found: warn
           retention-days: 30
