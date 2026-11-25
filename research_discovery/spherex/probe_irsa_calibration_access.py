@@ -144,31 +144,56 @@ def main():
             if row.get("planeid")
         ]
         report["m101_calibration_provenance"] = []
+        report["m101_calibration_provenance"] = []
         for plane_id in plane_ids:
             safe_id = plane_id.replace("'", "''")
             provenance_query = (
-                "SELECT pi.outputid, pi.inputid, "
-                "ip.provenance_name, ip.provenance_version, ip.provenance_runid, "
-                "ip.provenance_lastexecuted, "
-                "ia.artifactid AS input_artifactid, ia.uri AS input_uri, "
-                "ia.producttype AS input_producttype, ia.releasetype AS input_releasetype, "
-                "ia.contenttype AS input_contenttype, ia.contentlength AS input_contentlength, "
-                "ia.contentchecksum AS input_contentchecksum "
-                "FROM spherex.provenance_input pi "
-                "LEFT JOIN spherex.plane ip ON ip.planeid = pi.inputid "
-                "LEFT JOIN spherex.artifact ia ON ia.planeid = pi.inputid "
-                f"WHERE pi.outputid = '{safe_id}'"
+                "SELECT TOP 500 inputid, outputid "
+                "FROM spherex.provenance_input "
+                f"WHERE outputid = '{safe_id}'"
             )
+            entry = {"output_planeid": plane_id, "query": provenance_query}
             try:
-                joined = table_rows(provenance_query)
-                joined["output_planeid"] = plane_id
-                report["m101_calibration_provenance"].append(joined)
+                provenance = table_rows(provenance_query)
+                entry["provenance_inputs"] = provenance
+                entry["resolved_input_planes"] = []
+                for row in provenance.get("rows", []):
+                    input_id = str(row.get("inputid") or "").strip()
+                    if not input_id:
+                        continue
+                    if not re.fullmatch(r"[0-9a-fA-F-]{16,64}", input_id):
+                        entry["resolved_input_planes"].append({
+                            "inputid": input_id, "error": "inputid is not a UUID-like archive identifier"
+                        })
+                        continue
+                    input_literal = input_id.replace("'", "''")
+                    plane_query = (
+                        "SELECT TOP 5 planeid, productid, creatorid, "
+                        "provenance_name, provenance_version, provenance_runid, "
+                        "provenance_lastexecuted, provenance_keywords, datarelease, "
+                        "calibrationlevel, dataproducttype "
+                        "FROM spherex.plane "
+                        f"WHERE planeid = '{input_literal}'"
+                    )
+                    artifact_query = (
+                        "SELECT TOP 20 planeid, artifactid, uri, producttype, releasetype, "
+                        "contenttype, contentlength, contentchecksum "
+                        "FROM spherex.artifact "
+                        f"WHERE planeid = '{input_literal}'"
+                    )
+                    resolved = {"inputid": input_id}
+                    try:
+                        resolved["plane"] = table_rows(plane_query)
+                    except Exception as exc:
+                        resolved["plane_error"] = f"{type(exc).__name__}: {exc}"
+                    try:
+                        resolved["artifacts"] = table_rows(artifact_query)
+                    except Exception as exc:
+                        resolved["artifact_error"] = f"{type(exc).__name__}: {exc}"
+                    entry["resolved_input_planes"].append(resolved)
             except Exception as exc:
-                report["m101_calibration_provenance"].append({
-                    "output_planeid": plane_id,
-                    "query": provenance_query,
-                    "error": f"{type(exc).__name__}: {exc}",
-                })
+                entry["error"] = f"{type(exc).__name__}: {exc}"
+            report["m101_calibration_provenance"].append(entry)
     except Exception as exc:
         report["m101_science_identity"] = {
             "query": science_identity_query,
