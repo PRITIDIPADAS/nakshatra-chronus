@@ -27,12 +27,14 @@ The existing CHRONOS P/D/A implementation, measurement-level hypothesis engine a
 3. **Instrument forensics:** the same P/D/A candidate list after the existing transparent forensic diagnostics. Forensics is a triage/veto layer, not an independent source finder.
 4. **Sky–Detector Twin:** detections exported by the causal analysis for the identical field and exposure set.
 
-The adapter is in **backend/chronos_benchmark/adapters.py**. Use **field_mask_sha256(state)** and **reference_wcs_sha256(state["ref"])** to construct the verified common-input signature. Call **pipeline.run(...)** once per field, then pass that one state to **build_four_baseline_records(...)**. Supply Twin detections from the causal analysis of that same field. The adapter returns the input signature with each method record. It preserves each detection's score semantics and evidence provenance.
+The adapter is in **backend/chronos_benchmark/adapters.py**. Use **field_mask_sha256(state)** and **reference_wcs_sha256(state["ref"])** to construct the verified common-input signature. Call **pipeline.run(...)** once per field, then pass that one state to **build_benchmark_field_record(...)**. This returns the complete field row, including truth, split, matching radius and all four methods. Supply Twin detections from the causal analysis of that same field. The adapter returns the input signature with each method record. It preserves each detection's score semantics and evidence provenance.
 
 Example Python integration:
 
 ~~~python
-from chronos_benchmark.adapters import build_four_baseline_records
+from chronos_benchmark.adapters import (
+    build_benchmark_field_record, field_mask_sha256, reference_wcs_sha256,
+)
 from chronos_benchmark.runner import truth_catalogue_digest
 
 truth_catalogue = [
@@ -42,7 +44,7 @@ signature = {
     "field_id": "field-001",
     "dataset_class": "real",
     "exposure_ids": ["archive-product-id-a", "archive-product-id-b"],
-    "mask_sha256": "<SHA256 of the exact combined mask inputs>",
+    "mask_sha256": field_mask_sha256(field_state),
     "truth_catalogue_sha256": truth_catalogue_digest(truth_catalogue),
     "coordinate_frame": "sky",
     "coordinate_unit": "pixel",
@@ -55,15 +57,19 @@ thresholds = {
     "instrument_forensics": [12, 10, 8, 6, 5],
     "sky_detector_twin": [12, 10, 8, 6, 5],
 }
-records = build_four_baseline_records(
+field_record = build_benchmark_field_record(
     field_state,
     signature,
+    truth_catalogue,
+    split="development",
+    independence_group_id="field-001",
+    match_radius=2.0,
     sky_detector_twin_detections=twin_detections,
     score_thresholds=thresholds,
 )
 ~~~
 
-The example IDs and values are placeholders, not real archive identifiers or recommended scientific thresholds. Replace them only with the real field manifest and thresholds frozen for the experiment.
+The example IDs, match radius, and thresholds are placeholders, not real archive identifiers or recommended scientific values. Replace them only with the real field manifest and thresholds frozen for the experiment. Append each returned field_record to the package's fields list and use the same root score_thresholds for every field.
 
 ### Package format
 
@@ -152,12 +158,12 @@ The report sets scientific-claim eligibility to true only when every included fi
 
 ### Field selection and controls
 
-Prepare one independent row per field. Do not split exposures, pixels or candidates from the same field across development and test. If several rows are related observation periods from the same sky region, assign them the same split_group_id; they will stay in one split. Otherwise the field ID is the default split group.
+Prepare one independent row per field. Do not split exposures, pixels or candidates from the same field across development and test. If several rows are related observation periods from the same sky region, assign them the same split_group_id; they will stay in one split and are represented by the same opaque independence_group_token. The benchmark's field bootstrap resamples that group as a single independent unit. Otherwise the field ID is the default split group.
 
 Each field row contains:
 
 - field_id
-- split_group_id where related periods must stay together
+- split_group_id where related periods must stay together (private custodian field; converted to an opaque shared token in the public run manifest)
 - control_type: science, empty_field, negative_control, shuffled_time_control or detector_pattern_control
 - optional injection_stratum, such as flux, background, crowding, detector zone and wavelength bin
 - input_signature
