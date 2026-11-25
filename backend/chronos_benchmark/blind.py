@@ -297,6 +297,8 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
             "input_signature": original_signature,
             "truth_catalogue": original["truth_catalogue"],
             "independence_group_id": str(private_row.get("split_group_id") or private_row.get("original_field_id")),
+            "control_type": str(private_row.get("control_type", "science")),
+            "injection_stratum": dict(private_row.get("injection_stratum") or {}),
             "methods": restored_methods,
             "match_radius": original.get("match_radius"),
             "field_area_deg2": original.get("field_area_deg2"),
