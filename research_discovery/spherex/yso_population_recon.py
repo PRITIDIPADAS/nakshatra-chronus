@@ -73,11 +73,13 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def region_predicate(region: dict, ra_col: str = "ra", dec_col: str = "dec") -> str:
+    # Follow IRSA's TAP ADQL examples literally: geometry constructors without
+    # coordinate-system strings (deprecated in ADQL 2.1), and CONTAINS(...) = 1.
     return (
-        "1 = CONTAINS("
-        f"POINT('ICRS', {ra_col}, {dec_col}), "
-        f"CIRCLE('ICRS', {region['ra_deg']:.8f}, {region['dec_deg']:.8f}, {region['radius_deg']:.5f})"
-        ")"
+        "CONTAINS("
+        f"POINT({ra_col}, {dec_col}), "
+        f"CIRCLE({region['ra_deg']:.8f}, {region['dec_deg']:.8f}, {region['radius_deg']:.5f})"
+        ") = 1"
     )
 
 
@@ -123,8 +125,8 @@ def build_region_queries(region: dict) -> dict[str, str]:
         "SELECT p.energy_bandpassname, COUNT(*) AS n_exposures, "
         "MIN(p.time_bounds_lower) AS first_time, MAX(p.time_bounds_upper) AS last_time "
         "FROM spherex.artifact a JOIN spherex.plane p ON p.planeid = a.planeid "
-        "WHERE 1 = CONTAINS("
-        f"POINT('ICRS', {region['ra_deg']:.8f}, {region['dec_deg']:.8f}), p.poly) "
+        "WHERE CONTAINS("
+        f"POINT({region['ra_deg']:.8f}, {region['dec_deg']:.8f}), p.poly) = 1 "
         "AND LOWER(a.uri) LIKE '%/dr1/level2/%' "
         "AND p.energy_bandpassname IN ("
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
