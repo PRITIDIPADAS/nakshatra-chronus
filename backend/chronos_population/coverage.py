@@ -106,6 +106,7 @@ def assess_population_coverage(
                 selection_trials, selection_bin_spec, field_records=fields,
                 minimum_trials_per_cell=minimum_trials_per_selection_cell,
                 minimum_independent_fields=minimum_independent_fields,
+                minimum_fields_per_cell=minimum_independent_fields,
                 minimum_detection_probability=minimum_selection_probability,
             )
         except (ValueError, TypeError, KeyError, ImportError) as exc:
@@ -385,6 +386,7 @@ def assess_population_coverage(
             "minimum_median_snr": minimum_median_snr,
             "minimum_completeness": minimum_completeness,
             "minimum_trials_per_selection_cell": int(minimum_trials_per_selection_cell),
+            "minimum_fields_per_selection_cell": minimum_independent_fields,
             "minimum_selection_probability": float(minimum_selection_probability),
         },
         "field_count": len(field_reports),
