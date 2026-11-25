@@ -648,21 +648,37 @@ def test_population_coverage_rejects_same_source_counted_in_multiple_fields():
     assert result["eligible_for_predeclared_population_protocol"] is False
 
 
+def _population_coverage_audit(fields, minimum_completeness=0.5):
+    from chronos_population.coverage import assess_population_coverage
+
+    return assess_population_coverage(
+        fields,
+        minimum_independent_fields=1,
+        minimum_completeness=minimum_completeness,
+        feature_interval_um=[3.05, 3.15],
+        blue_continuum_um=[2.8, 2.95],
+        red_continuum_um=[3.3, 3.4],
+    )
+
+
 def test_population_event_rate_scales_null_control_to_science_exposure():
     from chronos_population.rates import estimate_event_rate
 
     field = _population_real_field()
-    result = estimate_event_rate([field], draws=1000, seed=19)
+    audit = _population_coverage_audit([field])
+    result = estimate_event_rate([field], coverage_audit=audit, draws=1000, seed=19)
     assert result["field_count"] == 1
+    assert result["coverage_revalidated"] is True
     included = result["included_fields"][0]
     assert included["null_control_to_science_exposure_ratio"] == pytest.approx(0.25)
     assert included["null_events_expected_in_science_exposure"] == pytest.approx(2.0)
     assert result["event_rate_per_sqdeg_day"]["median"] >= 0
-    assert result == estimate_event_rate([field], draws=1000, seed=19)
+    assert result == estimate_event_rate(
+        [field], coverage_audit=audit, draws=1000, seed=19
+    )
 
 
-def test_population_event_rate_skips_synthetic_and_unattested_fields():
-    from copy import deepcopy
+def test_population_event_rate_refuses_synthetic_or_unattested_fields():
     from chronos_population.rates import estimate_event_rate
 
     valid = _population_real_field("REAL")
@@ -670,17 +686,35 @@ def test_population_event_rate_skips_synthetic_and_unattested_fields():
     synthetic["dataset_class"] = "synthetic"
     unattested = _population_real_field("UNATTESTED")
     unattested["independent_field"] = False
-    result = estimate_event_rate([valid, synthetic, unattested], draws=1000, seed=23)
-    assert result["field_count"] == 1
-    assert {row["reason"] for row in result["skipped_fields"]} == {
-        "field_not_labelled_real", "independence_not_attested"
-    }
+    fields = [valid, synthetic, unattested]
+    audit = _population_coverage_audit(fields)
+    assert audit["eligible_for_predeclared_population_protocol"] is False
+    with pytest.raises(ValueError, match="coverage audit did not pass"):
+        estimate_event_rate(fields, coverage_audit=audit, draws=1000, seed=23)
 
 
-def test_population_event_rate_does_not_subtract_unscaled_null_counts():
+def test_population_event_rate_rejects_missing_null_control_exposure_scale():
     from chronos_population.rates import estimate_event_rate
 
     field = _population_real_field()
     field.pop("null_control_to_science_exposure_ratio")
-    with pytest.raises(ValueError, match="no real, independent fields"):
-        estimate_event_rate([field], draws=1000, seed=29)
+    audit = _population_coverage_audit([field])
+    assert audit["eligible_for_predeclared_population_protocol"] is False
+    with pytest.raises(ValueError, match="coverage audit did not pass"):
+        estimate_event_rate([field], coverage_audit=audit, draws=1000, seed=29)
+
+
+def test_population_event_rate_rejects_modified_coverage_audit_or_field_records():
+    from chronos_population.rates import estimate_event_rate
+
+    field = _population_real_field()
+    audit = _population_coverage_audit([field])
+    forged_audit = dict(audit)
+    forged_audit["input_fields_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="field digest mismatch"):
+        estimate_event_rate([field], coverage_audit=forged_audit, draws=1000, seed=31)
+
+    modified_field = dict(field)
+    modified_field["observed_events"] += 1
+    with pytest.raises(ValueError, match="field digest mismatch"):
+        estimate_event_rate([modified_field], coverage_audit=audit, draws=1000, seed=31)
