@@ -301,12 +301,15 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
     )
     if not good.all():
         raise ValueError("Reference PSF footprint touches invalid variance, solid-angle or flagged pixels")
-    invvar = 1.0 / local_var
-    numerator = float(np.sum((psf ** 2) * invvar / local_omega))
-    denominator = float(np.sqrt(np.sum((psf ** 2) * invvar)))
-    if not np.isfinite(numerator) or numerator <= 0 or not np.isfinite(denominator):
+    # In MJy/sr pixels the point-source template is ePSF / pixel-solid-angle.
+    # Use that same template both for the local inverse-variance depth estimate
+    # and for the SNR filter, rather than filtering surface brightness with a
+    # flux-normalized ePSF alone.
+    detection_template = psf / local_omega
+    matched_filter_information = float(np.sum((detection_template ** 2) / local_var))
+    if not np.isfinite(matched_filter_information) or matched_filter_information <= 0:
         raise ValueError("Could not derive local matched-filter flux sensitivity from the calibrated maps")
-    five_sigma_jy = 5.0 * denominator / (1e-6 * numerator)
+    five_sigma_jy = 5.0 / (1e-6 * np.sqrt(matched_filter_information))
     levels_jy = [0.5 * five_sigma_jy, five_sigma_jy, 2.0 * five_sigma_jy]
     result = run_injection_recovery(
         image, variance, flags, psf,
@@ -315,7 +318,7 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         min_injection_separation=16, source_exclusion_radius=7,
         solid_angle_sr_map=omega_sr, flux_unit="Jy",
         psf_reference_xy=(x_ref, y_ref), psf_region_radius=100.0,
-        background=background,
+        background=background, detection_psf=detection_template,
     )
     result["evaluation_type"] = "calibration-compatible real-data single-exposure injection recovery"
     result["calibrated_flux_definition"] = "Integrated source flux density in Jy; IMAGE is MJy/sr and pixel solid angle is converted from arcsec^2 to sr."
