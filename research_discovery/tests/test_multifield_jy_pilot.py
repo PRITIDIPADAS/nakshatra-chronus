@@ -110,10 +110,12 @@ def _injection_report(summary):
                 "local_snr_delta_within_match_radius": post_snr - baseline_snr,
                 "post_injection_local_peak_offset_within_match_radius_px": 0.75,
                 "source_only_local_max_snr_within_match_radius": 2.5 + index * 0.1,
+                "source_only_reference_local_max_snr_preinjection_variance": 2.7 + index * 0.1,
                 "source_only_local_peak_offset_within_match_radius_px": 0.5,
                 "source_only_peak_list_recovered": int(index < int(flux_bin["n_recovered"])),
                 "source_only_nearest_peak_distance_px": 0.75,
-                "source_only_diagnostic_uses_original_variance": True,
+                "source_only_diagnostic_uses_injected_variance": True,
+                "source_only_reference_uses_preinjection_variance": True,
             })
     return {
         "threshold_snr": 5.0,
@@ -130,7 +132,8 @@ def _injection_report(summary):
             "threshold_snr": 5.0,
             "does_not_change_recovery_or_peak_matching": True,
             "isolated_source_response_available": True,
-            "source_only_uses_original_variance": True,
+            "source_only_uses_injected_variance": True,
+            "source_only_preinjection_variance_reference_available": True,
             "source_only_peak_list_recovery_is_diagnostic_not_primary": True,
         },
         "flux_summary": [dict(row) for row in injection["flux_summary"]],
@@ -453,7 +456,7 @@ def test_field_summary_requires_complete_isolated_source_only_diagnostics():
     assert record["checks"]["source_only_diagnostics_complete_and_count_bound"] is False
 
     report = _injection_report(summary)
-    report["injections"][0]["source_only_diagnostic_uses_original_variance"] = False
+    report["injections"][0]["source_only_diagnostic_uses_injected_variance"] = False
     record = summarize_field_record(
         FIELDS[0], summary, return_code=0, log_path="field.log",
         injection_report=report, injection_report_sha256="d" * 64,
