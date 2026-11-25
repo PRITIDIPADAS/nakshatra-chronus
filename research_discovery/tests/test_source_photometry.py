@@ -120,6 +120,7 @@ def _photometry_inputs(tmp_path):
         "ra_deg": float(source_sky.ra.deg),
         "dec_deg": float(source_sky.dec.deg),
         "sample_class": "test_source",
+        "display_label": "étoile-test",
         "classification_reference": "https://catalogue.example/S1",
     }
     return files, product, source, compatibility
@@ -363,3 +364,52 @@ def test_native_source_photometry_rejects_audit_json_with_different_native_file_
             code_commit="1" * 40, output_dir=tmp_path / "mismatched-native-audit",
             epsf_extractor=_fake_epsf_extractor,
         )
+
+
+
+def test_source_photometry_batch_reverifies_native_audit_and_epsf_bytes(tmp_path):
+    from research_discovery.spherex.source_photometry import (
+        assemble_source_photometry_series,
+        extract_source_photometry,
+    )
+
+    files, product, source, compatibility = _photometry_inputs(tmp_path)
+    result = extract_source_photometry(
+        **files, product_record=product, source_record=source,
+        compatibility_decision=compatibility,
+        code_commit="1" * 40, output_dir=tmp_path / "out",
+        epsf_extractor=_fake_epsf_extractor,
+    )
+    audit_path = Path(result["extraction_artifacts"]["native_mef_audit_file"]["local_path"])
+    audit_bytes = audit_path.read_bytes()
+    audit_path.write_bytes(audit_bytes + b" ")
+    with pytest.raises(ValueError, match="local SHA-256 does not match its archive manifest"):
+        assemble_source_photometry_series([result], verify_files=True)
+    audit_path.write_bytes(audit_bytes)
+
+    stamp_path = Path(result["extraction_artifacts"]["epsf_stamp_path"])
+    stamp_bytes = stamp_path.read_bytes()
+    stamp_path.write_bytes(stamp_bytes + b" ")
+    with pytest.raises(ValueError, match="rendered ePSF stamp SHA-256 mismatch"):
+        assemble_source_photometry_series([result], verify_files=True)
+
+
+def test_source_photometry_batch_rejects_output_stamp_for_another_subpixel_position(tmp_path):
+    from research_discovery.spherex.source_photometry import (
+        assemble_source_photometry_series,
+        extract_source_photometry,
+    )
+
+    files, product, source, compatibility = _photometry_inputs(tmp_path)
+    result = extract_source_photometry(
+        **files, product_record=product, source_record=source,
+        compatibility_decision=compatibility,
+        code_commit="1" * 40, output_dir=tmp_path / "out",
+        epsf_extractor=_fake_epsf_extractor,
+    )
+    stamp_path = Path(result["extraction_artifacts"]["epsf_stamp_path"])
+    with fits.open(stamp_path, memmap=False) as hdul:
+        hdul[0].header["SRCX"] = float(hdul[0].header["SRCX"]) + 0.25
+        hdul.writeto(stamp_path, overwrite=True)
+    with pytest.raises(ValueError, match="rendered ePSF stamp SHA-256 mismatch"):
+        assemble_source_photometry_series([result], verify_files=True)

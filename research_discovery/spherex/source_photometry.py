@@ -615,12 +615,64 @@ def assemble_source_photometry_series(
         digest_payload.pop("output_path", None)
         actual_digest = hashlib.sha256(
             json.dumps(
-                digest_payload, sort_keys=True, separators=(",", ":"),
-                ensure_ascii=False, allow_nan=False, default=str,
-            ).encode("utf-8")
+                digest_payload, sort_keys=True, separators=(",", ":"), default=str
+            ).encode()
         ).hexdigest()
         if len(claimed_digest) != 64 or claimed_digest != actual_digest:
             raise ValueError(f"extraction result {index} output manifest digest does not match its contents")
+
+        extraction_artifacts = raw.get("extraction_artifacts")
+        if not isinstance(extraction_artifacts, Mapping):
+            raise ValueError(f"extraction result {index} is missing extraction_artifacts")
+        audit_file = extraction_artifacts.get("native_mef_audit_file")
+        stamp_path_value = extraction_artifacts.get("epsf_stamp_path")
+        stamp_sha = str(extraction_artifacts.get("epsf_stamp_sha256", "")).lower()
+        epsf_record = extraction_artifacts.get("epsf_extraction") or {}
+        if not isinstance(audit_file, Mapping):
+            raise ValueError(f"extraction result {index} is missing its native MEF audit file record")
+        if not stamp_path_value or not isinstance(epsf_record, Mapping):
+            raise ValueError(f"extraction result {index} is missing its rendered native ePSF record")
+        if verify_files:
+            audit_proof = _verify_native_audit(
+                audit_file,
+                science_sha256=str((product.get("science") or {}).get("sha256", "")),
+                spectral_wcs_sha256=str((product.get("spectral_wcs") or {}).get("sha256", "")),
+                solid_angle_sha256=str((product.get("solid_angle") or {}).get("sha256", "")),
+                compatibility_decision=product.get("compatibility_decision") or {},
+            )
+            if audit_proof["audit_sha256"] != str(product.get("native_mef_audit_sha256", "")).lower():
+                raise ValueError(f"extraction result {index} product does not bind the verified native MEF audit")
+            stamp_path = Path(str(stamp_path_value))
+            if not stamp_path.is_file():
+                raise FileNotFoundError(f"extraction result {index} rendered ePSF stamp is missing: {stamp_path}")
+            actual_stamp_sha = sha256_file(stamp_path)
+            if len(stamp_sha) != 64 or actual_stamp_sha != stamp_sha:
+                raise ValueError(f"extraction result {index} rendered ePSF stamp SHA-256 mismatch")
+            if str(epsf_record.get("output_sha256", "")).lower() != actual_stamp_sha:
+                raise ValueError(f"extraction result {index} EPSF extractor digest differs from its rendered stamp")
+            from astropy.io import fits
+            with fits.open(stamp_path, memmap=False) as stamp_hdul:
+                stamp_header = stamp_hdul[0].header
+                try:
+                    stamp_x = float(stamp_header["SRCX"])
+                    stamp_y = float(stamp_header["SRCY"])
+                    stamp_x_lower = int(stamp_header["XLL"])
+                    stamp_y_lower = int(stamp_header["YLL"])
+                except (KeyError, TypeError, ValueError, OverflowError):
+                    raise ValueError(f"extraction result {index} rendered ePSF header lacks source position/origin") from None
+            position = extraction_artifacts.get("native_pixel_position_float") or {}
+            if not (
+                math.isclose(stamp_x, float(position.get("x")), rel_tol=0.0, abs_tol=1e-6)
+                and math.isclose(stamp_y, float(position.get("y")), rel_tol=0.0, abs_tol=1e-6)
+            ):
+                raise ValueError(f"extraction result {index} rendered ePSF position differs from the measured source")
+            stamp_lower_left = epsf_record.get("stamp_lower_left_cutout_pixel_0based")
+            if (
+                not isinstance(stamp_lower_left, (list, tuple))
+                or len(stamp_lower_left) != 2
+                or [stamp_x_lower, stamp_y_lower] != [int(stamp_lower_left[0]), int(stamp_lower_left[1])]
+            ):
+                raise ValueError(f"extraction result {index} rendered ePSF origin differs from extractor metadata")
 
         product_ids.add(product_id)
         measurement_ids.add(measurement_id)
@@ -629,6 +681,8 @@ def assemble_source_photometry_series(
             "archive_product_id": product_id,
             "measurement_id": measurement_id,
             "output_manifest_sha256": actual_digest,
+            "native_mef_audit_sha256": str(product.get("native_mef_audit_sha256") or ""),
+            "rendered_epsf_sha256": stamp_sha,
         })
         if measurement.get("valid") is True and measurement.get("fit_status") == "success":
             accepted_products.append(product)
