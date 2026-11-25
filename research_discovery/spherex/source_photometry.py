@@ -633,15 +633,33 @@ def assemble_source_photometry_series(
         if not stamp_path_value or not isinstance(epsf_record, Mapping):
             raise ValueError(f"extraction result {index} is missing its rendered native ePSF record")
         if verify_files:
+            science_file_record = product.get("science") or {}
+            spectral_file_record = product.get("spectral_wcs") or {}
+            solid_angle_file_record = product.get("solid_angle") or {}
+            product_decision = product.get("compatibility_decision") or {}
+            expected_file_digests = {
+                "science_sha256": str(science_file_record.get("sha256", "")).lower(),
+                "spectral_wcs_sha256": str(spectral_file_record.get("sha256", "")).lower(),
+                "solid_angle_sha256": str(solid_angle_file_record.get("sha256", "")).lower(),
+            }
+            for key, expected_digest in expected_file_digests.items():
+                if not expected_digest or str(product_decision.get(key, "")).lower() != expected_digest:
+                    raise ValueError(f"extraction result {index} calibration decision does not bind its {key} product bytes")
+            embedded_decision = {
+                key: value for key, value in product_decision.items()
+                if key not in {"science_sha256", "spectral_wcs_sha256", "solid_angle_sha256", "sha256"}
+            }
             audit_proof = _verify_native_audit(
                 audit_file,
-                science_sha256=str((product.get("science") or {}).get("sha256", "")),
-                spectral_wcs_sha256=str((product.get("spectral_wcs") or {}).get("sha256", "")),
-                solid_angle_sha256=str((product.get("solid_angle") or {}).get("sha256", "")),
-                compatibility_decision=product.get("compatibility_decision") or {},
+                science_sha256=expected_file_digests["science_sha256"],
+                spectral_wcs_sha256=expected_file_digests["spectral_wcs_sha256"],
+                solid_angle_sha256=expected_file_digests["solid_angle_sha256"],
+                compatibility_decision=embedded_decision,
             )
             if audit_proof["audit_sha256"] != str(product.get("native_mef_audit_sha256", "")).lower():
                 raise ValueError(f"extraction result {index} product does not bind the verified native MEF audit")
+            if str(product_decision.get("sha256", "")).lower() != audit_proof["compatibility_sha256"]:
+                raise ValueError(f"extraction result {index} product compatibility decision digest is invalid")
             stamp_path = Path(str(stamp_path_value))
             if not stamp_path.is_file():
                 raise FileNotFoundError(f"extraction result {index} rendered ePSF stamp is missing: {stamp_path}")
