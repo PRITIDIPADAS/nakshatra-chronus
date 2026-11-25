@@ -11,6 +11,23 @@ def _header_value(header,key):
     if value is None: raise ValueError(f"required coordinate header {key} is missing")
     return float(value)
 
+
+def _fits_header(header):
+    """Normalize a mapping to an Astropy FITS Header for WCS parsing."""
+    from astropy.io.fits import Header
+    if isinstance(header, Header):
+        return header
+    result = Header()
+    for key, value in header.items():
+        if value is None:
+            continue
+        try:
+            result[str(key)] = value
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 def detector_origin_offset(image_header, native_shape=NATIVE_SHAPE):
     """Return (x,y) parent-detector coordinate of cutout pixel (0,0), in 0-based pixels."""
     n1=int(image_header.get("NAXIS1",-1)); n2=int(image_header.get("NAXIS2",-1))
@@ -18,7 +35,7 @@ def detector_origin_offset(image_header, native_shape=NATIVE_SHAPE):
         return (0,0)
     if image_header.get("CTYPE1A") and image_header.get("CTYPE2A"):
         from astropy.wcs import WCS
-        transform = WCS(image_header, key="A", relax=True)
+        transform = WCS(_fits_header(image_header), key="A", relax=True)
         if transform.pixel_n_dim != 2 or transform.world_n_dim != 2:
             raise ValueError("alternate WCS A is not a two-dimensional detector mapping")
         matrix = np.asarray(transform.pixel_scale_matrix, dtype=float)
