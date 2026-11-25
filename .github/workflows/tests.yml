@@ -87,8 +87,18 @@ jobs:
           assert native["status"] == "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS"
           compatibility = native["calibration_compatibility"]
           assert compatibility["status"] == "compatible"
-          assert all(item.get("status") == "pass"
-                     for item in compatibility["checks"].values())
+          compatibility_checks = compatibility["checks"]
+          assert all(
+              item.get("status") == "pass"
+              for name, item in compatibility_checks.items()
+              if name != "audit_details"
+          )
+          audit_details = compatibility_checks["audit_details"]
+          assert audit_details
+          assert all(
+              item.get("status") == "pass"
+              for item in audit_details.values()
+          )
 
           products = summary["selected_products"]
           for family in ("spectral_wcs", "solid_angle", "absolute_gain"):
