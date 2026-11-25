@@ -201,7 +201,7 @@ def summarise_label_concordance(rows: list[dict]) -> dict:
         "machine_stype_ml_yso_count": sum(row["machine_yso_label"] for row in profiled),
         "all_three_label_sources_agree_count": profiles.get("published_harmonised_ml_agree", 0),
         "ml_only_label_count": profiles.get("ml_only", 0),
-        "non_ml_label_without_ml_yso_count": profiles.get("non_ml_label_without_ml", 0),
+        "non_ml_label_without_ml_yso_count": profiles.get("non_ml_label_without_ml_yso", 0),
         "partial_multi_source_agreement_count": profiles.get("partial_multi_source_agreement", 0),
         "multi_source_label_support_count": sum(row["multi_source_label_support"] for row in profiled),
         "label_profiles": profiles,

@@ -147,5 +147,6 @@ def test_label_concordance_keeps_ml_only_candidates_separate_from_published_labe
     assert summary["ml_only_label_count"] == 1
     assert summary["published_yso_pub_count"] == 2
     assert summary["machine_stype_ml_yso_count"] == 2
+    assert summary["non_ml_label_without_ml_yso_count"] == 1
     assert "not independent validation" in summary["interpretation"]
 
