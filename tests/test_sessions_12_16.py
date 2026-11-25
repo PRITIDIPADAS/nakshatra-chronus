@@ -449,3 +449,68 @@ def test_investigation_package_can_record_external_sources_without_embedding_byt
         include_source_bytes=False,
     )
     assert result["source_bytes_embedded"] is False
+
+
+def test_evidence_package_export_api_returns_verifiable_zip(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from chronos_causal.api import router
+    from chronos_causal.investigation_package import verify_investigation_package
+
+    app = FastAPI()
+    app.include_router(router)
+    payload = {
+        "candidate_id": "SYNTHETIC-API-CANDIDATE",
+        "analysis": {"verdict": "unknown", "abstention_reasons": ["synthetic API fixture"]},
+        "evidence_graph": {"graph_sha256": "a" * 64, "claim": {"status": "unresolved"}},
+        "source_files": [{
+            "role": "science_mef",
+            "archive_id": "SYNTHETIC-ARCHIVE-ID",
+            "product_type": "Level-2 MEF test fixture",
+            "release": "SYNTHETIC",
+            "detector": "D2",
+            "native_uri": "https://example.org/synthetic/science.fits",
+            "sha256": "b" * 64,
+            "byte_count": 100,
+        }],
+        "reproduction_command": "python reproduce.py --manifest sources.json",
+        "code_commit": "c" * 40,
+        "environment": {"python_version": "fixture"},
+        "processing_configuration": {"data_class": "synthetic"},
+        "failed_checks": [{"check": "real_data", "status": "not_run"}],
+    }
+    response = TestClient(app).post("/api/v5/evidence/package/export", json=payload)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    package_path = tmp_path / "api-export.zip"
+    package_path.write_bytes(response.content)
+    report = verify_investigation_package(package_path)
+    assert report["valid"] is True
+    assert report["source_bytes_embedded"] is False
+
+
+def test_evidence_package_http_endpoint_rejects_server_local_paths():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from chronos_causal.api import router
+
+    app = FastAPI()
+    app.include_router(router)
+    payload = {
+        "candidate_id": "C",
+        "analysis": {"verdict": "unknown"},
+        "evidence_graph": {"graph_sha256": "a" * 64},
+        "source_files": [{
+            "role": "science",
+            "product_type": "Level-2 MEF",
+            "release": "DR1",
+            "detector": "D2",
+            "native_uri": "https://example.org/science.fits",
+            "sha256": "b" * 64,
+            "local_path": "/etc/passwd",
+        }],
+        "reproduction_command": "python reproduce.py",
+    }
+    response = TestClient(app).post("/api/v5/evidence/package/export", json=payload)
+    assert response.status_code == 422
+    assert "source metadata only" in response.json()["detail"]
