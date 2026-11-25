@@ -206,7 +206,8 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                            psf_region_radius: float | None = None,
                            background: np.ndarray | None = None,
                            electrons_per_image_unit: np.ndarray | None = None,
-                           electron_calibration_record: dict | None = None) -> dict:
+                           electron_calibration_record: dict | None = None,
+                           detection_psf: np.ndarray | None = None) -> dict:
     image=np.asarray(image,float); variance=np.asarray(variance,float); flags=np.asarray(flags)
     if image.ndim!=2 or variance.shape!=image.shape or flags.shape!=image.shape: raise ValueError("IMAGE/VARIANCE/FLAGS must have equal 2D shapes")
     if not flux_levels or any((not np.isfinite(x)) or x<=0 for x in flux_levels): raise ValueError("injected flux levels must be finite and >0")
@@ -238,6 +239,12 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
         omega = np.asarray(solid_angle_sr_map, float)
         if omega.shape != image.shape: raise ValueError("solid-angle map must be aligned to IMAGE and have the same shape")
     p=normalize_psf(psf)
+    # The injected source uses the integrated-flux ePSF. For calibrated Jy
+    # images, the matched-filter template may additionally include the local
+    # pixel-solid-angle conversion (surface brightness response).
+    filter_psf = normalize_psf(detection_psf) if detection_psf is not None else p
+    if filter_psf.shape != p.shape:
+        raise ValueError("detection_psf must have the same stamp shape as the injected ePSF")
     py,px=np.array(p.shape)//2
     good=np.isfinite(work_image)&np.isfinite(variance)&(variance>0)
     if excluded_flag_bits: good &= (flags.astype(np.uint64)&np.uint64(excluded_flag_bits))==0
@@ -260,7 +267,7 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
     if psf_region_radius is not None and (psf_reference_xy is None or psf_region_radius <= 0):
         raise ValueError("positive psf_region_radius requires psf_reference_xy")
     rng=np.random.default_rng(seed)
-    baseline_snr = matched_filter_snr(work_image,variance,p)
+    baseline_snr = matched_filter_snr(work_image,variance,filter_psf)
     baseline_snr[~detection_valid] = np.nan
     baseline=detect_peaks(baseline_snr,threshold=snr_threshold)
     # Do not inject on top of already-detected real sources: otherwise source
@@ -292,7 +299,7 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
             inject_source_patch(injected_img, injected_variance, flags, source_signal, x, y,
                 rng=rng, electrons_per_image_unit=electrons_per_image_unit,
                 excluded_flag_bits=excluded_flag_bits)
-        injected_snr = matched_filter_snr(injected_img,injected_variance,p)
+        injected_snr = matched_filter_snr(injected_img,injected_variance,filter_psf)
         injected_snr[~detection_valid] = np.nan
         peaks=detect_peaks(injected_snr,threshold=snr_threshold)
         distances=_distance(peaks,xy)
@@ -335,6 +342,12 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
       "threshold_snr":float(snr_threshold),"match_radius_px":float(match_radius),
       "excluded_flag_bits":int(excluded_flag_bits),"flux_unit":flux_unit,
       "background_model_subtracted":bool(background is not None),
+      "detection_template": {
+          "uses_separate_surface_brightness_psf": detection_psf is not None,
+          "unit_sum": float(filter_psf.sum()),
+          "shape": list(filter_psf.shape),
+          "note": "Injection morphology remains the integrated-flux ePSF; the optional detection template represents the same ePSF divided by the local pixel solid angle for MJy/sr data."
+      },
       "source_photon_noise": {
           "enabled": electrons_per_image_unit is not None,
           "physically_modelled": electrons_per_image_unit is not None and electron_calibration_record is not None,
