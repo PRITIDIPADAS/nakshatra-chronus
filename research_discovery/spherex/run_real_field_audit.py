@@ -388,7 +388,10 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         psf_reference_xy=(x_ref, y_ref), psf_region_radius=100.0,
         background=background, detection_psf=detection_template,
     )
-    result["evaluation_type"] = "calibration-compatible real-data single-exposure injection recovery"
+    result["evaluation_type"] = (
+        "real Level-2 single-exposure Jy injection/recovery using an archive-linked ePSF "
+        "and a detector-matched solid-angle calibration product"
+    )
     result["calibrated_flux_definition"] = "Integrated source flux density in Jy; IMAGE is MJy/sr and pixel solid angle is converted from arcsec^2 to sr."
     result["local_reference_5sigma_sensitivity_jy"] = five_sigma_jy
     result["local_reference_1sigma_flux_uncertainty_jy"] = five_sigma_jy / 5.0
@@ -400,6 +403,7 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
     result["science_provenance"] = {
         "science_native_uri": science_uri, "science_sha256": science_sha,
         "solid_angle_native_uri": area_uri, "solid_angle_sha256": area_sha,
+        "solid_angle_provenance_status": "detector-matched auxiliary calibration product; not represented as a direct input-plane link",
         "epsf_extraction": epsf_meta,
     }
     result["flag_policy"] = {"name": "conservative-photometry", "excluded_flag_names": list(flag_names), "excluded_flag_mask": int(flag_bits)}
@@ -408,7 +412,9 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         "Deterministic injected source signals are added to the measured real image; source Poisson noise is not added because an independently signed electron-conversion record is absent.",
         "The injected sources are visible to this evaluation and the seed is not held by an independent custodian; this is not a blind benchmark.",
         "Sensitivity is computed locally from the observed VARIANCE, native ePSF and detector pixel solid-angle map.",
-        "This run evaluates the matched-filter SNR baseline only, not the complete four-baseline CHRONOS comparison.",
+        "This is an exploratory standalone matched-filter test, not the Session 07 DEEPS SNR baseline and not the four-method CHRONOS comparison.",
+        "The solid-angle map is a detector-matched archive calibration product; it is not asserted to be a direct spherex.provenance_input child of this science plane.",
+        "The position-dependent matched filter uses the pixel-area map at each tested source location; its validity is limited to the selected local PSF zone.",
     ]
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / "calibrated_jy_injection_recovery.json"
