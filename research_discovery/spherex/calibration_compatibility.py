@@ -43,7 +43,8 @@ def _verified_archive_input_link(science: Mapping[str, Any],
     required = (
         "input_table", "science_planeid", "calibration_planeid",
         "inputid", "outputid", "science_native_uri", "calibration_native_uri",
-        "artifact_planeid", "calibration_producttype", "query_sha256",
+        "artifact_planeid", "calibration_producttype", "artifact_md5_status",
+        "artifact_md5_expected", "artifact_md5_actual", "calibration_sha256", "query_sha256",
     )
     missing = [key for key in required if link.get(key) in (None, "")]
     if missing:
@@ -56,6 +57,12 @@ def _verified_archive_input_link(science: Mapping[str, Any],
         "science_uri": str(link.get("science_native_uri")) == str(science.get("native_uri")),
         "calibration_uri": str(link.get("calibration_native_uri")) == str(calibration.get("native_uri")),
         "calibration_producttype": str(link.get("calibration_producttype")).lower() == "calibration",
+        "archive_md5": (
+            str(link.get("artifact_md5_status")) == "pass"
+            and str(link.get("artifact_md5_expected")).lower() == str(link.get("artifact_md5_actual")).lower()
+        ),
+        "calibration_sha256": bool(re.fullmatch(r"[0-9a-fA-F]{64}", str(link.get("calibration_sha256"))))
+            and str(link.get("calibration_sha256")).lower() == str(calibration.get("sha256", "")).lower(),
         "query_sha256": bool(re.fullmatch(r"[0-9a-fA-F]{64}", str(link.get("query_sha256")))),
     }
     passed = all(checks.values())
