@@ -531,23 +531,43 @@ def test_population_rate_is_seeded_and_reports_completeness_selection():
 
 
 def test_snr_adapter_collects_below_five_sigma_when_requested_thresholds_include_it():
-    from chronos_benchmark.adapters import build_four_baseline_records
+    from types import SimpleNamespace
+    from chronos_benchmark.adapters import (
+        build_four_baseline_records, field_mask_sha256, reference_wcs_sha256,
+    )
     from chronos_benchmark.runner import truth_catalogue_digest
+
+    class Header:
+        def tostring(self, **kwargs):
+            return "SNR-TEST-WCS"
+
+    class ReferenceWCS:
+        def to_header(self, relax=True):
+            return Header()
+
     truth = [{"truth_id": "T1", "x": 10.0, "y": 10.0}]
-    signature = {
-        "field_id": "SNR-FLOOR-FIELD", "dataset_class": "synthetic",
-        "exposure_ids": ["E1", "E2"], "mask_sha256": "a" * 64,
-        "truth_catalogue_sha256": truth_catalogue_digest(truth),
-        "coordinate_frame": "detector", "coordinate_unit": "pixel",
-    }
     deep = np.zeros((32, 32), dtype=float)
     deep[10, 10] = 12.0
     deep[22, 22] = 3.0
     state = {
-        "exps": [object()],
+        "exps": [
+            SimpleNamespace(id="E1", det=2),
+            SimpleNamespace(id="E2", det=2),
+        ],
+        "ref": ReferenceWCS(),
         "DEEPS": deep,
-        "RB": np.zeros((1, 32, 32), dtype=bool),
+        "RB": np.zeros((2, 32, 32), dtype=bool),
+        "IN": np.ones((2, 32, 32), dtype=bool),
+        "R": np.zeros((2, 32, 32), dtype=float),
+        "MAP": [],
         "cands": [],
+    }
+    signature = {
+        "field_id": "SNR-FLOOR-FIELD", "dataset_class": "synthetic",
+        "exposure_ids": ["E1", "E2"], "mask_sha256": field_mask_sha256(state),
+        "truth_catalogue_sha256": truth_catalogue_digest(truth),
+        "coordinate_frame": "sky", "coordinate_unit": "pixel",
+        "pixel_wcs_sha256": reference_wcs_sha256(state["ref"]),
     }
     thresholds = {name: [5.0, 1.0] for name in (
         "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
