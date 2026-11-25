@@ -56,6 +56,7 @@ class Exp:
     dxy: tuple = (0.0, 0.0)  # detector pixel of cutout pixel 0, 0 (alternate WCS A in real files)
     frame: str = ""  # exposures with the same frame were taken at the same time (one array on each side of the dichroic)
     source_uri: str = ""
+    source_observation_id: str = ""
     source_sha256: str = ""
     image_unit: str = "MJy/sr"
 
