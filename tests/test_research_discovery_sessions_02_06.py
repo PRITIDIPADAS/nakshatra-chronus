@@ -233,6 +233,51 @@ def test_cwave_cband_cutout_slices_without_interpolation_and_masks_invalid_value
     assert result["cwave_um"][0,0] == pytest.approx(2.1)
 
 
+def test_compatibility_matrix_applies_group_to_science_and_both_calibrations():
+    from research_discovery.spherex.archive_manifest import build_manifest,product_record
+    from research_discovery.spherex.apply_compatibility_matrix import apply_matrix
+    uris=[
+      "https://irsa.ipac.caltech.edu/dr1/level2/science.fits",
+      "https://irsa.ipac.caltech.edu/dr1/cal/spectral_wcs/D2.fits",
+      "https://irsa.ipac.caltech.edu/dr1/cal/solid_angle/D2.fits"]
+    products=[
+      product_record(product_type="level2_mef",native_uri=uris[0],status="discovered_not_downloaded",
+        archive_id="science-1",release="DR1",detector="D2",observation_time={"mjd":60000},
+        pipeline_version="7.1",processing_date="2026-001"),
+      product_record(product_type="spectral_wcs",native_uri=uris[1],status="discovered_not_downloaded",
+        release="DR1",detector="D2",observation_time=None,pipeline_version="7.1",processing_date="2026-001",
+        compatibility_status="candidate_only"),
+      product_record(product_type="solid_angle_pixel_map",native_uri=uris[2],status="discovered_not_downloaded",
+        release="DR1",detector="D2",observation_time=None,pipeline_version="7.1",processing_date="2026-001",
+        compatibility_status="candidate_only")]
+    manifest=build_manifest(archive="IRSA",query={},products=products,processing_config={})
+    matrix={"compatible_pairs":[{"science_uri":uris[0],"calibration_uri":uris[1],
+      "solid_angle_uri":uris[2],"compatibility_group":"DR1:D2:7.1:2026-001"}]}
+    updated,report=apply_matrix(manifest,matrix)
+    assert len(report["applied_pairs"])==1
+    assert {p["compatibility_group"] for p in updated["products"]}=={"DR1:D2:7.1:2026-001"}
+    assert {p["compatibility_status"] for p in updated["products"]}=={"compatible"}
+
+
+def test_compatibility_matrix_refuses_missing_solid_angle_product():
+    from research_discovery.spherex.archive_manifest import build_manifest,product_record
+    from research_discovery.spherex.apply_compatibility_matrix import apply_matrix
+    science_uri="https://irsa.ipac.caltech.edu/dr1/level2/science.fits"
+    cal_uri="https://irsa.ipac.caltech.edu/dr1/cal/spectral_wcs/D2.fits"
+    products=[
+      product_record(product_type="level2_mef",native_uri=science_uri,status="discovered_not_downloaded",
+        archive_id="science-1",release="DR1",detector="D2",observation_time={},pipeline_version="7.1",processing_date="2026-001"),
+      product_record(product_type="spectral_wcs",native_uri=cal_uri,status="discovered_not_downloaded",
+        release="DR1",detector="D2",observation_time=None,pipeline_version="7.1",processing_date="2026-001")]
+    manifest=build_manifest(archive="IRSA",query={},products=products,processing_config={})
+    matrix={"compatible_pairs":[{"science_uri":science_uri,"calibration_uri":cal_uri,
+      "solid_angle_uri":"https://irsa.ipac.caltech.edu/dr1/cal/solid_angle/D2.fits"}]}
+    updated,report=apply_matrix(manifest,matrix)
+    assert not report["applied_pairs"]
+    assert report["unresolved"]
+    assert all(p["compatibility_group"] is None for p in updated["products"])
+
+
 def test_psf_normalization_and_phase_preservation():
     from research_discovery.validation.injection_recovery import normalize_psf
     psf=np.arange(1,10,dtype=float).reshape(3,3)
