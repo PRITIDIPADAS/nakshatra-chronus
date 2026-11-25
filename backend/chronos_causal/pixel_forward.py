@@ -71,6 +71,7 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
                                 wavelength_map_um=None,
                                 calibration_nuisance: Mapping[str, float] | None = None,
                                 parameter_provenance: Mapping[str, Any] | None = None,
+                                motion_integration_substeps: int = 1,
                                 seed: int = 1) -> dict[str, Any]:
     """Render one synthetic exposure from explicit sky, response and detector inputs.
 
@@ -85,6 +86,18 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
     mjd, exposure_time_s = float(mjd), float(exposure_time_s)
     if not math.isfinite(mjd) or not math.isfinite(exposure_time_s) or exposure_time_s <= 0:
         raise ValueError("mjd must be finite and exposure_time_s must be positive")
+    try:
+        substeps_value = float(motion_integration_substeps)
+        substeps = int(substeps_value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("motion_integration_substeps must be an integer from 1 through 101") from None
+    if (
+        isinstance(motion_integration_substeps, bool)
+        or not math.isfinite(substeps_value)
+        or substeps_value != substeps
+        or not 1 <= substeps <= 101
+    ):
+        raise ValueError("motion_integration_substeps must be an integer from 1 through 101")
     wave = np.asarray(wavelengths_um, dtype=float)
     band = np.asarray(bandwidths_um, dtype=float)
     if wave.ndim != 1 or wave.size < 1 or band.shape != wave.shape:
@@ -152,19 +165,41 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
             raise ValueError(f"source {source_index} spectrum must be a non-negative vector matching wavelengths")
         if not all(math.isfinite(value) for value in (x0, y0, reference_mjd, vx, vy)):
             raise ValueError(f"source {source_index} position and motion must be finite")
-        x = x0 + vx * (mjd - reference_mjd)
-        y = y0 + vy * (mjd - reference_mjd)
-        for channel in range(wave.size):
-            total = (
-                float(spectrum[channel]) * float(band[channel]) * exposure_time_s
-                * nuisance["source_scale"]
-            )
-            stamp = np.zeros(shape, dtype=float)
-            _place_kernel(stamp, psf, x, y, total)
-            source_by_wavelength[channel] += stamp * response[channel]
+        # MJD denotes the exposure midpoint. Uniform midpoint quadrature
+        # integrates linear source motion across the finite exposure while
+        # preserving the total exposure time and expected source electrons.
+        centre_offset_days = mjd - reference_mjd
+        x_centre = x0 + vx * centre_offset_days
+        y_centre = y0 + vy * centre_offset_days
+        exposure_days = exposure_time_s / 86400.0
+        half_exposure_days = 0.5 * exposure_days
+        x_start = x_centre - vx * half_exposure_days
+        y_start = y_centre - vy * half_exposure_days
+        x_end = x_centre + vx * half_exposure_days
+        y_end = y_centre + vy * half_exposure_days
+        for substep in range(substeps):
+            fractional_midpoint = (substep + 0.5) / substeps - 0.5
+            time_offset_days = fractional_midpoint * exposure_days
+            x_at_time = x_centre + vx * time_offset_days
+            y_at_time = y_centre + vy * time_offset_days
+            for channel in range(wave.size):
+                total = (
+                    float(spectrum[channel]) * float(band[channel]) * exposure_time_s
+                    * nuisance["source_scale"] / substeps
+                )
+                stamp = np.zeros(shape, dtype=float)
+                _place_kernel(stamp, psf, x_at_time, y_at_time, total)
+                source_by_wavelength[channel] += stamp * response[channel]
         source_metadata.append({
-            "source_id": source_id, "x_at_exposure_px": x, "y_at_exposure_px": y,
-            "dx_pixels_per_day": vx, "dy_pixels_per_day": vy,
+            "source_id": source_id,
+            "x_at_exposure_px": x_centre,
+            "y_at_exposure_px": y_centre,
+            "exposure_start_xy_px": [x_start, y_start],
+            "exposure_end_xy_px": [x_end, y_end],
+            "motion_trail_length_px": float(math.hypot(x_end - x_start, y_end - y_start)),
+            "motion_integration_substeps": substeps,
+            "dx_pixels_per_day": vx,
+            "dy_pixels_per_day": vy,
             "flux_density_electrons_per_s_um": spectrum.tolist(),
         })
 
@@ -237,6 +272,8 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
         },
         "mjd": mjd,
         "exposure_time_s": exposure_time_s,
+        "motion_integration_substeps": substeps,
+        "motion_time_integration": "uniform midpoint quadrature over the finite exposure",
         "wavelengths_um": wave.tolist(),
         "bandwidths_um": band.tolist(),
         "model_inputs": {
@@ -275,7 +312,7 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
             "This is a controlled synthetic forward model, not a SPHEREx raw-readout converter.",
             "Source spectra are supplied in pre-response electron-rate units; a real analysis must derive them from calibrated physical flux and instrument throughput.",
             "The wavelength response and PSF are supplied arrays. Their shape and numeric validity do not establish calibration compatibility.",
-            "The PSF is spatially constant in this first implementation.",
+            "The supplied PSF is spatially constant and is shifted with bilinear subpixel weights; motion is integrated with finite uniform midpoint quadrature.",
             "Noise is Poisson in the expected electron count plus Gaussian read noise; covariance, saturation and nonlinear readout are not modelled here.",
             "Parameters marked assumed, illustrative or placeholder are not measured SPHEREx properties.",
         ],
