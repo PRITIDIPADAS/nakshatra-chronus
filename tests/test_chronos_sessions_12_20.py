@@ -104,3 +104,35 @@ def test_session17_site_has_four_workspaces_and_interactive_research_views():
         assert f'id="{panel}"' in html
     for name in ("searchCandidates","compareCandidates","shareShortlist","renderEvidenceGraph","inspectSpectralCell"):
         assert name in js
+
+
+def test_session15_available_external_record_is_not_promoted_to_verified():
+    from chronos_addons.planner import plan_candidate_observations
+
+    predictions = {"sky": {"mean": 1.0, "sigma": 0.1},
+                   "detector": {"mean": 3.0, "sigma": 0.1}}
+    forecast_provenance = {
+        name: {"fit_id": f"FIT-{name}", "input_observation_ids": ["OBS-1"]}
+        for name in predictions
+    }
+    candidate = {
+        "candidate_observation_id": "AVAILABLE-ONLY",
+        "time": "2027-02-01T00:10:00Z",
+        "predictions": predictions,
+        "forecast_provenance": forecast_provenance,
+        "feasibility": {
+            "status": "available",
+            "source_url": "https://visibility.example/query/42",
+            "retrieved_at": "2026-11-25T12:00:00Z",
+            "calculator": "test",
+            "query_id": "Q42",
+            "evidence_sha256": "e" * 64,
+            "query_parameters": {"target": "test", "band": "IR"},
+            "window_start_utc": "2027-02-01T00:00:00Z",
+            "window_end_utc": "2027-02-01T00:30:00Z",
+        },
+    }
+    result = plan_candidate_observations([candidate])
+    assert result["recommended"] is None
+    assert result["status"] == "science_ranked_but_feasibility_unverified"
+    assert result["blocked_or_unverified"][0]["feasibility"]["status"] == "unverified"
