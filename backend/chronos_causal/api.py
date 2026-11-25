@@ -206,7 +206,8 @@ def status():
             "generic pixel-level spectral forward experiments with parameter provenance",
             "forward-model Jacobian identifiability and nuisance-degeneracy analysis",
             "grouped residuals and conditional parametric-bootstrap challenges",
-            "predeclared measurement-level sky, detector and mixed interventions",
+            "candidate-family transient search correction when complete field candidate sets are supplied",
+            "measurement-level sky, detector and mixed counterfactual interventions",
             "synthetic challenge fixtures",
         ],
         "not_claimed": [
@@ -215,6 +216,7 @@ def status():
             "validated SPHEREx detector coefficients",
             "full Bayesian posterior-predictive inference",
             "real-data performance improvement",
+            "independently verified preregistration timestamps",
             "automated telescope scheduling",
         ],
     }
