@@ -616,3 +616,46 @@ def test_calibration_downloader_rejects_solid_angle_wrong_detector_path(tmp_path
     with pytest.raises(ValueError, match="detector directory"):
         download_calibration(uri, release="dr1", product="solid_angle",
                              detector=2, out=tmp_path / "wrong_detector.fits")
+
+def test_archive_provenance_link_allows_distinct_science_and_calibration_build_ids():
+    from research_discovery.spherex.calibration_compatibility import (
+        _verified_archive_input_link, compatibility_decision,
+    )
+    science = {
+        "native_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/science.fits",
+        "release": "dr1", "detector": "D2", "pipeline_version": "7.0.5",
+        "processing_date": "2026-198", "coordinate_frame": "native_detector",
+    }
+    calibration = {
+        "native_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2.fits",
+        "release": "dr1", "detector": "D2", "pipeline_version": "7.0.0b6",
+        "processing_date": "2026-191", "coordinate_frame": "native_detector",
+        "archive_provenance_link": {
+            "input_table": "spherex.provenance_input",
+            "science_planeid": "science-plane-1",
+            "calibration_planeid": "cal-plane-1",
+            "inputid": "cal-plane-1", "outputid": "science-plane-1",
+            "artifact_planeid": "cal-plane-1",
+            "science_native_uri": science["native_uri"],
+            "calibration_native_uri": calibration["native_uri"],
+            "calibration_producttype": "calibration",
+            "artifact_md5_status": "pass",
+            "artifact_md5_expected": "a" * 32,
+            "artifact_md5_actual": "a" * 32,
+            "calibration_sha256": "b" * 64,
+            "query_sha256": "c" * 64,
+        },
+    }
+    valid, detail = _verified_archive_input_link(science, calibration)
+    assert valid, detail
+    result = compatibility_decision(science, calibration)
+    assert result["checks"]["pipeline_version"]["status"] == "pass"
+    assert result["checks"]["processing_date"]["status"] == "pass"
+    assert result["checks"]["archive_provenance_input_link"]["status"] == "pass"
+    assert result["status"] == "review_required"  # A live native-FITS audit is still mandatory.
+
+    calibration["archive_provenance_link"]["calibration_native_uri"] = "https://example.invalid/wrong.fits"
+    rejected = compatibility_decision(science, calibration)
+    assert rejected["checks"]["archive_provenance_input_link"]["status"] == "fail"
+    assert rejected["status"] == "rejected"
+
