@@ -206,7 +206,11 @@ def compatibility_decision(science: Mapping[str, Any], calibration: Mapping[str,
         checks["coordinate_frame"]["status"] = "fail"
 
     audit = _audit_proof(science, calibration)
-    audit_state = "fail" if audit["status"] == "rejected" else audit["status"]
+    audit_state = (
+        "pass" if audit["status"] == "compatible"
+        else "fail" if audit["status"] == "rejected"
+        else "unknown"
+    )
     checks["native_mef_audit"] = {"status": audit_state, "audit_status": audit["status"],
                                   "audit_sha256": audit.get("audit_sha256"),
                                   "reason": audit.get("reason")}
