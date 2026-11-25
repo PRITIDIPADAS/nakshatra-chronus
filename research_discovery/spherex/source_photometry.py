@@ -355,14 +355,43 @@ def extract_source_photometry(
         with fits.open(stamp_path, memmap=True) as psf_hdul:
             raw_psf = np.asarray(psf_hdul[0].data, dtype=float)
             psf_header = psf_hdul[0].header.copy()
+        if raw_psf.shape != (stamp_size, stamp_size):
+            raise ValueError("position-specific EPSF stamp shape does not match the requested native stamp size")
+        try:
+            stamp_source_x = float(psf_header["SRCX"])
+            stamp_source_y = float(psf_header["SRCY"])
+            header_x_lower = int(psf_header["XLL"])
+            header_y_lower = int(psf_header["YLL"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            raise ValueError("position-specific EPSF stamp must record finite SRCX/SRCY and integer XLL/YLL") from None
+        if not (
+            math.isfinite(stamp_source_x) and math.isfinite(stamp_source_y)
+            and math.isclose(stamp_source_x, x, rel_tol=0.0, abs_tol=1e-6)
+            and math.isclose(stamp_source_y, y, rel_tol=0.0, abs_tol=1e-6)
+        ):
+            raise ValueError("position-specific EPSF source coordinates do not match the requested native source position")
+        epsf_digest = sha256_file(stamp_path)
+        declared_epsf_digest = str(epsf_meta.get("output_sha256", "")).strip().lower()
+        if len(declared_epsf_digest) != 64 or declared_epsf_digest != epsf_digest:
+            raise ValueError("position-specific EPSF output SHA-256 does not match the rendered stamp bytes")
+        lower_left = epsf_meta.get("stamp_lower_left_cutout_pixel_0based")
+        if not isinstance(lower_left, (list, tuple)) or len(lower_left) != 2:
+            raise ValueError("EPSF extractor must record the native stamp lower-left x/y")
+        try:
+            metadata_x_lower, metadata_y_lower = int(lower_left[0]), int(lower_left[1])
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError("EPSF lower-left x/y must be integer native pixels") from None
+        if (
+            metadata_x_lower != header_x_lower or metadata_y_lower != header_y_lower
+            or abs(float(lower_left[0]) - metadata_x_lower) > 1e-9
+            or abs(float(lower_left[1]) - metadata_y_lower) > 1e-9
+        ):
+            raise ValueError("EPSF header and extractor metadata disagree on the native stamp lower-left pixel")
         psf, psf_physicality = enforce_nonnegative_interpolation_psf(raw_psf)
         psf_detector = str(psf_header.get("DETECTOR", "")).strip().removeprefix("D")
         if psf_detector and psf_detector != detector[1:]:
             raise ValueError("extracted ePSF detector does not match the science detector")
-        lower_left = epsf_meta.get("stamp_lower_left_cutout_pixel_0based")
-        if not isinstance(lower_left, (list, tuple)) or len(lower_left) != 2:
-            raise ValueError("EPSF extractor must record the native stamp lower-left x/y")
-        x0, y0 = int(lower_left[0]), int(lower_left[1])
+        x0, y0 = metadata_x_lower, metadata_y_lower
         x1, y1 = x0 + psf.shape[1], y0 + psf.shape[0]
         if x0 < 0 or y0 < 0 or x1 > image.shape[1] or y1 > image.shape[0]:
             raise ValueError("full native ePSF footprint lies outside the science image")

@@ -114,10 +114,11 @@ def _photometry_inputs(tmp_path):
         "detector": "D2",
         "calibration_group": "DR1:D2:7.0.5:2025-001",
     }
+    source_sky = WCS(image_header).pixel_to_world(source_x, source_y)
     source = {
         "source_id": "S1",
-        "ra_deg": 10.0,
-        "dec_deg": 20.0,
+        "ra_deg": float(source_sky.ra.deg),
+        "dec_deg": float(source_sky.dec.deg),
         "sample_class": "test_source",
         "classification_reference": "https://catalogue.example/S1",
     }
