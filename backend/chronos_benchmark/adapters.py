@@ -10,7 +10,7 @@ import numpy as np
 from scipy.ndimage import map_coordinates
 
 from chronos_addons.forensics import diagnose_candidate
-from .runner import REQUIRED_METHODS
+from .runner import REQUIRED_METHODS, truth_catalogue_digest
 
 
 
@@ -277,4 +277,51 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
             "instrument_forensics_policy": "P/D/A candidates plus measured flag/detector-position diagnostics",
             "sky_detector_twin_source": "supplied detections from causal inference on this field",
         },
+    }
+
+
+
+def build_benchmark_field_record(state: Mapping[str, Any], input_signature: Mapping[str, Any],
+                                 truth_catalogue: Sequence[Mapping[str, Any]], *,
+                                 split: str, match_radius: float,
+                                 score_thresholds: Mapping[str, Sequence[float]],
+                                 sky_detector_twin_detections: Sequence[Mapping[str, Any]] | None,
+                                 field_area_deg2: float | None = None,
+                                 independence_group_id: str | None = None,
+                                 snr_threshold: float | None = None,
+                                 forensics_thresholds: Mapping[str, float] | None = None) -> dict[str, Any]:
+    """Build one complete field record ready to append to a benchmark package."""
+    signature = _signature(input_signature)
+    if truth_catalogue_digest(truth_catalogue) != str(signature["truth_catalogue_sha256"]).lower():
+        raise ValueError("truth catalogue does not match input_signature truth_catalogue_sha256")
+    if split not in {"development", "blind_test", "held_out", "not_split"}:
+        raise ValueError("split must be development, blind_test, held_out or not_split")
+    radius = float(match_radius)
+    if not math.isfinite(radius) or radius <= 0:
+        raise ValueError("match_radius must be finite and positive")
+    if field_area_deg2 is not None and (
+        not math.isfinite(float(field_area_deg2)) or float(field_area_deg2) <= 0
+    ):
+        raise ValueError("field_area_deg2 must be finite and positive when supplied")
+    group_id = str(independence_group_id or signature["field_id"])
+    if not group_id:
+        raise ValueError("independence_group_id cannot be blank")
+
+    records = build_four_baseline_records(
+        state,
+        signature,
+        sky_detector_twin_detections=sky_detector_twin_detections,
+        score_thresholds=score_thresholds,
+        snr_threshold=snr_threshold,
+        forensics_thresholds=forensics_thresholds,
+    )
+    return {
+        "split": split,
+        "input_signature": signature,
+        "truth_catalogue": [dict(row) for row in truth_catalogue],
+        "independence_group_id": group_id,
+        "match_radius": radius,
+        "field_area_deg2": float(field_area_deg2) if field_area_deg2 is not None else None,
+        "methods": records["methods"],
+        "baseline_contract": records["baseline_contract"],
     }
