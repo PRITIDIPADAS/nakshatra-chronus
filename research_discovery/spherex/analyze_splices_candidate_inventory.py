@@ -797,7 +797,9 @@ def analyze(root: Path) -> dict:
                 else len(candidate_source_epoch_summaries)
             ),
             "regions_with_completed_query": sum(
-                row.get("candidate_source_exposure_query_status") == "complete_below_declared_row_cap"
+                row.get("candidate_source_exposure_query_status") in {
+                    "complete_below_declared_row_cap", "complete_below_declared_caps"
+                }
                 for row in regional
             ),
             "regions_with_unavailable_query": sum(
