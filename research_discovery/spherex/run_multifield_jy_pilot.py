@@ -57,6 +57,8 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
     electron_derivation = injection.get("electron_calibration_derivation") or {}
     electron_record = electron_derivation.get("record") or {}
     gain_link = electron_record.get("provenance_link") or {}
+    photon_record = photon_noise.get("calibration_record") or {}
+    photon_gain_link = photon_record.get("provenance_link") or {}
     flux_bins = injection.get("flux_summary") or []
     measured_poisson_bins = (
         len(flux_bins) == 3
@@ -105,6 +107,13 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
             and gain_link.get("science_native_uri") == electron_record.get("science_source_uri")
             and gain_link.get("calibration_native_uri") == electron_record.get("calibration_uri")
             and gain_link.get("calibration_sha256") == electron_record.get("calibration_sha256")
+            and photon_gain_link.get("input_table") == "spherex.provenance_input"
+            and photon_gain_link.get("status") == "verified_from_live_irsa_foreign_key_query"
+            and photon_gain_link.get("artifact_md5_status") == "pass"
+            and photon_gain_link.get("inputid") == photon_gain_link.get("calibration_planeid")
+            and photon_gain_link.get("outputid") == photon_gain_link.get("science_planeid")
+            and photon_gain_link.get("calibration_sha256") == electron_record.get("calibration_sha256")
+            and photon_record.get("calibration_sha256") == electron_record.get("calibration_sha256")
         ),
         "electron_conversion_review_status_is_explicit": electron_derivation.get("independent_review_status") == "pending",
         "science_native_uri_present": bool(science.get("uri")),
