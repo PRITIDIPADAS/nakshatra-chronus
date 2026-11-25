@@ -135,6 +135,103 @@ def inject_source_patch(image: np.ndarray, variance: np.ndarray, flags: np.ndarr
             "variance_added_sum": float(variance_added.sum())}
 
 
+def matched_filter_flux_uncertainty_jy(
+    psf: np.ndarray,
+    variance_patch: np.ndarray,
+    solid_angle_sr_patch: np.ndarray,
+) -> float:
+    """Return the known-covariance matched-filter 1-sigma flux error in Jy.
+
+    IMAGE is in MJy/sr. A unit-integral ePSF p_i for integrated flux F_Jy
+    produces image signal 1e-6 * F_Jy * p_i / Omega_i. With diagonal
+    variance V_i, the Fisher information is
+    1e-12 * sum((p_i / Omega_i)^2 / V_i).
+    """
+    p = normalize_psf(psf)
+    var = np.asarray(variance_patch, dtype=float)
+    omega = np.asarray(solid_angle_sr_patch, dtype=float)
+    if var.shape != p.shape or omega.shape != p.shape:
+        raise ValueError("PSF, variance and solid-angle patches must have identical shapes")
+    if (np.any(~np.isfinite(var)) or np.any(var <= 0)
+            or np.any(~np.isfinite(omega)) or np.any(omega <= 0)):
+        raise ValueError("variance and solid-angle patches must be finite and positive")
+    information_without_jy_scale = float(np.sum((p / omega) ** 2 / var))
+    if not np.isfinite(information_without_jy_scale) or information_without_jy_scale <= 0:
+        raise ValueError("matched-filter flux information must be finite and positive")
+    return float(1.0e6 / np.sqrt(information_without_jy_scale))
+
+
+def matched_filter_snr_jy(
+    image: np.ndarray,
+    variance: np.ndarray,
+    psf: np.ndarray,
+    solid_angle_sr_map: np.ndarray,
+    *,
+    region_center_xy: tuple[float, float],
+    region_radius_px: float,
+) -> np.ndarray:
+    """Position-dependent matched-filter SNR for Jy sources in MJy/sr images.
+
+    A local response p_i/Omega_i is evaluated for every candidate pixel, so
+    the detector-aligned solid-angle map is included inside each PSF
+    footprint. Only the requested local region is evaluated; pixels outside
+    it remain NaN.
+    """
+    from numpy.lib.stride_tricks import sliding_window_view
+
+    data = np.asarray(image, dtype=float)
+    var = np.asarray(variance, dtype=float)
+    omega = np.asarray(solid_angle_sr_map, dtype=float)
+    p = normalize_psf(psf)
+    if data.ndim != 2 or var.shape != data.shape or omega.shape != data.shape:
+        raise ValueError("image, variance and solid-angle map must be aligned 2D arrays")
+    if not np.isfinite(region_radius_px) or region_radius_px <= 0:
+        raise ValueError("region_radius_px must be positive and finite")
+    if len(region_center_xy) != 2 or not np.all(np.isfinite(region_center_xy)):
+        raise ValueError("region_center_xy must contain finite x,y coordinates")
+    height, width = data.shape
+    py, px = np.array(p.shape) // 2
+    cx, cy = map(float, region_center_xy)
+    x_first = max(px, int(np.ceil(cx - region_radius_px)))
+    x_last = min(width - px - 1, int(np.floor(cx + region_radius_px)))
+    y_first = max(py, int(np.ceil(cy - region_radius_px)))
+    y_last = min(height - py - 1, int(np.floor(cy + region_radius_px)))
+    output = np.full(data.shape, np.nan, dtype=float)
+    if x_last < x_first or y_last < y_first:
+        raise ValueError("requested local matched-filter region does not intersect the image")
+
+    image_windows = sliding_window_view(data, p.shape)[
+        y_first - py:y_last - py + 1,
+        x_first - px:x_last - px + 1,
+    ]
+    variance_windows = sliding_window_view(var, p.shape)[
+        y_first - py:y_last - py + 1,
+        x_first - px:x_last - px + 1,
+    ]
+    omega_windows = sliding_window_view(omega, p.shape)[
+        y_first - py:y_last - py + 1,
+        x_first - px:x_last - px + 1,
+    ]
+    good = (
+        np.all(np.isfinite(image_windows), axis=(-2, -1))
+        & np.all(np.isfinite(variance_windows) & (variance_windows > 0), axis=(-2, -1))
+        & np.all(np.isfinite(omega_windows) & (omega_windows > 0), axis=(-2, -1))
+    )
+    safe_var = np.where(np.isfinite(variance_windows) & (variance_windows > 0),
+                        variance_windows, 1.0)
+    safe_omega = np.where(np.isfinite(omega_windows) & (omega_windows > 0),
+                          omega_windows, 1.0)
+    response = p[None, None, :, :] / safe_omega
+    weighted_response = response / safe_var
+    numerator = np.sum(image_windows * weighted_response, axis=(-2, -1))
+    denominator_squared = np.sum(response * weighted_response, axis=(-2, -1))
+    local_snr = np.full(numerator.shape, np.nan, dtype=float)
+    valid = good & np.isfinite(denominator_squared) & (denominator_squared > 0)
+    local_snr[valid] = numerator[valid] / np.sqrt(denominator_squared[valid])
+    output[y_first:y_last + 1, x_first:x_last + 1] = local_snr
+    return output
+
+
 def matched_filter_snr(image: np.ndarray, variance: np.ndarray, psf: np.ndarray) -> np.ndarray:
     image=np.asarray(image,float); variance=np.asarray(variance,float); psf=np.asarray(psf,float)
     if image.ndim!=2 or variance.shape!=image.shape: raise ValueError("image and variance must be same-sized 2D arrays")
@@ -267,7 +364,13 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
     if psf_region_radius is not None and (psf_reference_xy is None or psf_region_radius <= 0):
         raise ValueError("positive psf_region_radius requires psf_reference_xy")
     rng=np.random.default_rng(seed)
-    baseline_snr = matched_filter_snr(work_image,variance,filter_psf)
+    if flux_unit == "Jy" and psf_reference_xy is not None and psf_region_radius is not None:
+        baseline_snr = matched_filter_snr_jy(
+            work_image, variance, p, omega,
+            region_center_xy=psf_reference_xy, region_radius_px=psf_region_radius,
+        )
+    else:
+        baseline_snr = matched_filter_snr(work_image,variance,filter_psf)
     baseline_snr[~detection_valid] = np.nan
     baseline=detect_peaks(baseline_snr,threshold=snr_threshold)
     # Do not inject on top of already-detected real sources: otherwise source
@@ -299,7 +402,13 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
             inject_source_patch(injected_img, injected_variance, flags, source_signal, x, y,
                 rng=rng, electrons_per_image_unit=electrons_per_image_unit,
                 excluded_flag_bits=excluded_flag_bits)
-        injected_snr = matched_filter_snr(injected_img,injected_variance,filter_psf)
+        if flux_unit == "Jy" and psf_reference_xy is not None and psf_region_radius is not None:
+            injected_snr = matched_filter_snr_jy(
+                injected_img, injected_variance, p, omega,
+                region_center_xy=psf_reference_xy, region_radius_px=psf_region_radius,
+            )
+        else:
+            injected_snr = matched_filter_snr(injected_img,injected_variance,filter_psf)
         injected_snr[~detection_valid] = np.nan
         peaks=detect_peaks(injected_snr,threshold=snr_threshold)
         distances=_distance(peaks,xy)
