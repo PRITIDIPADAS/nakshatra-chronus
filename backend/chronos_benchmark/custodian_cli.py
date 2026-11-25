@@ -39,6 +39,12 @@ def create_key_file(path: str | Path) -> Path:
     from cryptography.fernet import Fernet
 
     target = Path(path).expanduser().resolve()
+    try:
+        target.relative_to(ROOT.resolve())
+    except ValueError:
+        pass
+    else:
+        raise ValueError("custodian Fernet key must be stored outside the repository")
     if target.exists():
         raise FileExistsError(f"refusing to overwrite existing key file: {target}")
     target.parent.mkdir(parents=True, exist_ok=True)
