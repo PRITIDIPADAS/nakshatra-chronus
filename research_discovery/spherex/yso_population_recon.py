@@ -396,7 +396,10 @@ def inspect_region(region: dict) -> dict:
                 "row_count": None,
                 "rows": [],
             }
-            if name == "dr1_level2_exposures_full_region":
+            if name in {
+                "dr1_level2_exposures_full_region",
+                "candidate_source_exposure_matches",
+            }:
                 error_record["optional"] = True
                 optional_query_errors[name] = error_record["error"]
             else:
@@ -462,6 +465,53 @@ def inspect_region(region: dict) -> dict:
     counts["ml_only_candidate_rows_in_bounded_candidate_query"] = sum(
         row["machine_only_candidate"] for row in candidate_profiles
     )
+
+    source_epoch_result = query_results["candidate_source_exposure_matches"]
+    source_epoch_error = source_epoch_result.get("error")
+    source_epoch_rows = source_epoch_result.get("rows", [])
+    if source_epoch_error:
+        matched_source_exposure_rows = []
+        source_epoch_summaries = []
+        source_epoch_summary = {
+            "status": "unavailable_due_to_optional_query_error",
+            "error": source_epoch_error,
+            "candidate_source_id_count": None,
+            "candidate_source_ids_with_level2_footprint_match": None,
+            "candidate_source_ids_without_level2_footprint_match": None,
+        }
+    else:
+        matched_source_exposure_rows, source_epoch_summaries, source_epoch_summary = (
+            summarize_candidate_source_epochs(region, candidate_rows, source_epoch_rows)
+        )
+        source_epoch_summary["status"] = (
+            "lower_bound_at_declared_row_cap"
+            if source_epoch_summary["source_epoch_query_at_cap"]
+            else "complete_below_declared_row_cap"
+        )
+    counts["candidate_source_exposure_query_complete"] = (
+        not source_epoch_error
+        and not source_epoch_summary.get("source_epoch_query_at_cap", False)
+        and bool(counts["candidate_query_complete"])
+    )
+    counts["candidate_source_exposure_match_rows"] = (
+        len(matched_source_exposure_rows) if not source_epoch_error else None
+    )
+    counts["candidate_unique_source_ids_with_level2_footprint_match"] = (
+        source_epoch_summary.get("candidate_source_ids_with_level2_footprint_match")
+    )
+    counts["candidate_unique_source_ids_without_level2_footprint_match"] = (
+        source_epoch_summary.get("candidate_source_ids_without_level2_footprint_match")
+    )
+    counts["candidate_source_footprint_matches_measured"] = not bool(source_epoch_error)
+    counts["source_level_epoch_coverage_measured"] = False
+    query_results["candidate_source_exposure_matches"]["rows"] = (
+        matched_source_exposure_rows if not source_epoch_error else []
+    )
+    query_results["candidate_source_epoch_summary"] = {
+        "method": "great-circle cone filter and unique SPLICES source ID / Level-2 plane ID pairs",
+        "summary": source_epoch_summary,
+        "rows": source_epoch_summaries,
+    }
 
     exposure_result = query_results["dr1_level2_exposures"]
     exposure_rows = exposure_result.get("rows", [])
@@ -540,6 +590,8 @@ def main() -> None:
     all_candidates = []
     all_classes = []
     all_label_disagreements = []
+    all_source_exposure_matches = []
+    all_source_epoch_summaries = []
     errors = []
     for region in REGIONS:
         print(f"Querying SPLICES and DR1 coverage: {region['name']}", flush=True)
@@ -565,12 +617,20 @@ def main() -> None:
                 all_label_disagreements.append({
                     **row, "recon_region": region["name"], "region_role": region["role"]
                 })
+            all_source_exposure_matches.extend(
+                result["queries"]["candidate_source_exposure_matches"]["rows"]
+            )
+            all_source_epoch_summaries.extend(
+                result["queries"]["candidate_source_epoch_summary"]["rows"]
+            )
             region_dir = OUTPUT / region["name"]
             for name, query_result in result["queries"].items():
                 if "rows" in query_result and name in {
                     "catalogue_sources", "candidate_sources", "class_distribution",
                     "label_disagreement_candidates", "dr1_level2_exposures",
-                    "dr1_level2_exposures_full_region"
+                    "dr1_level2_exposures_full_region",
+                    "candidate_source_exposure_matches",
+                    "candidate_source_epoch_summary"
                 }:
                     write_csv(region_dir / f"{name}.csv", query_result["rows"])
             (region_dir / "query_record.json").write_text(
@@ -584,6 +644,8 @@ def main() -> None:
     write_csv(OUTPUT / "candidate_sources_all_regions.csv", all_candidates)
     write_csv(OUTPUT / "class_distribution_all_regions.csv", all_classes)
     write_csv(OUTPUT / "label_disagreement_candidates_all_regions.csv", all_label_disagreements)
+    write_csv(OUTPUT / "candidate_source_exposure_matches_all_regions.csv", all_source_exposure_matches)
+    write_csv(OUTPUT / "candidate_source_epoch_summary_all_regions.csv", all_source_epoch_summaries)
     report = {
         "schema": "chronos-spllices-yso-recon/1.0",
         "started_utc": started,
@@ -595,6 +657,8 @@ def main() -> None:
         "candidate_record_count": len(all_candidates),
         "class_distribution_record_count": len(all_classes),
         "label_disagreement_candidate_count": len(all_label_disagreements),
+        "candidate_source_exposure_match_row_count": len(all_source_exposure_matches),
+        "candidate_source_epoch_summary_row_count": len(all_source_epoch_summaries),
         "optional_query_errors": {
             item["region"]["name"]: item.get("optional_query_errors", {})
             for item in summaries if item.get("optional_query_errors")
@@ -616,7 +680,7 @@ def main() -> None:
             "The centre-point DR1 query tests whether each fixed region-centre coordinate lies inside an exposure polygon.",
             "A separate optional INTERSECTS query tests whether each exposure polygon overlaps the full circular region. If IRSA rejects that optional geometry query, the error is recorded separately and does not invalidate the catalogue or centre-point queries.",
             "The row-cap checks establish only that each completed query returned fewer than 20000 rows; they do not establish survey-wide or source-level coverage completeness.",
-            "Neither regional footprint query matches exposures to individual catalogue sources; no source-level epoch completeness is measured by this reconnaissance.",
+            "The optional candidate-source query matches SPLICES coordinates to Level-2 exposure polygons; this is geometric archive footprint coverage, not extracted-flux validity, spectrum quality, usable epoch cadence or source-level epoch completeness.",
         ],
         "report_sha256": None,
     }
