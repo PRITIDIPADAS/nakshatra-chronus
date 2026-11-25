@@ -65,8 +65,9 @@ def test_session15_planner_needs_structured_external_feasibility_record():
     base={"candidate_observation_id":"C1","predictions":pred,"forecast_provenance":provenance}
     unknown=plan_candidate_observations([{**base,"feasibility":{"status":"unknown"}}])
     assert unknown["recommended"] is None
-    verified={**base,"feasibility":{"status":"verified","feasible":True,
+    verified={**base,"time":"2026-11-25T14:00:00Z","feasibility":{"status":"verified","feasible":True,
         "source_uri":"https://visibility.example/query/1","checked_utc":"2026-11-25T12:00:00Z",
+        "window_start_utc":"2026-11-25T13:00:00Z","window_end_utc":"2026-11-25T15:00:00Z",
         "calculator":"test","query_id":"Q1","evidence_sha256":"d"*64,
         "query_parameters":{"target":"test","band":"IR"}}}
     result=plan_candidate_observations([verified])
