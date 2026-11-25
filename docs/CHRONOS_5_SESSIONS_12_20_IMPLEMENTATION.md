@@ -161,3 +161,12 @@ The Session 19 coverage/rate path has additional fail-closed checks on the curre
 
 These checks are tested using synthetic fixtures with synthetic archive/provenance URLs and fake hashes. They are software regressions, not real measurements or custodian attestations. The ratio still has to be derived from documented control/science solid-angle and time coverage, and the scalar completeness model still does not replace a multidimensional selection function. The new population-gate CI for current head `63b800601a3a24372bf9426099d094eeba24bda9` was pending at the moment this note was edited.
 
+
+
+## Exact candidate-to-archive product manifest — 25 November 2026
+
+The SIAv2 matcher now emits exact source/product pair records as well as compact per-source summaries. `candidate_source_product_matches.csv` is written under each predeclared region and `candidate_source_product_matches_all_regions.csv` is written across the six regions. Each pair records the source ID, publisher dataset ID where available, native access URI, archive `obs_id`, collection/release, spectral band, archive time bounds and matcher version. The full regional SIAv2 manifest retains the `s_region` polygon used for each geometric association.
+
+The population inventory analyzer now uses `archive_product_id` rather than assuming legacy `planeid` for schema 1.1 cross-region source/product overlap. Schema 1.0 continues to use its historical plane-ID interpretation. Missing per-source product manifests now set the region and aggregate product-match result to unavailable rather than zero. Regression tests cover missing manifests and a repeated source/product identity across fields.
+
+The matcher’s `complete_below_declared_caps` status is counted as a completed archive-metadata query by the analyzer, but it is not a claim of temporal completeness or usable cadence. The exact current branch has pending CI; no new pass is claimed here.

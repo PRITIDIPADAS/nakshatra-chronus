@@ -111,3 +111,10 @@ On feature-branch head f5fe73471c83d1e9639ebf204abbf139ae01da77, push workflow #
 The population-rate estimator now reuses the frozen completeness threshold from the coverage audit unless an explicit matching threshold is supplied; it revalidates the audit against the exact submitted field records. Science-minus-null-control count draws remain signed while field results are pooled, and the non-negative boundary is applied once to the pooled sum, divided by the combined science-field solid-angle×time exposure. Null-control exposure ratios are checked against both area-time denominators. The generic /api/v5/population/rate route now requires a coverage-audit object rather than allowing an unaudited rate request.
 
 These are software/statistical-contract improvements only. No source-photometry sample, YSO discovery or independent population result is claimed; the population-selection, classification, contamination, cadence and independent preregistration gates remain open.
+
+
+## Source-to-product association software update — 25 November 2026
+
+The six-region pipeline no longer relies on the rejected direct SPLICES/artifact/plane TAP join. It uses local spherical gnomonic point-in-polygon matching against SIAv2 `s_region` metadata, and now preserves the exact source-to-product pairs in per-region and aggregate CSV manifests. The inventory analyzer consumes the pair manifest and computes cross-region overlap using archive product IDs. Missing pair files are marked unavailable, not zero. This is a provenance/coverage improvement only; it is not source photometry, a verified time series, a new YSO discovery, or a population result.
+
+The latest committed code head when this note was updated is `fc64357658bc042fc27623b743ae7c7e08226116`. The combined tests/M101 and refreshed six-region YSO workflows were pending; no passing status is claimed for that revision.

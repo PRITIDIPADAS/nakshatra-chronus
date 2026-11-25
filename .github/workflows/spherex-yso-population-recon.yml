@@ -36,7 +36,7 @@ jobs:
         run: python -m pip install -r research_discovery/requirements-research.txt
       - name: Compile the reconnaissance runner
         run: python -m py_compile research_discovery/spherex/yso_population_recon.py
-      - name: Query predeclared SPLICES fields and DR1 Level-2 coverage
+      - name: Query predeclared SPLICES fields and DR1/QR3 SIAv2 image and cube coverage
         run: |
           set -o pipefail
           python -m research_discovery.spherex.yso_population_recon 2>&1 | tee yso-population-recon.log

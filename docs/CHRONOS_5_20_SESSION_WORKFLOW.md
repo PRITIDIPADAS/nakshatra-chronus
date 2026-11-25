@@ -501,3 +501,12 @@ The canonical [20-session capability ledger](CHRONOS_5_CAPABILITY_LEDGER.md) sup
 The current branch additionally tightens the Session 19 population gate: it requires feature and both continuum bands in the same repeated epochs, detects sources reused across fields, and requires the science-to-null-control exposure ratio before a rate is estimated. New tests are included. CI on the resulting branch head `63b800601a3a24372bf9426099d094eeba24bda9` was still running when this note was written; do not read that pending run as a pass.
 
 The M101 and six-region pilots remain exploratory and non-blind. Lupus III's 0/20 recovery in all three bins remains a critical anomaly. Gain-derived electron conversions still require independent calibration review. The blind four-method benchmark, source-level validated (F(\lambda,t)) YSO population analysis, external astronomical reproduction and validated scientific release remain unsatisfied.
+
+
+## Source-to-product provenance update — 25 November 2026
+
+The six-region SPLICES/DR1/QR3 workflow now computes local spherical point-in-polygon associations between candidate coordinates and the returned SIAv2 `s_region` polygons. It writes a per-field `candidate_source_product_matches.csv` and an aggregate `candidate_source_product_matches_all_regions.csv`. Each row binds a SPLICES source ID to a specific archive product ID, `obs_id`, SIAv2 collection/release, band and archive time bounds. The analysis audit uses these exact product IDs for cross-field overlap; the previous unsupported three-table SPLICES/artifact/plane TAP join is no longer used.
+
+These records establish only a positional association with an archive image footprint. Product time metadata are not evidence of independent usable epochs, and the workflow does not extract calibrated source flux or validate a light curve. The newer schema-1.1 analyzer treats a missing product-pair manifest as unavailable, not zero. The current code and its regression tests are committed, but the workflows on the latest commit `fc64357658bc042fc27623b743ae7c7e08226116` were still pending when this note was updated. Do not treat that pending CI as a pass.
+
+This updates the earlier evidence refresh which described source-to-exposure association as unavailable. The science acceptance gates in Sessions 18–20 remain unchanged and unsatisfied.
