@@ -489,3 +489,32 @@ def test_blind_control_labels_and_field_ids_stay_in_encrypted_store():
     empty_row = next(row for row in private["fields"] if row["field"]["field_id"] == "SECRET-FIELD-0")
     assert empty_row["control_type"] == "empty_field"
     assert empty_row["field"]["truth_catalogue"] == []
+
+
+def test_population_rate_rejects_duplicate_field_ids_and_fractional_counts():
+    from chronos_population.rates import estimate_event_rate
+    row = {
+        "field_id": "FIELD-A", "observed_events": 3, "null_events": 1,
+        "area_deg2": 1.0, "baseline_days": 10.0,
+        "n_injected": 100, "n_recovered": 80,
+    }
+    with pytest.raises(ValueError, match="duplicate field_id"):
+        estimate_event_rate([row, dict(row)], draws=100)
+    fractional = dict(row, field_id="FIELD-B", observed_events=2.5)
+    with pytest.raises(ValueError, match="integer count"):
+        estimate_event_rate([fractional], draws=100)
+
+
+def test_population_rate_is_seeded_and_reports_completeness_selection():
+    from chronos_population.rates import estimate_event_rate
+    fields = [
+        {"field_id": "FIELD-A", "observed_events": 5, "null_events": 1,
+         "area_deg2": 1.0, "baseline_days": 20.0, "n_injected": 100, "n_recovered": 80},
+        {"field_id": "FIELD-B", "observed_events": 2, "null_events": 1,
+         "area_deg2": 0.5, "baseline_days": 10.0, "n_injected": 100, "n_recovered": 2},
+    ]
+    a = estimate_event_rate(fields, minimum_completeness=0.1, draws=200, seed=7)
+    b = estimate_event_rate(fields, minimum_completeness=0.1, draws=200, seed=7)
+    assert a == b
+    assert a["field_count"] == 1
+    assert a["skipped_fields"][0]["field_id"] == "FIELD-B"
