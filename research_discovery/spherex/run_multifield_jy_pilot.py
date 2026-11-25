@@ -92,7 +92,7 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
         "checks": checks,
         "metrics": metrics,
         "science": {
-            key: science.get(key)
+            key: (science.get("image_bunit") if key == "image_unit" else science.get(key))
             for key in ("uri", "sha256", "observation_id", "detector", "release",
                         "pipeline_version", "processing_date", "exposure_time_s", "image_unit")
         },
