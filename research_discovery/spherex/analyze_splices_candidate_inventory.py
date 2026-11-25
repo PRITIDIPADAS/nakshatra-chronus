@@ -450,6 +450,95 @@ def _audit_source_product_manifest(
     }
 
 
+
+
+def _summarize_same_observation_band_coverage(
+    candidate_ids: set[str],
+    source_product_rows: list[dict],
+    *,
+    available: bool,
+) -> dict:
+    """Count exact same-obs-id detector coverage without time-proximity grouping.
+
+    A release-qualified archive obs_id is the identity key. Rows from different
+    releases or merely nearby timestamps are never merged into one visit.
+    """
+    if not available:
+        return {
+            "available": False,
+            "status": "unavailable",
+            "candidate_source_count": len(candidate_ids),
+            "sources_with_same_observation_d4_d5_products": None,
+            "same_observation_d4_d5_source_visit_count": None,
+            "sources_with_same_observation_d3_d4_d5_products": None,
+            "identity_rule": "exact data_release plus obs_id equality; no timestamp proximity grouping",
+            "metadata_only": True,
+            "not_validated_independent_epochs": True,
+        }
+
+    products_by_source_obs: dict[str, dict[tuple[str, str], set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+    for row in source_product_rows:
+        source_id = str(row.get("source_id") or "").strip()
+        obs_id = str(row.get("obs_id") or row.get("obsid") or "").strip()
+        release = str(row.get("data_release") or "").strip().lower()
+        band = str(row.get("energy_bandpassname") or "").strip()
+        if source_id not in candidate_ids or not obs_id or not release or not band:
+            continue
+        products_by_source_obs[source_id][(release, obs_id)].add(band)
+
+    source_details = []
+    sources_with_d4_d5 = 0
+    d4_d5_source_visits = 0
+    sources_with_d3_d4_d5 = 0
+    source_obs_rows_by_band = Counter()
+    for source_id in sorted(candidate_ids):
+        observation_rows = products_by_source_obs.get(source_id, {})
+        d4_d5_visits = []
+        d3_d4_d5_visits = []
+        for (release, obs_id), bands in sorted(observation_rows.items()):
+            for band in bands:
+                source_obs_rows_by_band[band] += 1
+            if {"SPHEREx-D4", "SPHEREx-D5"}.issubset(bands):
+                d4_d5_visits.append({"data_release": release, "obs_id": obs_id})
+            if {"SPHEREx-D3", "SPHEREx-D4", "SPHEREx-D5"}.issubset(bands):
+                d3_d4_d5_visits.append({"data_release": release, "obs_id": obs_id})
+        if d4_d5_visits:
+            sources_with_d4_d5 += 1
+            d4_d5_source_visits += len(d4_d5_visits)
+        if d3_d4_d5_visits:
+            sources_with_d3_d4_d5 += 1
+        if d4_d5_visits or d3_d4_d5_visits:
+            source_details.append({
+                "source_id": source_id,
+                "d4_d5_same_observation_visits": d4_d5_visits,
+                "d3_d4_d5_same_observation_visits": d3_d4_d5_visits,
+            })
+
+    return {
+        "available": True,
+        "status": "computed",
+        "candidate_source_count": len(candidate_ids),
+        "candidate_sources_with_any_product_match": len(products_by_source_obs),
+        "sources_with_same_observation_d4_d5_products": sources_with_d4_d5,
+        "same_observation_d4_d5_source_visit_count": d4_d5_source_visits,
+        "sources_with_same_observation_d3_d4_d5_products": sources_with_d3_d4_d5,
+        "unique_source_observation_rows_by_band": dict(sorted(source_obs_rows_by_band.items())),
+        "sources_with_required_band_overlap": source_details,
+        "required_feature_and_continuum_bands": ["SPHEREx-D4", "SPHEREx-D5"],
+        "identity_rule": "exact data_release plus obs_id equality; no timestamp proximity grouping",
+        "metadata_only": True,
+        "not_validated_independent_epochs": True,
+        "interpretation": (
+            "Detector-product associations are archive metadata only. An exact "
+            "release-qualified obs_id overlap is a necessary archive-coverage "
+            "check, not proof of calibrated flux, a validated epoch, or physical "
+            "simultaneity. Nearby times are not merged."
+        ),
+    }
+
+
 def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
     region_rows = []
     centre_point_exposures = []
@@ -624,6 +713,13 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
             source_match_error = (
                 source_epoch_error or source_product_error or source_product_manifest_integrity_error
             )
+            same_observation_band_coverage = _summarize_same_observation_band_coverage(
+                candidate_ids,
+                source_product_rows,
+                available=source_match_error is None
+                and source_product_manifest_audit is not None
+                and source_product_manifest_audit.get("valid") is True,
+            )
             matched_source_ids = {
                 str(row.get("source_id") or "").strip()
                 for row in source_match_rows
@@ -663,6 +759,7 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
                     else "observed_lower_bound")
             )
         else:
+            same_observation_band_coverage = None
             source_match_error = source_epoch_error
             source_band_summary, source_plane_ids = _summarize_exposure_rows(source_match_rows)
             matched_source_ids = {
@@ -728,6 +825,7 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
             "candidate_source_product_match_error": source_product_error,
             "candidate_source_product_manifest_integrity_error": source_product_manifest_integrity_error,
             "candidate_source_product_manifest_audit": source_product_manifest_audit,
+            "candidate_source_same_observation_band_coverage": same_observation_band_coverage,
             "candidate_source_exposure_match_rows": (
                 None if source_match_error else len(source_match_rows)
             ),

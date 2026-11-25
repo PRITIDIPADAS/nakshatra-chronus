@@ -722,3 +722,67 @@ def test_schema_1_1_source_product_manifest_requires_archive_identity_fields(tmp
     assert audit["valid"] is False
     assert audit["pair_rows_with_missing_required_archive_metadata"] > 0
     assert first["candidate_source_product_manifest_integrity_error"]
+
+
+
+def test_same_observation_band_coverage_requires_exact_release_qualified_obs_id():
+    from research_discovery.spherex.analyze_splices_candidate_inventory import (
+        _summarize_same_observation_band_coverage,
+    )
+
+    rows = [
+        # Close timestamps are deliberately not merged: these are different obs_ids.
+        {"source_id": "S1", "data_release": "dr1", "obs_id": "VISIT-1",
+         "energy_bandpassname": "SPHEREx-D4", "t_min": "60000.00"},
+        {"source_id": "S1", "data_release": "dr1", "obs_id": "VISIT-2",
+         "energy_bandpassname": "SPHEREx-D5", "t_min": "60000.01"},
+        # Exact obs_id plus release matches are counted.
+        {"source_id": "S1", "data_release": "dr1", "obs_id": "VISIT-3",
+         "energy_bandpassname": "SPHEREx-D4"},
+        {"source_id": "S1", "data_release": "dr1", "obs_id": "VISIT-3",
+         "energy_bandpassname": "SPHEREx-D5"},
+        # Same obs_id but different release must not be combined.
+        {"source_id": "S2", "data_release": "dr1", "obs_id": "VISIT-4",
+         "energy_bandpassname": "SPHEREx-D4"},
+        {"source_id": "S2", "data_release": "qr3", "obs_id": "VISIT-4",
+         "energy_bandpassname": "SPHEREx-D5"},
+        {"source_id": "S3", "data_release": "dr1", "obs_id": "VISIT-5",
+         "energy_bandpassname": "SPHEREx-D3"},
+        {"source_id": "S3", "data_release": "dr1", "obs_id": "VISIT-5",
+         "energy_bandpassname": "SPHEREx-D4"},
+        {"source_id": "S3", "data_release": "dr1", "obs_id": "VISIT-5",
+         "energy_bandpassname": "SPHEREx-D5"},
+    ]
+    result = _summarize_same_observation_band_coverage(
+        {"S1", "S2", "S3", "NO-PRODUCT"}, rows, available=True,
+    )
+    assert result["sources_with_same_observation_d4_d5_products"] == 2
+    assert result["same_observation_d4_d5_source_visit_count"] == 2
+    assert result["sources_with_same_observation_d3_d4_d5_products"] == 1
+    assert result["identity_rule"] == "exact data_release plus obs_id equality; no timestamp proximity grouping"
+    assert {row["source_id"] for row in result["sources_with_required_band_overlap"]} == {"S1", "S3"}
+
+
+def test_same_observation_band_coverage_fails_closed_when_pair_manifest_unavailable():
+    from research_discovery.spherex.analyze_splices_candidate_inventory import (
+        _summarize_same_observation_band_coverage,
+    )
+
+    result = _summarize_same_observation_band_coverage(
+        {"S1", "S2"}, [], available=False,
+    )
+    assert result["available"] is False
+    assert result["sources_with_same_observation_d4_d5_products"] is None
+    assert result["same_observation_d4_d5_source_visit_count"] is None
+
+
+def test_schema_1_1_reports_exact_same_observation_band_coverage_without_treating_metadata_as_epochs(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    report = analyze(tmp_path)
+    first = report["regional_candidate_and_coverage_summaries"][0]
+    coverage = first["candidate_source_same_observation_band_coverage"]
+    assert coverage["available"] is True
+    assert coverage["candidate_source_count"] == 2
+    assert coverage["sources_with_same_observation_d4_d5_products"] == 0
+    assert coverage["same_observation_d4_d5_source_visit_count"] == 0
+    assert coverage["not_validated_independent_epochs"] is True
