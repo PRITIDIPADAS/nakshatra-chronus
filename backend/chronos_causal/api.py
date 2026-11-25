@@ -128,11 +128,17 @@ class PopulationCoverageRequest(BaseModel):
     minimum_continuum_samples: int = 4
     minimum_median_snr: float = 5.0
     minimum_completeness: float = 0.5
+    selection_trials: list[dict[str, Any]] = Field(default_factory=list)
+    selection_bin_spec: dict[str, Any] | None = None
+    minimum_trials_per_selection_cell: int = 20
+    minimum_selection_probability: float = 0.05
 
 class PopulationRateRequest(BaseModel):
     fields: list[dict[str, Any]]
     coverage_audit: dict[str, Any]
-    # Inherit the audit's frozen threshold unless an explicit matching value is supplied.
+    selection_trials: list[dict[str, Any]] = Field(default_factory=list)
+    selection_bin_spec: dict[str, Any] | None = None
+    # Inherit frozen selection/completeness thresholds from the coverage audit.
     minimum_completeness: float | None = None
     draws: int = 10000
     seed: int = 1
@@ -359,6 +365,8 @@ def population_rate(request: PopulationRateRequest):
         request.fields,
         coverage_audit=request.coverage_audit,
         minimum_completeness=request.minimum_completeness,
+        selection_trials=request.selection_trials,
+        selection_bin_spec=request.selection_bin_spec,
         draws=request.draws,
         seed=request.seed,
     ))
@@ -377,6 +385,10 @@ def population_assess_coverage(request: PopulationCoverageRequest):
         minimum_continuum_samples=request.minimum_continuum_samples,
         minimum_median_snr=request.minimum_median_snr,
         minimum_completeness=request.minimum_completeness,
+        selection_trials=request.selection_trials,
+        selection_bin_spec=request.selection_bin_spec,
+        minimum_trials_per_selection_cell=request.minimum_trials_per_selection_cell,
+        minimum_selection_probability=request.minimum_selection_probability,
     ))
 
 
@@ -402,6 +414,10 @@ def population_yso_rate(request: YSOPopulationRateRequest):
             minimum_continuum_samples=request.minimum_continuum_samples,
             minimum_median_snr=request.minimum_median_snr,
             minimum_completeness=request.minimum_completeness,
+            selection_trials=request.selection_trials,
+            selection_bin_spec=request.selection_bin_spec,
+            minimum_trials_per_selection_cell=request.minimum_trials_per_selection_cell,
+            minimum_selection_probability=request.minimum_selection_probability,
         )
         if not coverage["eligible_for_predeclared_population_protocol"]:
             raise HTTPException(status_code=422, detail={
@@ -411,6 +427,8 @@ def population_yso_rate(request: YSOPopulationRateRequest):
         rate = estimate_event_rate(
             request.fields, coverage_audit=coverage,
             minimum_completeness=request.minimum_completeness,
+            selection_trials=request.selection_trials,
+            selection_bin_spec=request.selection_bin_spec,
             draws=request.draws, seed=request.seed,
         )
         return {
@@ -418,7 +436,7 @@ def population_yso_rate(request: YSOPopulationRateRequest):
             "preregistration_sha256": digest,
             "coverage_audit": coverage,
             "population_rate": rate,
-            "interpretation": "Conditional on the supplied predeclared selection and null-control assumptions. This is not a discovery claim.",
+            "interpretation": "Conditional on the supplied real-field multidimensional source-selection model and null-control assumptions. Event-detection completeness remains a separate field-level approximation. This is not a discovery claim.",
         }
     return guarded(run)
 
