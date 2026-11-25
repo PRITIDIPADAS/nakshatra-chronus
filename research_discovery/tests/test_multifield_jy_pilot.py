@@ -34,10 +34,58 @@ def _summary():
         "calibrated_jy_injection_evaluation": {
             "status": "completed",
             "five_sigma_sensitivity_jy": 1e-4,
-            "flux_summary": [{"flux_level": 1e-4, "n_injected": 20, "n_recovered": 18}],
+            "flux_summary": [
+                {
+                    "flux_level": level, "n_injected": 20, "n_recovered": 18,
+                    "source_poisson_expected_electrons": 200.0,
+                    "source_poisson_variance_added_image_units2": 0.02,
+                }
+                for level in (0.5e-4, 1e-4, 2e-4)
+            ],
             "n_baseline_detections": 10,
-            "source_photon_noise": {"enabled": True, "physically_modelled": True, "calibration_review_status": "pending"},
-            "electron_calibration_derivation": {"absolute_gain_uri": "https://irsa.example/gain.fits", "absolute_gain_sha256": "b" * 64, "independent_review_status": "pending"},
+            "source_photon_noise": {
+                "enabled": True, "physically_modelled": True,
+                "calibration_review_status": "pending",
+                "independent_human_reviewed": False,
+                "conversion_map_valid_fraction": 0.9999,
+                "calibration_record": {
+                    "verification_status": "derived_pending_independent_review",
+                    "science_source_uri": "https://irsa.example/science.fits",
+                    "calibration_uri": "https://irsa.example/gain.fits",
+                    "calibration_sha256": "b" * 64,
+                    "provenance_link": {
+                        "input_table": "spherex.provenance_input",
+                        "status": "verified_from_live_irsa_foreign_key_query",
+                        "artifact_md5_status": "pass",
+                        "inputid": "gain-plane", "calibration_planeid": "gain-plane",
+                        "outputid": "science-plane", "science_planeid": "science-plane",
+                        "science_native_uri": "https://irsa.example/science.fits",
+                        "calibration_native_uri": "https://irsa.example/gain.fits",
+                        "calibration_sha256": "b" * 64,
+                    },
+                },
+            },
+            "electron_calibration_derivation": {
+                "absolute_gain_uri": "https://irsa.example/gain.fits",
+                "absolute_gain_sha256": "b" * 64,
+                "independent_review_status": "pending",
+                "record": {
+                    "verification_status": "derived_pending_independent_review",
+                    "science_source_uri": "https://irsa.example/science.fits",
+                    "calibration_uri": "https://irsa.example/gain.fits",
+                    "calibration_sha256": "b" * 64,
+                    "provenance_link": {
+                        "input_table": "spherex.provenance_input",
+                        "status": "verified_from_live_irsa_foreign_key_query",
+                        "artifact_md5_status": "pass",
+                        "inputid": "gain-plane", "calibration_planeid": "gain-plane",
+                        "outputid": "science-plane", "science_planeid": "science-plane",
+                        "science_native_uri": "https://irsa.example/science.fits",
+                        "calibration_native_uri": "https://irsa.example/gain.fits",
+                        "calibration_sha256": "b" * 64,
+                    },
+                },
+            },
         },
     }
 
@@ -129,3 +177,39 @@ def test_field_summary_preserves_exact_native_image_bunit():
     )
     assert record["science"]["image_unit"] == "MJy / sr"
     assert record["eligible_for_multi_field_pilot_summary"] is True
+
+
+def test_field_summary_requires_real_poisson_variance_diagnostics_for_all_flux_bins():
+    summary = _summary()
+    summary["calibrated_jy_injection_evaluation"]["flux_summary"][1].pop(
+        "source_poisson_variance_added_image_units2"
+    )
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log"
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["checks"]["source_poisson_flux_bin_variances_measured"] is False
+
+
+def test_field_summary_rejects_gain_link_without_live_archive_md5():
+    summary = _summary()
+    summary["calibrated_jy_injection_evaluation"]["source_photon_noise"][
+        "calibration_record"
+    ]["provenance_link"]["artifact_md5_status"] = "not_checked"
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log"
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["checks"]["electron_conversion_live_irsa_relation_and_md5"] is False
+
+
+def test_field_summary_requires_explicit_pending_review_not_human_signoff():
+    summary = _summary()
+    summary["calibrated_jy_injection_evaluation"]["source_photon_noise"][
+        "independent_human_reviewed"
+    ] = True
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log"
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["checks"]["source_poisson_is_not_mislabelled_human_verified"] is False

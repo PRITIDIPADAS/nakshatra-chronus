@@ -55,6 +55,18 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
     injection = summary.get("calibrated_jy_injection_evaluation") or {}
     photon_noise = injection.get("source_photon_noise") or {}
     electron_derivation = injection.get("electron_calibration_derivation") or {}
+    electron_record = electron_derivation.get("record") or {}
+    gain_link = electron_record.get("provenance_link") or {}
+    flux_bins = injection.get("flux_summary") or []
+    measured_poisson_bins = (
+        len(flux_bins) == 3
+        and all(
+            float(row.get("source_poisson_expected_electrons") or 0.0) > 0
+            and float(row.get("source_poisson_variance_added_image_units2") or 0.0) > 0
+            for row in flux_bins
+        )
+    )
+    conversion_valid_fraction = photon_noise.get("conversion_map_valid_fraction")
 
     checks = {
         "native_mef_audit_compatible": compatibility.get("status") == "compatible",
@@ -68,7 +80,32 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
         },
         "jy_injection_completed": injection.get("status") == "completed",
         "source_poisson_noise_modelled": bool(photon_noise.get("enabled") and photon_noise.get("physically_modelled")),
-        "electron_conversion_derived_from_exact_gain": bool(electron_derivation.get("absolute_gain_uri") and electron_derivation.get("absolute_gain_sha256")),
+        "source_poisson_is_not_mislabelled_human_verified": (
+            photon_noise.get("independent_human_reviewed") is False
+            and photon_noise.get("calibration_review_status") == "pending"
+        ),
+        "source_poisson_flux_bin_variances_measured": measured_poisson_bins,
+        "electron_conversion_map_valid_fraction_gt_99pct": (
+            isinstance(conversion_valid_fraction, (int, float))
+            and 0.99 < float(conversion_valid_fraction) <= 1.0
+        ),
+        "electron_conversion_derived_from_exact_gain": bool(
+            electron_derivation.get("absolute_gain_uri")
+            and electron_derivation.get("absolute_gain_sha256")
+            and electron_record.get("verification_status") == "derived_pending_independent_review"
+            and electron_record.get("calibration_uri") == electron_derivation.get("absolute_gain_uri")
+            and electron_record.get("calibration_sha256") == electron_derivation.get("absolute_gain_sha256")
+        ),
+        "electron_conversion_live_irsa_relation_and_md5": (
+            gain_link.get("input_table") == "spherex.provenance_input"
+            and gain_link.get("status") == "verified_from_live_irsa_foreign_key_query"
+            and gain_link.get("artifact_md5_status") == "pass"
+            and gain_link.get("inputid") == gain_link.get("calibration_planeid")
+            and gain_link.get("outputid") == gain_link.get("science_planeid")
+            and gain_link.get("science_native_uri") == electron_record.get("science_source_uri")
+            and gain_link.get("calibration_native_uri") == electron_record.get("calibration_uri")
+            and gain_link.get("calibration_sha256") == electron_record.get("calibration_sha256")
+        ),
         "electron_conversion_review_status_is_explicit": electron_derivation.get("independent_review_status") == "pending",
         "science_native_uri_present": bool(science.get("uri")),
         "science_sha256_present": bool(science.get("sha256")),
