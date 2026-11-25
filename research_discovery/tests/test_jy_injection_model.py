@@ -149,3 +149,106 @@ def test_local_psf_region_position_search_enumerates_candidates_without_global_r
     distances = np.sqrt(((points[:, None, :] - points[None, :, :]) ** 2).sum(axis=2))
     distances += np.eye(len(points)) * 1e9
     assert float(distances.min()) >= 16.0
+
+
+def _pending_electron_record(tmp_path):
+    import hashlib
+
+    from datetime import datetime, timezone
+
+    calibration = tmp_path / "abs_gain_D2.fits"
+    calibration.write_bytes(b"provenance-bound absolute gain test bytes")
+    calibration_sha = hashlib.sha256(calibration.read_bytes()).hexdigest()
+    science_sha = "a" * 64
+    science_uri = "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/test_science.fits"
+    calibration_uri = "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/abs_gain_matrix/test_gain.fits"
+    link = {
+        "input_table": "spherex.provenance_input",
+        "science_planeid": "science-plane",
+        "calibration_planeid": "gain-plane",
+        "inputid": "gain-plane",
+        "outputid": "science-plane",
+        "science_native_uri": science_uri,
+        "calibration_native_uri": calibration_uri,
+    }
+    return {
+        "verification_status": "derived_pending_independent_review",
+        "review_status": "pending",
+        "derived_by": "automated test",
+        "derived_utc": datetime.now(timezone.utc).isoformat(),
+        "science_file_sha256": science_sha,
+        "science_native_file_sha256": science_sha,
+        "science_observation_id": "TEST_OBS_D2",
+        "science_source_uri": science_uri,
+        "detector": "D2",
+        "image_unit": "MJy/sr",
+        "exposure_time_s": 100.0,
+        "calibration_product": "abs_gain_matrix",
+        "calibration_uri": calibration_uri,
+        "calibration_file_path": str(calibration),
+        "calibration_sha256": calibration_sha,
+        "calibration_bunit": "MJy s / (electron sr)",
+        "conversion_method": "e-/image unit = exposure_time_s / absolute_gain",
+        "provenance_link": link,
+    }
+
+
+def test_pending_electron_record_requires_explicit_exploratory_opt_in(tmp_path):
+    from research_discovery.validation.injection_recovery import (
+        validate_electron_calibration_record,
+    )
+
+    record = _pending_electron_record(tmp_path)
+    with pytest.raises(ValueError, match="pending independent review"):
+        validate_electron_calibration_record(record)
+    checked = validate_electron_calibration_record(record, allow_unreviewed=True)
+    assert checked["verification_status"] == "derived_pending_independent_review"
+    assert checked["review_status"] == "pending"
+
+
+def test_pending_electron_record_rejects_mismatched_provenance_link(tmp_path):
+    from research_discovery.validation.injection_recovery import (
+        validate_electron_calibration_record,
+    )
+
+    record = _pending_electron_record(tmp_path)
+    record["provenance_link"]["inputid"] = "different-calibration-plane"
+    with pytest.raises(ValueError, match="inputid"):
+        validate_electron_calibration_record(record, allow_unreviewed=True)
+
+
+def test_pending_review_absolute_gain_enables_source_poisson_injection_only_with_opt_in(tmp_path):
+    shape = (96, 96)
+    rng = np.random.default_rng(71)
+    image = rng.normal(0.0, 0.04, shape)
+    variance = np.full(shape, 0.04 ** 2)
+    flags = np.zeros(shape, dtype=np.uint16)
+    omega = np.full(shape, 8.0e-7)
+    psf = _psf()
+    record = _pending_electron_record(tmp_path)
+
+    with pytest.raises(ValueError, match="pending independent review"):
+        run_injection_recovery(
+            image.copy(), variance.copy(), flags.copy(), psf,
+            flux_levels=[80.0], n_per_level=1, seed=13,
+            min_injection_separation=6, source_exclusion_radius=0,
+            solid_angle_sr_map=omega, flux_unit="Jy",
+            psf_reference_xy=(48.0, 48.0), psf_region_radius=18.0,
+            electrons_per_image_unit=np.full(shape, 1000.0),
+            electron_calibration_record=record,
+        )
+
+    result = run_injection_recovery(
+        image.copy(), variance.copy(), flags.copy(), psf,
+        flux_levels=[80.0], n_per_level=1, seed=13,
+        min_injection_separation=6, source_exclusion_radius=0,
+        solid_angle_sr_map=omega, flux_unit="Jy",
+        psf_reference_xy=(48.0, 48.0), psf_region_radius=18.0,
+        electrons_per_image_unit=np.full(shape, 1000.0),
+        electron_calibration_record=record,
+        allow_unreviewed_electron_calibration=True,
+    )
+    assert result["source_photon_noise"]["enabled"] is True
+    assert result["source_photon_noise"]["physically_modelled"] is True
+    assert result["source_photon_noise"]["calibration_review_status"] == "pending"
+    assert result["source_photon_noise"]["independent_human_reviewed"] is False
