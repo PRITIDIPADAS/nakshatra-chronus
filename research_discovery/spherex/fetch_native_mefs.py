@@ -176,7 +176,7 @@ def run(fields: list[Field], bandpass: str, outdir: Path,
             try:
                 fname = _safe_basename(uri)
             except ValueError as exc:
-                item = {"field": field.name, "status": "rejected", "artifact_uri": raw_uri, "error": str(exc)}
+                item = {"field": field.name, "status": "rejected", "artifact_uri": raw_uri, "source_url": uri, "error": str(exc)}
                 field_info["downloads"].append(item); all_manifest_rows.append(item); continue
             destination = query_dir / fname
             record = {
@@ -207,6 +207,8 @@ def run(fields: list[Field], bandpass: str, outdir: Path,
     validation = validate_manifest(archive_manifest, verify_local=download, base_dir=Path.cwd())
     (outdir / "archive_manifest_validation.json").write_text(json.dumps(validation, indent=2))
     print(f"Versioned archive manifest valid={validation['valid']}; products={validation['product_count']}")
+    if not validation["valid"]:
+        raise SystemExit("Archive manifest validation failed; inspect archive_manifest_validation.json")
     return inventory
 
 
