@@ -74,7 +74,8 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None,
             {"index": index, "name": hdu.name,
              "shape": list(hdu.data.shape) if hdu.data is not None else None,
              "bunit": hdu.header.get("BUNIT"), "extver": hdu.header.get("EXTVER"),
-             "header": _header_summary(hdu.header)}
+             "header": _header_summary(hdu.header),
+             "history": [str(card.value) for card in hdu.header.cards if card.keyword == "HISTORY"]}
             for index, hdu in enumerate(science)
         ]
         required = ("IMAGE", "FLAGS", "VARIANCE", "ZODI", "WCS-WAVE")
@@ -94,6 +95,10 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None,
         report["image_bunit"] = image_hdu.header.get("BUNIT")
         report["science_detector"] = science_detector
         report["checks"]["image_2d"] = {"status": "pass" if image.ndim == 2 else "fail"}
+        if image.ndim != 2:
+            report["status"] = "FAILED"
+            report["error"] = "IMAGE extension must be a two-dimensional detector plane"
+            return report
         report["checks"]["native_full_frame"] = {
             "status": "pass" if image.shape == (2040, 2040) else "fail",
             "expected_shape": [2040, 2040]}
@@ -169,7 +174,8 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None,
         cal_names = [str(hdu.name).upper() for hdu in calibration]
         report["spectral_wcs_hdus"] = [
             {"name": hdu.name, "shape": list(hdu.data.shape) if hdu.data is not None else None,
-             "bunit": hdu.header.get("BUNIT"), "header": _header_summary(hdu.header)}
+             "bunit": hdu.header.get("BUNIT"), "header": _header_summary(hdu.header),
+             "history": [str(card.value) for card in hdu.header.cards if card.keyword == "HISTORY"]}
             for hdu in calibration]
         missing_cal = [name for name in ("CWAVE", "CBAND") if name not in cal_names]
         if missing_cal:
