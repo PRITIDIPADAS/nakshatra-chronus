@@ -567,11 +567,24 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                 injected_img, injected_variance, p, omega,
                 region_center_xy=psf_reference_xy, region_radius_px=psf_region_radius,
             )
+            # Evaluate the injected component separately from the native sky.
+            # This uses the *original* variance map so the response is directly
+            # comparable to the pre-injection matched-filter sensitivity.
+            source_only_snr = matched_filter_snr_jy(
+                injected_img - work_image, variance, p, omega,
+                region_center_xy=psf_reference_xy, region_radius_px=psf_region_radius,
+            )
         else:
             injected_snr = matched_filter_snr(injected_img,injected_variance,filter_psf)
+            source_only_snr = matched_filter_snr(
+                injected_img - work_image, variance, filter_psf
+            )
         injected_snr[~detection_valid] = np.nan
+        source_only_snr[~detection_valid] = np.nan
         peaks=detect_peaks(injected_snr,threshold=snr_threshold)
+        source_only_peaks = detect_peaks(source_only_snr, threshold=snr_threshold)
         distances=_distance(peaks,xy)
+        source_only_distances = _distance(source_only_peaks, xy)
         recovered=set(); matched_peak=set()
         if distances.size:
             for idx in np.argsort(distances,axis=None):
@@ -579,6 +592,16 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                 if distances[i,j]>match_radius: break
                 if int(j) not in recovered and int(i) not in matched_peak:
                     recovered.add(int(j));matched_peak.add(int(i))
+        source_only_recovered = set()
+        source_only_matched_peak = set()
+        if source_only_distances.size:
+            for idx in np.argsort(source_only_distances, axis=None):
+                i, j = np.unravel_index(idx, source_only_distances.shape)
+                if source_only_distances[i, j] > match_radius:
+                    break
+                if int(j) not in source_only_recovered and int(i) not in source_only_matched_peak:
+                    source_only_recovered.add(int(j))
+                    source_only_matched_peak.add(int(i))
         level_injection_rows = []
         for j,(x,y) in enumerate(xy):
             baseline_match_peak = _local_snr_peak(
@@ -592,6 +615,9 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
             )
             injected_extended_peak = _local_snr_peak(
                 injected_snr, float(x), float(y), extended_diagnostic_radius_px
+            )
+            source_only_match_peak = _local_snr_peak(
+                source_only_snr, float(x), float(y), float(match_radius)
             )
             baseline_match_snr = baseline_match_peak[0] if baseline_match_peak else None
             baseline_extended_snr = baseline_extended_peak[0] if baseline_extended_peak else None
@@ -621,6 +647,18 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                 "post_injection_local_peak_offset_within_extended_radius_px": _peak_offset(
                     injected_extended_peak, float(x), float(y)
                 ),
+                "source_only_local_max_snr_within_match_radius": (
+                    source_only_match_peak[0] if source_only_match_peak else None
+                ),
+                "source_only_local_peak_offset_within_match_radius_px": _peak_offset(
+                    source_only_match_peak, float(x), float(y)
+                ),
+                "source_only_peak_list_recovered": int(j in source_only_recovered),
+                "source_only_nearest_peak_distance_px": (
+                    float(np.min(source_only_distances[:, j]))
+                    if source_only_distances.size else None
+                ),
+                "source_only_diagnostic_uses_original_variance": True,
                 "local_snr_delta_within_match_radius": (
                     injected_match_snr - baseline_match_snr
                     if injected_match_snr is not None and baseline_match_snr is not None
@@ -666,6 +704,8 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
         ]
         all_detected.append({
             "flux_level": float(level),
+            "source_only_peak_list_recovered_count": len(source_only_recovered),
+            "source_only_peak_list_recovered_fraction": len(source_only_recovered) / len(xy),
             "new_unmatched_peaks_within_local_psf_region": len(new_peaks),
             "unmatched_peaks_outside_local_psf_region_excluded": n_outside_local_psf_region,
             "injections_with_local_max_snr_ge_threshold_within_match_radius": sum(
