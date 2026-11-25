@@ -16,6 +16,14 @@ def detector_origin_offset(image_header, native_shape=NATIVE_SHAPE):
     n1=int(image_header.get("NAXIS1",-1)); n2=int(image_header.get("NAXIS2",-1))
     if (n1,n2)==(int(native_shape[1]),int(native_shape[0])):
         return (0,0)
+    if image_header.get("CTYPE1A") and image_header.get("CTYPE2A"):
+        from astropy.wcs import WCS
+        transform = WCS(image_header, key="A", relax=True)
+        if transform.pixel_n_dim != 2 or transform.world_n_dim != 2:
+            raise ValueError("alternate WCS A is not a two-dimensional detector mapping")
+        matrix = np.asarray(transform.pixel_scale_matrix, dtype=float)
+        if matrix.shape != (2, 2) or not np.allclose(matrix, np.eye(2), rtol=0, atol=1e-8):
+            raise ValueError("native calibration slicing requires an identity-aligned WCS A; rotated/flipped frames need explicit detector-grid resampling")
     x0=1.0-_header_value(image_header,"CRPIX1A")
     y0=1.0-_header_value(image_header,"CRPIX2A")
     rounded=(int(round(x0)),int(round(y0)))
