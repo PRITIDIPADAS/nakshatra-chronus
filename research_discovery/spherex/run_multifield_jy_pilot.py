@@ -162,6 +162,42 @@ def summarize_field_record(
         and expected_injection_rows > 0
         and local_snr_diagnostic_rows == len(report_rows) == expected_injection_rows
     )
+    source_only_bins = injection_report.get("new_unmatched_peak_summary") or []
+    source_only_flux_bin_counts_match = (
+        isinstance(source_only_bins, list)
+        and len(source_only_bins) == len(flux_bins) == 3
+        and report_rows_match_bins
+    )
+    if source_only_flux_bin_counts_match:
+        for compact_bin, source_bin in zip(flux_bins, source_only_bins):
+            try:
+                level = float(compact_bin.get("flux_level"))
+                source_level = float(source_bin.get("flux_level"))
+                n_injected = int(float(compact_bin.get("n_injected")))
+                reported_count = float(source_bin.get("source_only_peak_list_recovered_count"))
+                reported_fraction = float(source_bin.get("source_only_peak_list_recovered_fraction"))
+                bin_rows = [
+                    row for row in report_rows
+                    if abs(float(row.get("flux_level")) - level) <= 1e-12
+                ]
+                row_count = sum(
+                    int(row.get("source_only_peak_list_recovered", 0))
+                    for row in bin_rows
+                )
+                source_only_flux_bin_counts_match = (
+                    source_only_flux_bin_counts_match
+                    and abs(source_level - level) <= 1e-12
+                    and n_injected > 0
+                    and len(bin_rows) == n_injected
+                    and reported_count >= 0
+                    and reported_count <= n_injected
+                    and reported_count.is_integer()
+                    and int(reported_count) == row_count
+                    and 0.0 <= reported_fraction <= 1.0
+                    and abs(reported_fraction - row_count / n_injected) <= 1e-12
+                )
+            except (TypeError, ValueError, OverflowError, ZeroDivisionError):
+                source_only_flux_bin_counts_match = False
     source_only_diagnostics_complete = (
         response_diagnostics.get("isolated_source_response_available") is True
         and response_diagnostics.get("source_only_uses_injected_variance") is True
@@ -171,6 +207,7 @@ def summarize_field_record(
         and report_rows_match_bins
         and expected_injection_rows > 0
         and source_only_diagnostic_rows == len(report_rows) == expected_injection_rows
+        and source_only_flux_bin_counts_match
     )
     diagnostic_flux_bins = []
     if report_bins_match:
@@ -216,6 +253,10 @@ def summarize_field_record(
                         int(row.get("source_only_peak_list_recovered", 0))
                         for row in bin_rows
                     ),
+                    "source_only_peak_list_recovered_fraction": (
+                        sum(int(row.get("source_only_peak_list_recovered", 0)) for row in bin_rows)
+                        / len(bin_rows) if bin_rows else None
+                    ),
                 })
             except (TypeError, ValueError, OverflowError):
                 diagnostic_flux_bins.append({
@@ -238,6 +279,7 @@ def summarize_field_record(
         "local_snr_diagnostic_rows": local_snr_diagnostic_rows,
         "local_snr_diagnostics_complete": local_snr_diagnostics_complete,
         "source_only_diagnostic_rows": source_only_diagnostic_rows,
+        "source_only_flux_bin_counts_match_injection_rows": source_only_flux_bin_counts_match,
         "source_only_diagnostics_complete": source_only_diagnostics_complete,
         "injection_report_identity_matches_science_and_gain": report_identity_matches,
         "injection_report_flux_bins_match_compact_summary": report_bins_match,
@@ -273,6 +315,7 @@ def summarize_field_record(
         "injection_report_matches_science_and_calibration": report_identity_matches,
         "local_snr_diagnostics_complete_and_count_bound": local_snr_diagnostics_complete,
         "source_only_diagnostics_complete_and_count_bound": source_only_diagnostics_complete,
+        "source_only_flux_bin_counts_match_injection_rows": source_only_flux_bin_counts_match,
         "electron_conversion_map_valid_fraction_gt_99pct": (
             isinstance(conversion_valid_fraction, (int, float))
             and 0.99 < float(conversion_valid_fraction) <= 1.0
@@ -509,6 +552,8 @@ def validate_aggregate_report(report: dict) -> dict:
             errors.append(f"{name}: local per-injection SNR diagnostics are incomplete or unbound")
         if investigation.get("source_only_diagnostics_complete") is not True:
             errors.append(f"{name}: isolated source-only response diagnostics are incomplete or unbound")
+        if investigation.get("source_only_flux_bin_counts_match_injection_rows") is not True:
+            errors.append(f"{name}: source-only peak-list counts do not match the detailed injection rows")
         if investigation.get("injection_report_identity_matches_science_and_gain") is not True:
             errors.append(f"{name}: per-injection report is not bound to the science/gain pair")
         science = row.get("science") or {}

@@ -117,6 +117,18 @@ def _injection_report(summary):
                 "source_only_diagnostic_uses_injected_variance": True,
                 "source_only_reference_uses_preinjection_variance": True,
             })
+    source_only_summary = []
+    for flux_bin in injection["flux_summary"]:
+        level_rows = [
+            row for row in rows
+            if abs(float(row["flux_level"]) - float(flux_bin["flux_level"])) <= 1e-12
+        ]
+        recovered_count = sum(int(row["source_only_peak_list_recovered"]) for row in level_rows)
+        source_only_summary.append({
+            "flux_level": float(flux_bin["flux_level"]),
+            "source_only_peak_list_recovered_count": recovered_count,
+            "source_only_peak_list_recovered_fraction": recovered_count / len(level_rows),
+        })
     return {
         "threshold_snr": 5.0,
         "science_provenance": {"science_sha256": science["sha256"]},
@@ -137,6 +149,7 @@ def _injection_report(summary):
             "source_only_peak_list_recovery_is_diagnostic_not_primary": True,
         },
         "flux_summary": [dict(row) for row in injection["flux_summary"]],
+        "new_unmatched_peak_summary": source_only_summary,
         "injections": rows,
     }
 
@@ -475,6 +488,7 @@ def test_field_summary_exposes_source_only_response_separately_from_sky_recovery
     investigation = record["recovery_investigation"]
     assert record["eligible_for_multi_field_pilot_summary"] is True
     assert investigation["source_only_diagnostics_complete"] is True
+    assert investigation["source_only_flux_bin_counts_match_injection_rows"] is True
     assert investigation["source_only_diagnostic_rows"] == 60
     assert len(investigation["local_snr_flux_bin_diagnostics"]) == 3
     assert investigation["local_snr_flux_bin_diagnostics"][0]["source_only_peak_list_recovered_count"] == 18
@@ -486,3 +500,18 @@ def test_final_aggregate_gate_rejects_missing_source_only_diagnostic_rows():
     result = validate_aggregate_report(report)
     assert result["valid"] is False
     assert any("isolated source-only response diagnostics" in error for error in result["errors"])
+
+
+def test_field_summary_rejects_source_only_flux_bin_count_mismatch():
+    summary = _summary()
+    report = _injection_report(summary)
+    report["new_unmatched_peak_summary"][1]["source_only_peak_list_recovered_count"] = 1
+    report["new_unmatched_peak_summary"][1]["source_only_peak_list_recovered_fraction"] = 0.05
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="e" * 64,
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["checks"]["source_only_diagnostics_complete_and_count_bound"] is False
+    assert record["checks"]["source_only_flux_bin_counts_match_injection_rows"] is False
+    assert record["recovery_investigation"]["source_only_flux_bin_counts_match_injection_rows"] is False
