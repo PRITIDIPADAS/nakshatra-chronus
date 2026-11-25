@@ -600,3 +600,19 @@ def test_epsf_zone_lookup_uses_full_alternate_wcs_a_for_cutouts():
     detector_x, detector_y = detector_position_from_cutout(3.0, 4.0, header)
     assert detector_x == pytest.approx(96.0)
     assert detector_y == pytest.approx(203.0)
+
+
+
+def test_calibration_archive_metadata_preserves_version_and_processing_date():
+    from research_discovery.spherex.fetch_calibration import archive_path_metadata
+    result = archive_path_metadata(
+        "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/v7.1.0-2026-191/2/spectral_wcs_D2.fits")
+    assert result == {"product_version": "7.1.0", "processing_date": "2026-191"}
+
+
+def test_calibration_downloader_rejects_solid_angle_wrong_detector_path(tmp_path):
+    from research_discovery.spherex.fetch_calibration import download_calibration
+    uri = "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/solid_angle_pixel_map/v2/3/solid_angle_D3.fits"
+    with pytest.raises(ValueError, match="detector directory"):
+        download_calibration(uri, release="dr1", product="solid_angle",
+                             detector=2, out=tmp_path / "wrong_detector.fits")
