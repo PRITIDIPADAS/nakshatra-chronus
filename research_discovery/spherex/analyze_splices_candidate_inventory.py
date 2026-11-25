@@ -308,6 +308,8 @@ def _audit_source_product_manifest(
         errors.append("duplicate source IDs in candidate source summary")
     if unexpected_summary_ids:
         errors.append("source summary contains IDs outside the regional candidate set")
+    if missing_summary_ids:
+        errors.append("candidate source summary omits one or more regional candidate source IDs")
 
     full_product_rows: dict[str, list[dict]] = defaultdict(list)
     for row in full_region_rows:
@@ -326,6 +328,7 @@ def _audit_source_product_manifest(
     metadata_flag_errors = 0
     region_flag_errors = 0
     product_metadata_mismatches = 0
+    required_pair_metadata_missing = 0
     for row in source_product_rows:
         source_id = str(row.get("source_id") or "").strip()
         product_id = str(row.get("archive_product_id") or "").strip()
@@ -346,17 +349,41 @@ def _audit_source_product_manifest(
             unknown_archive_product_ids.add(product_id)
         if not _is_true(row.get("metadata_only")) or _is_true(row.get("extracted_flux_available")):
             metadata_flag_errors += 1
+
         row_region = str(row.get("region") or "").strip()
-        if row_region and row_region != region_name:
+        if not row_region or row_region != region_name:
             region_flag_errors += 1
+
+        required_pair_fields = (
+            "obs_id", "access_url", "collection", "data_release", "region"
+        )
+        if any(not str(row.get(field) or "").strip() for field in required_pair_fields):
+            required_pair_metadata_missing += 1
+
         matching_metadata = full_product_rows.get(product_id) or []
         if matching_metadata:
-            for field in ("obs_id", "access_url", "energy_bandpassname"):
-                pair_value = str(row.get(field) or "").strip()
-                archive_value = str(matching_metadata[0].get(field) or "").strip()
-                if pair_value and archive_value and pair_value != archive_value:
+            # Compare every inventory row associated with this exact archive ID.
+            # Looking only at the first row can hide a conflicting duplicate
+            # returned by another SIAv2 collection query.
+            required_mappings = (
+                ("obs_id", "obs_id"),
+                ("access_url", "access_url"),
+                ("collection", "_chronos_collection"),
+                ("data_release", "_chronos_release"),
+                ("region", "_chronos_region"),
+            )
+            for archive_row in matching_metadata:
+                for pair_field, archive_field in required_mappings:
+                    pair_value = str(row.get(pair_field) or "").strip()
+                    archive_value = str(archive_row.get(archive_field) or "").strip()
+                    if not pair_value or not archive_value:
+                        required_pair_metadata_missing += 1
+                    elif pair_value != archive_value:
+                        product_metadata_mismatches += 1
+                pair_band = str(row.get("energy_bandpassname") or "").strip()
+                archive_band = str(archive_row.get("energy_bandpassname") or "").strip()
+                if pair_band and archive_band and pair_band != archive_band:
                     product_metadata_mismatches += 1
-                    break
 
     if missing_pair_source_ids:
         errors.append("source/product pair row is missing source_id")
@@ -371,9 +398,11 @@ def _audit_source_product_manifest(
     if metadata_flag_errors:
         errors.append("source/product pair violates metadata-only status flags")
     if region_flag_errors:
-        errors.append("source/product pair region differs from its regional manifest")
+        errors.append("source/product pair region is missing or differs from its regional manifest")
+    if required_pair_metadata_missing:
+        errors.append("source/product pair is missing required archive metadata or matching SIAv2 fields")
     if product_metadata_mismatches:
-        errors.append("source/product metadata fields disagree with the SIAv2 product row")
+        errors.append("source/product metadata fields disagree with one or more SIAv2 inventory rows")
 
     count_mismatches = []
     digest_mismatches = []
@@ -415,6 +444,7 @@ def _audit_source_product_manifest(
         "pair_rows_missing_archive_product_id": missing_pair_product_ids,
         "pair_rows_with_metadata_flag_errors": metadata_flag_errors,
         "pair_rows_with_region_errors": region_flag_errors,
+        "pair_rows_with_missing_required_archive_metadata": required_pair_metadata_missing,
         "pair_rows_with_product_metadata_mismatches": product_metadata_mismatches,
         "errors": errors,
     }
