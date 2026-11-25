@@ -247,53 +247,35 @@ def main():
     audit_path.write_text(json.dumps(audit, indent=2, default=str), encoding="utf-8")
     audit_sha = hashlib.sha256(audit_path.read_bytes()).hexdigest()
 
-    # Absolute gain conversion is attempted only when the native MEF audit
-    # confirms the science IMAGE and map are structurally valid.
+    # The retrieved science product is already Level 2, in calibrated surface
+    # brightness units (MJy/sr), with its delivered VARIANCE plane. Do not
+    # apply the absolute-gain matrix a second time or infer an exposure time
+    # from unrelated calibration products. Retain the gain map and its hashes
+    # for provenance, but use Level-2 IMAGE/VARIANCE as delivered.
+    gain_hdu = first_2d_hdu(gain_path)
     gain_validation = {
-        "status": "not_attempted",
-        "reason": "The native audit did not provide a usable science IMAGE footprint.",
+        "status": "not_applicable_to_level2_image",
+        "reason": (
+            "This science product is Level 2. Its IMAGE is already in calibrated "
+            "surface-brightness units and the delivered VARIANCE is the Level-2 "
+            "uncertainty product. The absolute-gain matrix is retained and hashed "
+            "as an archive input, but is not applied again to Level-2 pixels."
+        ),
+        "gain_product": {
+            "path": str(gain_path),
+            "sha256": records["absolute_gain"]["computed_sha256"],
+            "hdu": gain_hdu,
+        },
+        "likelihood_policy": (
+            "Use Level-2 IMAGE and VARIANCE in their delivered units, with FLAGS, "
+            "ZODI, EPSF and CWAVE/CBAND. Keep Level-1 gain/dark/read-noise/"
+            "nonlinearity modeling separate from Level-2 inference."
+        ),
+        "exposure_time_policy": (
+            "No exposure-time value is inferred. Missing EXPTIME is not imputed "
+            "for an unnecessary Level-2 electron conversion."
+        ),
     }
-    if audit.get("image_shape") and audit.get("cutout_parent_origin_xy") is not None:
-        science_hdu = next((x for x in headers["science"]["hdus"] if x["name"].upper() == "IMAGE"), None)
-        gain_hdu = first_2d_hdu(gain_path)
-        if science_hdu and gain_hdu:
-            try:
-                with fits.open(science_path, memmap=True) as hdul:
-                    image_header = hdul["IMAGE"].header
-                    exptime = image_header.get("EXPTIME", image_header.get("TEXPTIME"))
-                    if exptime is None:
-                        exptime = hdul[0].header.get("EXPTIME", hdul[0].header.get("TEXPTIME"))
-                    science_unit = str(image_header.get("BUNIT", ""))
-                gain_map = derive_electrons_per_image_unit(
-                    calibration_path=gain_path,
-                    expected_sha256=records["absolute_gain"]["computed_sha256"],
-                    detector="D2",
-                    calibration_bunit=str(gain_hdu.get("bunit") or ""),
-                    exposure_time_s=float(exptime),
-                    origin_xy=tuple(audit["cutout_parent_origin_xy"]),
-                    image_shape=tuple(audit["image_shape"]),
-                    science_image_unit=science_unit,
-                )
-                finite = np.isfinite(gain_map)
-                gain_validation = {
-                    "status": "conversion_map_derived",
-                    "shape": list(gain_map.shape),
-                    "finite_fraction": float(finite.mean()),
-                    "positive_fraction": float((finite & (gain_map > 0)).mean()),
-                    "minimum": float(np.nanmin(gain_map)) if finite.any() else None,
-                    "maximum": float(np.nanmax(gain_map)) if finite.any() else None,
-                    "units": "electrons per IMAGE unit per pixel",
-                    "formula": "exposure_time_s / absolute_gain[(MJy/sr)/(e-/s)]",
-                    "exposure_time_s": float(exptime),
-                    "science_image_unit": science_unit,
-                }
-                np.save(OUT / "electrons_per_image_unit.npy", gain_map)
-            except Exception as exc:
-                gain_validation = {
-                    "status": "review_required",
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "gain_hdu": gain_hdu,
-                }
 
     strict_metadata = {
         "science": {
