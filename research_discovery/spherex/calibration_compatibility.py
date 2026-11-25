@@ -57,6 +57,23 @@ def compatibility_decision(science:Mapping[str,Any],calibration:Mapping[str,Any]
             "audit_sha256":audit_sha or None,"cwave_shape":calibration.get("cwave_shape"),
             "cband_shape":calibration.get("cband_shape"),"valid_fraction":fraction,
             "note":"Requires a SHA-256-linked native MEF audit summary proving full science-footprint validity."}
+    area=calibration.get("solid_angle_map")
+    if not isinstance(area,Mapping):
+        checks["solid_angle_map"]={"status":"unknown",
+            "note":"A detector-matched pixel-area/solid-angle map with URI, SHA-256, native shape and unit is required."}
+    else:
+        area_detector=_detector(area.get("detector"))
+        science_detector=_detector(science.get("detector"))
+        area_shape=area.get("shape")
+        area_unit=str(area.get("bunit","")).lower().replace(" ","")
+        area_sha=str(area.get("sha256",""))
+        area_uri=str(area.get("uri",""))
+        area_valid=(area.get("status")=="pass" and area_detector==science_detector and
+            area_shape==[2040,2040] and area_unit in {"arcsec2","arcsec**2","arcsec^2"} and
+            bool(re.fullmatch(r"[0-9a-fA-F]{64}",area_sha)) and area_uri.startswith("https://"))
+        checks["solid_angle_map"]={"status":"pass" if area_valid else "fail",
+            "detector":area_detector,"science_detector":science_detector,"shape":area_shape,
+            "bunit":area.get("bunit"),"sha256":area_sha or None,"uri":area_uri or None}
     states=[x["status"] for x in checks.values()]
     status="rejected" if "fail" in states else "compatible" if all(x=="pass" for x in states) else "review_required"
     return {"status":status,"checks":checks,
