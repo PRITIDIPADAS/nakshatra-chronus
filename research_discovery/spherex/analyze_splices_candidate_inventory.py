@@ -198,9 +198,41 @@ def _label_overlap(rows: list[dict]) -> dict:
     }
 
 
-def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> tuple[list[dict], list[dict]]:
+def _summarize_exposure_rows(rows: list[dict]) -> tuple[dict, set[str]]:
+    by_band: dict[str, list[dict]] = defaultdict(list)
+    plane_ids = set()
+    for exposure in rows:
+        band = str(exposure.get("energy_bandpassname") or "UNKNOWN")
+        by_band[band].append(exposure)
+        plane_id = str(exposure.get("planeid") or "").strip()
+        if plane_id:
+            plane_ids.add(plane_id)
+    band_summary = {}
+    for band, values in sorted(by_band.items()):
+        lower = [numeric(row.get("time_bounds_lower")) for row in values]
+        upper = [numeric(row.get("time_bounds_upper")) for row in values]
+        lower = [value for value in lower if value is not None]
+        upper = [value for value in upper if value is not None]
+        band_summary[band] = {
+            "rows": len(values),
+            "unique_plane_ids": len({
+                str(row.get("planeid") or "").strip()
+                for row in values if nonempty(row.get("planeid"))
+            }),
+            "unique_native_uris": len({
+                str(row.get("uri") or "").strip()
+                for row in values if nonempty(row.get("uri"))
+            }),
+            "first_mjd": min(lower) if lower else None,
+            "last_mjd": max(upper) if upper else None,
+        }
+    return band_summary, plane_ids
+
+
+def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
     region_rows = []
-    all_exposures = []
+    centre_point_exposures = []
+    full_region_exposures = []
     for result in report.get("region_results", []):
         region = result.get("region") or {}
         name = str(region.get("name") or "")
@@ -211,36 +243,18 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> t
         for row in regional_candidates:
             flags = label_flags(row)
             flags_counter[pattern_key(flags)] += 1
-        exposure_path = root / name / "dr1_level2_exposures.csv"
-        exposures = read_csv(exposure_path)
-        by_band: dict[str, list[dict]] = defaultdict(list)
-        seen_plane_ids: set[str] = set()
-        for exposure in exposures:
-            band = str(exposure.get("energy_bandpassname") or "UNKNOWN")
-            by_band[band].append(exposure)
-            plane_id = str(exposure.get("planeid") or "").strip()
-            if plane_id:
-                seen_plane_ids.add(plane_id)
-            all_exposures.append({**exposure, "recon_region": name})
-        band_summary = {}
-        for band, values in sorted(by_band.items()):
-            lower = [numeric(row.get("time_bounds_lower")) for row in values]
-            upper = [numeric(row.get("time_bounds_upper")) for row in values]
-            lower = [value for value in lower if value is not None]
-            upper = [value for value in upper if value is not None]
-            band_summary[band] = {
-                "rows": len(values),
-                "unique_plane_ids": len({
-                    str(row.get("planeid") or "").strip()
-                    for row in values if nonempty(row.get("planeid"))
-                }),
-                "unique_native_uris": len({
-                    str(row.get("uri") or "").strip()
-                    for row in values if nonempty(row.get("uri"))
-                }),
-                "first_mjd": min(lower) if lower else None,
-                "last_mjd": max(upper) if upper else None,
-            }
+
+        centre_path = root / name / "dr1_level2_exposures.csv"
+        full_region_path = root / name / "dr1_level2_exposures_full_region.csv"
+        exposures = read_csv(centre_path)
+        full_region_rows = read_csv(full_region_path)
+        centre_point_exposures.extend({**row, "recon_region": name} for row in exposures)
+        full_region_exposures.extend({**row, "recon_region": name} for row in full_region_rows)
+
+        centre_band_summary, centre_plane_ids = _summarize_exposure_rows(exposures)
+        full_band_summary, full_plane_ids = _summarize_exposure_rows(full_region_rows)
+        optional_errors = result.get("optional_query_errors") or {}
+        full_region_error = optional_errors.get("dr1_level2_exposures_full_region")
         region_rows.append({
             "region": name,
             "role": region.get("role"),
@@ -254,14 +268,27 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> t
                 {"pattern": key, "rows": count}
                 for key, count in sorted(flags_counter.items(), key=lambda item: (-item[1], item[0]))
             ],
-            "dr1_level2_footprint_rows": len(exposures),
-            "dr1_level2_unique_plane_ids": len(seen_plane_ids),
-            "dr1_level2_by_band": band_summary,
-            "exposure_query_semantics": "fixed_region_centre_point_inside_exposure_polygon",
-            "source_level_epoch_coverage": "not measured by this regional footprint query",
+            "dr1_level2_region_centre_exposure_rows": len(exposures),
+            "dr1_level2_region_centre_unique_plane_ids": len(centre_plane_ids),
+            "dr1_level2_region_centre_by_band": centre_band_summary,
+            "region_centre_query_semantics": "fixed_region_centre_point_inside_exposure_polygon",
+            "dr1_level2_full_region_intersection_query_status": (
+                "unavailable" if full_region_error else "returned_below_or_at_declared_row_cap"
+            ),
+            "dr1_level2_full_region_intersection_query_error": full_region_error,
+            "dr1_level2_full_region_intersection_exposure_rows": (
+                None if full_region_error else len(full_region_rows)
+            ),
+            "dr1_level2_full_region_intersection_unique_plane_ids": (
+                None if full_region_error else len(full_plane_ids)
+            ),
+            "dr1_level2_full_region_intersection_by_band": (
+                None if full_region_error else full_band_summary
+            ),
+            "full_region_query_semantics": "region_circle_intersects_exposure_polygon",
+            "source_level_epoch_coverage": "not measured by either regional footprint query",
         })
-    return region_rows, all_exposures
-
+    return region_rows, centre_point_exposures, full_region_exposures
 
 def _field_quality(rows: list[dict]) -> dict:
     availability = {}
@@ -310,20 +337,41 @@ def analyze(root: Path) -> dict:
     input_validation = _check_input_report(report, candidates)
     source_ids = _source_id_audit(candidates)
     label_overlap = _label_overlap(candidates)
-    regional, exposures = _region_summaries(root, report, candidates)
-    global_exposure_ids = {
-        str(row.get("planeid") or "").strip()
-        for row in exposures if nonempty(row.get("planeid"))
-    }
-    exposure_membership = defaultdict(set)
-    for row in exposures:
-        plane_id = str(row.get("planeid") or "").strip()
-        if plane_id:
-            exposure_membership[plane_id].add(str(row.get("recon_region") or ""))
-    cross_region_planes = {
-        plane_id: sorted(regions)
-        for plane_id, regions in exposure_membership.items() if len(regions) > 1
-    }
+    regional, centre_point_exposures, full_region_exposures = _region_summaries(
+        root, report, candidates
+    )
+
+    def overlap_summary(exposures: list[dict], semantics: str) -> dict:
+        plane_membership = defaultdict(set)
+        for row in exposures:
+            plane_id = str(row.get("planeid") or "").strip()
+            if plane_id:
+                plane_membership[plane_id].add(str(row.get("recon_region") or ""))
+        cross_region = {
+            plane_id: sorted(regions)
+            for plane_id, regions in plane_membership.items() if len(regions) > 1
+        }
+        return {
+            "exposure_rows_across_regions": len(exposures),
+            "unique_plane_ids_across_regions": len(plane_membership),
+            "plane_ids_in_multiple_region_queries": len(cross_region),
+            "plane_id_region_memberships": cross_region,
+            "query_semantics": semantics,
+            "interpretation": (
+                "A repeated plane ID means the same archive exposure satisfies the same "
+                "spatial query for multiple predeclared regions. It is not a repeated observation "
+                "and does not establish per-source coverage."
+            ),
+        }
+
+    centre_overlap = overlap_summary(
+        centre_point_exposures,
+        "fixed_region_centre_point_inside_exposure_polygon",
+    )
+    full_region_overlap = overlap_summary(
+        full_region_exposures,
+        "region_circle_intersects_exposure_polygon",
+    )
     result = {
         "schema": SCHEMA,
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -332,17 +380,8 @@ def analyze(root: Path) -> dict:
         "label_overlap_audit": label_overlap,
         "candidate_data_quality": _field_quality(candidates),
         "regional_candidate_and_coverage_summaries": regional,
-        "cross_region_exposure_overlap": {
-            "exposure_rows_across_regions": len(exposures),
-            "unique_plane_ids_across_regions": len(global_exposure_ids),
-            "plane_ids_in_multiple_region_queries": len(cross_region_planes),
-            "plane_id_region_memberships": cross_region_planes,
-            "interpretation": (
-                "A repeated plane ID indicates that the same archive exposure footprint contains "
-                "the fixed centre coordinates of more than one predeclared region. It is not a "
-                "repeated observation and does not establish per-source coverage."
-            ),
-        },
+        "cross_region_exposure_overlap": centre_overlap,
+        "cross_region_full_region_exposure_overlap": full_region_overlap,
         "candidate_selection_definition": (
             "Candidate union rows satisfy at least one of YSO_PUB non-null, CLASS_1 containing YSO, "
             "or STYPE_ML containing YSO in the archived region query. This is a catalogue query "
