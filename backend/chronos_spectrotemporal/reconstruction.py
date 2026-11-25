@@ -70,11 +70,11 @@ def _validate_measurement_covariance(
     expected_shape = (input_count, input_count)
     if full.shape != expected_shape:
         raise ValueError(f"measurement_covariance must have shape {expected_shape} in original input-row order")
-    if np.any(~np.isfinite(full)):
-        raise ValueError("measurement_covariance must be finite")
-    if not np.allclose(full, full.T, rtol=1e-10, atol=1e-12):
-        raise ValueError("measurement_covariance must be symmetric")
     selected = full[np.ix_(selected_indices, selected_indices)]
+    if np.any(~np.isfinite(selected)):
+        raise ValueError("selected measurement_covariance rows must be finite")
+    if not np.allclose(selected, selected.T, rtol=1e-10, atol=1e-12):
+        raise ValueError("selected measurement_covariance must be symmetric")
     if not np.allclose(np.diag(selected), sigma ** 2, rtol=1e-5, atol=1e-10):
         raise ValueError("measurement_covariance diagonal must agree with the selected sigma squared")
     try:
