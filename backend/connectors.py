@@ -183,6 +183,18 @@ def load(row, ra, dec, size, coll):
     if not (2 <= x < img.shape[1] - 2 and 2 <= y < img.shape[0] - 2):
         raise ValueError("Target outside the cutout")
     det = int(hd.get("DETECTOR", 0) or row_detector(row))
+    raw_exptime = row["t_exptime"] if "t_exptime" in row.colnames else hd.get("EXPTIME", 0.0)
+    try:
+        source_exptime = 0.0 if np.ma.is_masked(raw_exptime) else float(raw_exptime)
+    except (TypeError, ValueError):
+        source_exptime = 0.0
+    try:
+        from research_discovery.spherex.coordinate_transform import detector_origin_offset
+        detector_origin = detector_origin_offset(dict(hd))
+    except Exception as err:
+        detector_origin = None
+        notes.append(f"Native detector origin not verified: {type(err).__name__}.")
+
     notes, lam_ok, src = [], True, "W lookup table of the file (display grade)"
     try:
         lam, bw = wavelength(h, hd, x, y)
@@ -210,7 +222,8 @@ def load(row, ra, dec, size, coll):
                coll, "REAL SPHEREx", img, var, flags, zod, w, (x, y), psf=psf, bits=bits, lam_src=src, lam_ok=lam_ok, notes=notes,
                dxy=dxy, frame=f"{float(row['t_min']):.5f}", source_uri=str(row["access_url"]),
                source_sha256=cutout_sha256, image_unit=str(hd.get("BUNIT", "")),
-               source_observation_id=str(hd.get("OBSID") or row.get("obs_id") or row.get("obs_publisher_did") or ""))
+               source_observation_id=str(hd.get("OBSID") or row.get("obs_id") or row.get("obs_publisher_did") or ""),
+               source_exposure_time_s=source_exptime, detector_origin_xy=detector_origin)
 
 
 @plugin("gaia")
