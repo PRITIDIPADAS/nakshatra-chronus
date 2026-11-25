@@ -1,6 +1,7 @@
 """Track a pre-defined spectral feature across measured epochs."""
 from __future__ import annotations
 from typing import Any, Mapping, Sequence
+from chronos_causal.wavelength_gate import validate_spectral_epoch
 
 def measure_feature_evolution(epochs: Sequence[Mapping[str, Any]], feature_interval_um,
                               continuum_intervals_um) -> dict[str, Any]:
@@ -9,7 +10,11 @@ def measure_feature_evolution(epochs: Sequence[Mapping[str, Any]], feature_inter
     if not epochs:
         raise ValueError("at least one epoch is required")
     rows = []
+    groups = {str(epoch.get("calibration_group", "")) for epoch in epochs}
+    if "" in groups or len(groups) != 1:
+        raise ValueError("feature evolution requires one explicit compatible calibration_group across epochs")
     for index, epoch in enumerate(epochs):
+        validate_spectral_epoch(epoch, index=index)
         spectrum = Spectrum(
             wavelength_um=epoch["wavelength_um"],
             flux=epoch["flux"],
@@ -31,6 +36,7 @@ def measure_feature_evolution(epochs: Sequence[Mapping[str, Any]], feature_inter
             "limitations": measured["limitations"],
         })
     return {
+        "calibration_group": next(iter(groups)),
         "epochs": rows,
         "feature_interval_um": list(feature_interval_um),
         "continuum_intervals_um": [list(x) for x in continuum_intervals_um],
