@@ -107,8 +107,9 @@ def test_spectrotemporal_reconstruction_keeps_unsupported_cells_missing():
         min_neighbors=2,
     )
     assert result["valid"] == [[False, True, False]]
-    assert np.isnan(result["flux"][0][0])
-    assert np.isnan(result["flux"][0][2])
+    # Reconstruction returns JSON-safe nulls for unsupported cells.
+    assert result["flux"][0][0] is None
+    assert result["flux"][0][2] is None
 
 
 def test_equivalent_width_reports_lsf_sampling_and_possible_blending():
