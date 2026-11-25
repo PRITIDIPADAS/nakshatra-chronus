@@ -142,7 +142,7 @@ def main() -> None:
     p.add_argument("--ra", type=float, required=True, help="ICRS RA in degrees")
     p.add_argument("--dec", type=float, required=True, help="ICRS Dec in degrees")
     p.add_argument("--radius", type=float, default=0.2, help="Search radius in degrees")
-    p.add_argument("--collections", nargs="+", default=list(DEFAULT_COLLECTIONS))
+    p.add_argument("--collections", nargs="+", choices=("spherex_dr1", "spherex_qr3"), default=list(DEFAULT_COLLECTIONS), help="Use uniformly processed DR1/QR3 products; QR2 is not mixed into the standard workflow")
     p.add_argument("--mjd-start", type=float)
     p.add_argument("--mjd-end", type=float)
     p.add_argument("--min-um", type=float)
