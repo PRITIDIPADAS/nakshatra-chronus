@@ -141,6 +141,77 @@ def _is_yso_like(row: dict) -> bool:
     )
 
 
+def label_profile(row: dict) -> dict:
+    """Compare independent catalogue label columns without promoting ML labels to truth."""
+    published = row.get("yso_pub") is not None
+    harmonised = "YSO" in str(row.get("class_1") or "").upper()
+    machine = "YSO" in str(row.get("stype_ml") or "").upper()
+    sources = [
+        name for name, present in (
+            ("published_yso_pub", published),
+            ("harmonised_class_1", harmonised),
+            ("machine_stype_ml", machine),
+        ) if present
+    ]
+    if all((published, harmonised, machine)):
+        profile = "published_harmonised_ml_agree"
+    elif machine and not published and not harmonised:
+        profile = "ml_only"
+    elif (published or harmonised) and not machine:
+        profile = "non_ml_label_without_ml_yso"
+    elif machine and (published or harmonised):
+        profile = "partial_multi_source_agreement"
+    else:
+        profile = "not_yso_labelled"
+    return {
+        "source_id": row.get("source_id"),
+        "designation": row.get("designation"),
+        "ra": row.get("ra"),
+        "dec": row.get("dec"),
+        "yso_pub": row.get("yso_pub"),
+        "class_1": row.get("class_1"),
+        "stype_ml": row.get("stype_ml"),
+        "stype_ml_prob1": row.get("stype_ml_prob1"),
+        "stype_ml_prob2": row.get("stype_ml_prob2"),
+        "published_yso_label": published,
+        "harmonised_class1_yso_label": harmonised,
+        "machine_yso_label": machine,
+        "independent_label_source_count": len(sources),
+        "label_profile": profile,
+        "machine_only_candidate": profile == "ml_only",
+        "multi_source_label_support": len(sources) >= 2,
+        "interpretation": (
+            "ML-only candidate for independent review"
+            if profile == "ml_only"
+            else "Catalogue label concordance descriptor; not an independently confirmed YSO"
+        ),
+    }
+
+
+def summarise_label_concordance(rows: list[dict]) -> dict:
+    profiles = {}
+    profiled = [label_profile(row) for row in rows]
+    for row in profiled:
+        key = row["label_profile"]
+        profiles[key] = profiles.get(key, 0) + 1
+    return {
+        "source_row_count": len(rows),
+        "published_yso_pub_count": sum(row["published_yso_label"] for row in profiled),
+        "harmonised_class_1_yso_count": sum(row["harmonised_class1_yso_label"] for row in profiled),
+        "machine_stype_ml_yso_count": sum(row["machine_yso_label"] for row in profiled),
+        "all_three_label_sources_agree_count": profiles.get("published_harmonised_ml_agree", 0),
+        "ml_only_label_count": profiles.get("ml_only", 0),
+        "non_ml_label_without_ml_yso_count": profiles.get("non_ml_label_without_ml", 0),
+        "partial_multi_source_agreement_count": profiles.get("partial_multi_source_agreement", 0),
+        "multi_source_label_support_count": sum(row["multi_source_label_support"] for row in profiled),
+        "label_profiles": profiles,
+        "interpretation": (
+            "Counts describe concordance among catalogue label fields. They are not independent "
+            "validation, a contamination-corrected YSO census, or a population-rate estimate."
+        ),
+    }
+
+
 def inspect_region(region: dict) -> dict:
     """Execute TAP queries and derive counts without unsupported spatial COUNT()."""
     query_definitions = build_region_queries(region)
@@ -201,6 +272,20 @@ def inspect_region(region: dict) -> dict:
     counts["candidate_query_complete"] = (
         not candidate_error and len(candidate_rows) < CANDIDATE_LIMIT
     )
+    candidate_profiles = [label_profile(row) for row in candidate_rows]
+    query_results["label_disagreement_candidates"] = {
+        "method": "row-wise concordance across yso_pub, class_1 and stype_ml",
+        "source_query": query_definitions["candidate_sources"],
+        "source_row_count": len(candidate_rows),
+        "rows": candidate_profiles,
+    }
+    label_summary = summarise_label_concordance(catalogue_rows) if not catalogue_error else {
+        "source_row_count": None, "status": "unavailable_due_to_catalogue_query_error"
+    }
+    counts["label_concordance"] = label_summary
+    counts["ml_only_candidate_rows_in_bounded_candidate_query"] = sum(
+        row["machine_only_candidate"] for row in candidate_profiles
+    )
 
     exposure_result = query_results["dr1_level2_exposures"]
     exposure_rows = exposure_result.get("rows", [])
@@ -241,6 +326,7 @@ def main() -> None:
     summaries = []
     all_candidates = []
     all_classes = []
+    all_label_disagreements = []
     errors = []
     for region in REGIONS:
         print(f"Querying SPLICES and DR1 coverage: {region['name']}", flush=True)
@@ -261,9 +347,16 @@ def main() -> None:
                 all_candidates.append({**row, "recon_region": region["name"], "region_role": region["role"]})
             for row in result["queries"]["class_distribution"]["rows"]:
                 all_classes.append({**row, "recon_region": region["name"], "region_role": region["role"]})
+            for row in result["queries"]["label_disagreement_candidates"]["rows"]:
+                all_label_disagreements.append({
+                    **row, "recon_region": region["name"], "region_role": region["role"]
+                })
             region_dir = OUTPUT / region["name"]
             for name, query_result in result["queries"].items():
-                if "rows" in query_result and name in {"catalogue_sources", "candidate_sources", "class_distribution", "dr1_level2_exposures"}:
+                if "rows" in query_result and name in {
+                    "catalogue_sources", "candidate_sources", "class_distribution",
+                    "label_disagreement_candidates", "dr1_level2_exposures"
+                }:
                     write_csv(region_dir / f"{name}.csv", query_result["rows"])
             (region_dir / "query_record.json").write_text(
                 json.dumps(result, indent=2, default=str), encoding="utf-8"
@@ -275,6 +368,7 @@ def main() -> None:
             })
     write_csv(OUTPUT / "candidate_sources_all_regions.csv", all_candidates)
     write_csv(OUTPUT / "class_distribution_all_regions.csv", all_classes)
+    write_csv(OUTPUT / "label_disagreement_candidates_all_regions.csv", all_label_disagreements)
     report = {
         "schema": "chronos-spllices-yso-recon/1.0",
         "started_utc": started,
@@ -285,6 +379,14 @@ def main() -> None:
         "region_results": summaries,
         "candidate_record_count": len(all_candidates),
         "class_distribution_record_count": len(all_classes),
+        "label_disagreement_candidate_count": len(all_label_disagreements),
+        "label_profile_counts_by_region": {
+            item["region"]["name"]: item["counts"].get("label_concordance")
+            for item in summaries
+        },
+        "ml_only_candidate_rows": [
+            row for row in all_label_disagreements if row.get("machine_only_candidate")
+        ],
         "errors": errors,
         "scientific_boundary": [
             "SPLICES is a broad ice-source target compilation, not a census of confirmed YSOs.",
