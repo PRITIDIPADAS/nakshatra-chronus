@@ -103,13 +103,18 @@ def download_native_mef(uri: str, destination: Path, timeout: int = 180,
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
     last_error = None
+    last_headers = {}
     for attempt in range(1, retries + 1):
+        digest = hashlib.sha256()
+        nbytes = 0
         try:
             with requests.get(url, stream=True, timeout=(30, timeout)) as response:
                 response.raise_for_status()
+                last_headers = {"etag": response.headers.get("ETag"),
+                    "last_modified": response.headers.get("Last-Modified"),
+                    "content_type": response.headers.get("Content-Type"),
+                    "http_status": response.status_code}
                 expected = response.headers.get("Content-Length")
-                digest = hashlib.sha256()
-                nbytes = 0
                 with temporary.open("wb") as out:
                     for block in response.iter_content(1024 * 1024):
                         if not block:
@@ -126,21 +131,21 @@ def download_native_mef(uri: str, destination: Path, timeout: int = 180,
                 if signature != b"SIMPLE  ":
                     raise IOError(f"Downloaded file does not start with FITS SIMPLE signature: {signature!r}")
                 temporary.replace(destination)
-                return {
-                    "status": "downloaded", "source_url": url,
+                return {"status": "downloaded", "source_url": url,
                     "local_path": str(destination), "bytes": nbytes,
-                    "sha256": digest.hexdigest(),
-                    "etag": response.headers.get("ETag"),
-                    "last_modified": response.headers.get("Last-Modified"),
-                    "content_type": response.headers.get("Content-Type"),
-                    "http_status": response.status_code,
-                }
-        except Exception as exc:  # preserve failure in the manifest and retry
+                    "sha256": digest.hexdigest(), **last_headers}
+        except Exception as exc:
             last_error = f"{type(exc).__name__}: {exc}"
-            temporary.unlink(missing_ok=True)
             if attempt < retries:
+                temporary.unlink(missing_ok=True)
                 time.sleep(min(2 ** attempt, 10))
-    return {"status": "failed", "source_url": url, "error": last_error}
+    if temporary.exists() and temporary.stat().st_size > 0:
+        return {"status": "partial", "source_url": url, "local_path": str(temporary),
+                "bytes": temporary.stat().st_size, "sha256": None,
+                "error": last_error, **last_headers}
+    temporary.unlink(missing_ok=True)
+    return {"status": "failed", "source_url": url, "bytes": None,
+            "local_path": None, "sha256": None, "error": last_error, **last_headers}
 
 
 def run(fields: list[Field], bandpass: str, outdir: Path,
