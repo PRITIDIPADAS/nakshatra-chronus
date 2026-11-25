@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import requests
 
 HOST="irsa.ipac.caltech.edu"
-ALLOWED={"spectral_wcs","epsf","solid_angle_pixel_map","solid_angle","gain","dark","readnoise_pars","nonlinear_pars"}
+ALLOWED={"spectral_wcs","epsf","solid_angle_pixel_map","solid_angle","abs_gain_matrix","gain","dark","readnoise_pars","nonlinear_pars"}
 def sha256_file(path):
  h=hashlib.sha256()
  with Path(path).open("rb") as f:
