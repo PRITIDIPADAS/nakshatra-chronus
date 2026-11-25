@@ -60,9 +60,29 @@ unit-sum stamp receives its own SHA-256 and diagnostic record. No science image,
 variance or calibration pixels are modified or interpolated by this PSF-only
 correction.
 
-The current M101 run on the latest branch revision is the authoritative rerun.
-Do not substitute the previous failed injection report or infer recovery
-completeness from the successful calibration audit.
+**Completed calibrated real-data evaluation:** GitHub Actions run
+[45614873760](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45614873760)
+completed successfully on commit `dfe3bc322902758a9d317efddb718112a03e2a04`.
+The report recorded:
+- Local reference 5σ sensitivity: **0.000108396 Jy (108.396 μJy)**.
+- Injected integrated flux levels: **54.198, 108.396, and 216.792 μJy**.
+- Recoveries: **5/20 (25%)**, **13/20 (65%)**, and **19/20 (95%)**.
+- Corresponding two-sided 95% Wilson intervals: **11.2–46.9%**, **43.3–81.9%**, and **76.4–99.1%**.
+- Median astrometric offset: **0.791 native pixels**; 95th-percentile offset was **0.791–1.057 pixels** across the three levels.
+- 246 baseline detections were present in the full exposure; zero new unmatched peaks were reported within the evaluated local PSF region.
+
+The position-dependent ePSF was extracted at (x=1019.25, y=1020.75). One negative
+interpolation sample was clipped under the predeclared two-part limit: its
+negative-to-positive peak fraction was 0.0001716 and its integrated negative
+flux fraction was 0.00008576, both below 0.001. The corrected stamp was
+renormalized to unit sum and separately SHA-256 hashed.
+
+**Interpretation:** this is evidence that the pipeline can run a calibrated
+single-exposure Jy injection/recovery experiment on a real SPHEREx DR1 exposure.
+The 20 injections per flux level are a small local pilot, not a complete
+completeness curve or an all-sky estimate. The measured 65% recovery at the
+nominal local 5σ estimate also shows that the current threshold/sensitivity
+mapping is not yet validated as a 50%/completeness operating point.
 
 Limitations of this pilot:
 - One M101 D2 exposure only; no multi-field or time-domain generalisation.
@@ -128,7 +148,7 @@ protocol, and external astronomical reproduction/review.
 | Gate | Current status |
 |---|---|
 | M101 D2 DR1 calibration compatibility | **Passed for one exposure** |
-| Calibrated real-data injection/recovery | **Pilot rerun in progress; no result claim yet** |
+| Calibrated real-data injection/recovery | **Completed one-exposure exploratory pilot; 20 injections at each of three Jy levels** |
 | Multi-field calibration-compatible evaluation | Not satisfied |
 | Four-baseline blind benchmark on actual held-out SPHEREx fields | Not satisfied |
 | Population-level YSO discovery | Not satisfied |
