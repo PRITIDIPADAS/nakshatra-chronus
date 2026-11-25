@@ -127,7 +127,10 @@ def test_spectral_epoch_rejects_valid_pixels_with_nan_wavelengths():
         "wavelength_validated": True, "calibration_group": "DR1:D2:7.1:2026-191",
         "wavelength_provenance": _real_provenance(),
     }
-    with pytest.raises(ValueError, match="must be positive"):
+    with pytest.raises(ValueError, match="finite and positive"):
+        validate_spectral_epoch(epoch, index=0)
+    epoch["wavelength_um"][1] = float("inf")
+    with pytest.raises(ValueError, match="finite and positive"):
         validate_spectral_epoch(epoch, index=0)
 
 
