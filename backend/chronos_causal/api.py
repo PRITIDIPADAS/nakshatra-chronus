@@ -43,6 +43,7 @@ class FeatureEvolutionRequest(BaseModel):
     epochs: list[dict[str, Any]]
     feature_interval_um: list[float]
     continuum_intervals_um: list[list[float]]
+    potential_blend_intervals_um: list[list[float]] = Field(default_factory=list)
 
 class IdentityRequest(BaseModel):
     candidate: dict[str, Any]
@@ -248,6 +249,7 @@ def spectrotemporal_feature_evolution(request: FeatureEvolutionRequest):
     from chronos_spectrotemporal.feature_evolution import measure_feature_evolution
     return guarded(lambda: measure_feature_evolution(
         request.epochs, request.feature_interval_um, request.continuum_intervals_um,
+        potential_blend_intervals_um=request.potential_blend_intervals_um,
     ))
 
 @router.post("/identity/associate")
