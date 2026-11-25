@@ -104,6 +104,23 @@ def create_signing_keypair(private_path: str | Path, public_path: str | Path) ->
     }
 
 
+def _read_signing_private_key(path: str | Path) -> bytes:
+    target = Path(path).expanduser().resolve()
+    try:
+        target.relative_to(ROOT.resolve())
+    except ValueError:
+        pass
+    else:
+        raise ValueError("custodian signing private key must be stored outside the repository")
+    if not target.is_file():
+        raise FileNotFoundError(f"custodian signing private key does not exist: {target}")
+    if os.name != "nt":
+        mode = stat.S_IMODE(target.stat().st_mode)
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            raise PermissionError("custodian signing private key must have owner-only permissions (0600)")
+    return target.read_bytes()
+
+
 def create_custodian_attestation_file(
     *,
     custodian_id: str,
@@ -118,6 +135,7 @@ def create_custodian_attestation_file(
     private_signing_key_path: str | Path,
     output_path: str | Path,
 ) -> dict[str, Any]:
+    from cryptography.hazmat.primitives import serialization
     from .custodian_attestation import build_attestation_payload, sign_attestation, public_key_fingerprint
 
     public = _read_json(public_manifest_path)
@@ -125,7 +143,7 @@ def create_custodian_attestation_file(
     frozen = _read_json(frozen_configuration_path)
     encrypted = Path(encrypted_truth_store_path).read_bytes()
     receipt = Path(registration_receipt_path).read_bytes()
-    private_pem = Path(private_signing_key_path).read_bytes()
+    private_pem = _read_signing_private_key(private_signing_key_path)
     payload = build_attestation_payload(
         custodian_id=custodian_id,
         registration_url=registration_url,
@@ -143,17 +161,15 @@ def create_custodian_attestation_file(
     )
     attestation = sign_attestation(payload, private_pem)
     _write_json(output_path, attestation)
+    private_key = serialization.load_pem_private_key(private_pem, password=None)
+    public_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
     return {
         "output": str(Path(output_path).resolve()),
         "custodian_id": custodian_id,
-        "custodian_public_key_sha256": public_key_fingerprint(
-            __import__("cryptography.hazmat.primitives.serialization", fromlist=["load_pem_public_key"])
-            .load_pem_private_key(private_pem, password=None).public_key()
-            .public_bytes(
-                encoding=__import__("cryptography.hazmat.primitives.serialization", fromlist=["Encoding"]).Encoding.Raw,
-                format=__import__("cryptography.hazmat.primitives.serialization", fromlist=["PublicFormat"]).PublicFormat.Raw,
-            )
-        ),
+        "custodian_public_key_sha256": public_key_fingerprint(public_pem),
         "registered_utc": registered_utc,
         "public_manifest_sha256": payload["public_manifest_sha256"],
         "encrypted_truth_store_sha256": payload["encrypted_truth_store_sha256"],
