@@ -1,105 +1,55 @@
-# SPHEREx DR1 / SPLICES regional catalogue reconnaissance — 2026-11-25
+# SPHEREx DR1 / QR3 and SPLICES regional reconnaissance — 25 November 2026
 
-**Scope:** predeclared query of the public IRSA `spherex.splices` catalogue and SPHEREx DR1 Level-2 exposures whose detector footprint contains each predeclared region-centre coordinate, across five star-forming regions and one high-latitude control. This is catalogue reconnaissance, not source reclassification or a YSO population discovery.
+**Scientific status:** completed descriptive archive reconnaissance across five predeclared star-forming regions and one high-latitude control. This is not a YSO population estimate, source reclassification, or discovery.
 
 ## Reproducible run
 
-- GitHub Actions: [run 45619403576](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45619403576)
-- Commit: `bf94adc459164916c9cd42173d2d7cd768bf3bb4`
-- Conclusion: `success`; the job ran the predeclared regional catalogue and SPHEREx footprint queries without TAP errors.
-- Artifact: `15023987147` (`spherex-yso-population-recon`), 1,783,173 bytes, retained by Actions until 2026-12-25.
-- Artifact SHA-256: `f7ddddf549720623a914416336a908b20d6f7f68423a3a3d0d4cbb9381e16863`.
-- Machine report: `data/yso_population_recon/yso_population_recon.json`.
-- Machine-report SHA-256: `96e7d9539bb52bac6697c5dbde329e27b44a047e7d0c9bae860d16f3035a22de`.
-- Catalogue: IRSA `spherex.splices`; the report records SPLICES v8.6 as the release returned by the service.
+- GitHub Actions: [run 45641583599](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583599), workflow run #36.
+- Code revision: `ab5b82fe11d1d592985fbfda5d4eb643584708f3`.
+- Conclusion: success; catalogue, Level-2 region-centre coverage, four SIAv2 spectral-image collections, candidate audit and artifact upload completed.
+- Artifact ID `15035548163`, 4,946,716 bytes; ZIP SHA-256 `61ef8c6674d7d9f4c82ad65d3384f41504d2a6882de5bc688cdd2e542ca36a34`.
+- Report `data/yso_population_recon/yso_population_recon.json`, 3,235,795 bytes; raw SHA-256 `fdeac3345932a63f7b5e279249e338f57903199c026ced1fd62aa7fc22b26cfc`; embedded canonical SHA-256 `fa48a33ccea8b87a1b408bf3dee2de7c85865fd7f316048560b10abc3deebf47`, independently recomputed and matched.
+- Candidate inventory audit, 37,321 bytes; raw SHA-256 `d59415f855bf063f95befa50ba1a214e19b7c5d66e9db004fdbfe95c4206c400`; embedded canonical SHA-256 `25bffb561289de44bd53e88b8336a4e907f50ee3c7e193880c56c08ffd2acedc`, independently recomputed and matched.
+- Schema `chronos-spllices-yso-recon/1.1`; 2,421 candidate records; no required query errors.
 
-The query plan is archived per region, with catalogue rows, candidate rows, class distributions and Level-2 footprint rows kept as separate tables. Each query has a recorded SHA-256. A query failure is a workflow failure; a failed query is not converted into a count of zero.
+## Regional archive results
 
-## Predeclared regions and returned rows
+The query returned 16,663 regional catalogue rows and a 2,421-row union defined by at least one of `YSO_PUB`, `CLASS_1` YSO label or `STYPE_ML` YSO label. Region-centre Level-2 queries returned 1,540 rows summed over six regions. Four SIAv2 spectral-image collections returned 6,214 product rows (DR1 and QR3; deep collections returned zero).
 
-| Region | Radius | Catalogue rows | YSO_PUB not null | CLASS_1 containing YSO | STYPE_ML containing YSO | Candidate union rows | DR1 exposures covering region centre |
+| Region | Catalogue | Candidate union | YSO_PUB / CLASS_1 YSO | STYPE_ML YSO | DR1 SIAv2 | QR3 SIAv2 | Level-2 centre-point |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Taurus / Auriga | 2.00° | 4,176 | 58 | 58 | 208 | 237 | 242 |
-| Perseus / NGC 1333 | 0.85° | 849 | 130 | 130 | 120 | 189 | 241 |
-| Orion A | 1.50° | 4,990 | 1,083 | 1,083 | 342 | 1,337 | 237 |
-| Rho Ophiuchi | 0.90° | 2,617 | 167 | 167 | 366 | 482 | 297 |
-| Lupus III | 0.90° | 4,016 | 52 | 52 | 129 | 176 | 235 |
-| High-latitude control | 1.50° | 15 | 0 | 0 | 0 | 0 | 288 |
-| **Total of regional query returns** | — | **16,663** | **1,490** | **1,490** | **1,165** | **2,421** | **1,540** |
+| Taurus / Auriga | 4,176 | 237 | 58 | 208 | 962 | 481 | 242 |
+| Perseus / NGC 1333 | 849 | 189 | 130 | 120 | 471 | 244 | 241 |
+| Orion A | 4,990 | 1,337 | 1,083 | 342 | 857 | 472 | 237 |
+| Rho Ophiuchi | 2,617 | 482 | 167 | 366 | 626 | 335 | 297 |
+| Lupus III | 4,016 | 176 | 52 | 129 | 504 | 234 | 235 |
+| High-latitude control | 15 | 0 | 0 | 0 | 1,012 | 16 | 288 |
+| **Sum of regional returns** | **16,663** | **2,421** | **1,490** | **1,165** | **4,432** | **1,782** | **1,540** |
 
-All catalogue query results were below the 50,000-row cap; all candidate rows were below the 5,000-row cap; and all footprint rows were below the 20,000-row cap. No regional count in this table is a truncated lower bound.
+Each of the four SIAv2 queries succeeded for each region below the 20,000-row cap. The 6,214 SIAv2 rows are archive spectral-image product metadata, not Level-2 visits or usable source epochs. The audit reports 2,448 distinct archive product IDs across those rows, with no ID appearing in more than one regional query. They must not be interpreted as 2,448 observations or temporal visits.
 
-The total row is a sum of regional query returns, not a count of unique objects across the whole sky. Regions are predeclared cones, and any catalogue source lying in overlapping cones would be counted in each regional result. The high-latitude control is a comparison region, not a matched control sample with identical extinction, completeness or observing history.
+The 1,540 Level-2 rows use the fixed region-centre point inside an exposure polygon. The audit found 1,540 plane IDs with no plane ID repeated across the six centre-point queries. These are not source-to-exposure matches or cadence measurements.
 
-The 1,540 Level-2 rows are exposures whose native footprints contain the single predeclared region-centre coordinate used by each query. They are **not** all exposures intersecting each circular region: the query does not test overlap with the full cone. They are also not claimed to be 1,540 unique exposures; the same exposure can cover more than one region centre, and cross-region plane-ID deduplication is handled by the separate candidate-inventory audit. These centre-point counts do not establish which individual catalogue source lies in an exposure, source-level visits, or epoch completeness. A row count below the declared 20,000-row cap means only that the centre-point query completed below that cap, not that full survey coverage is complete.
+## Catalogue label overlap
 
-## Full-region footprint-query extension
+In the 2,421 candidate rows, 1,490 carry non-null `YSO_PUB`, 1,490 have `CLASS_1` containing YSO, and 1,165 have `STYPE_ML` containing YSO. `YSO_PUB` and `CLASS_1` membership was identical across all 2,421 candidate rows. Pattern counts: 1,256 published/harmonised-only, 931 ML-only and 234 all-three-label rows. All candidate rows have a non-empty source ID and there are zero duplicate source-ID groups in this export.
 
-The live reconnaissance above records the **centre-point** query only. The current workflow now also issues a separate optional ADQL shape-intersection query using `INTERSECTS(CIRCLE('ICRS', ra, dec, radius), p.poly)` to count Level-2 exposure polygons overlapping the entire predeclared circular region. This follows the IRSA SPHEREx ADQL help, which documents `INTERSECTS` for two geometry regions ([IRSA SPHEREx help](https://irsa.ipac.caltech.edu/onlinehelp/spherex/help.pdf?id=2073b24); [ADQL 2.1 specification](https://www.ivoa.net/documents/ADQL/20210528/PR-ADQL-2.1-20210528.html)).
+These are catalogue-field overlaps, not independent physical classifications. The 931 ML-only rows are follow-up candidates, not newly confirmed YSOs. Exact equality between two fields in this returned export does not establish independent label provenance.
 
-The new full-region query has a separate row-cap check, CSV, and cross-region plane-ID audit. It is optional and non-fatal: if the live TAP service rejects the shape-intersection expression, the error is recorded in `optional_query_errors`; the analyzer does not treat the failed query as zero coverage and ignores any stale full-region CSV. No full-region-intersection counts are added to the historical 1,540 centre-point rows in this report until a new live workflow run successfully returns and validates them.
+## Source-level exposure and epoch linkage unavailable
 
-## Labels were not merged into a single truth class
+The optional candidate-source-to-Level-2 exposure query failed in all six regions at the IRSA TAP metadata resolver:
 
-The three YSO-related fields retain distinct meanings:
+`DALQueryError: UsageFault: BAD_REQUEST: get_table_metadata(), unknown datasource / table: spherex_postgres / splices`.
 
-- `YSO_PUB`: a non-null literature-reference field in SPLICES.
-- `CLASS_1`: the catalogue's harmonised class field.
-- `STYPE_ML`: the machine-learning source-type label.
+The audit records `match_row_count: null`, an observed lower bound of zero, zero regions with a completed source-level query and six with unavailable queries. The null is intentional. It is not zero measured matches, zero visits or zero cadence.
 
-The observed sums are 1,490 rows with `YSO_PUB` non-null, 1,490 rows whose `CLASS_1` text contains YSO, and 1,165 rows whose `STYPE_ML` text contains YSO. In the exported 2,421-row candidate union, a row-by-row overlap audit found that the `YSO_PUB` and `CLASS_1` flags have identical membership on all 2,421 rows. This is an observed property of the returned catalogue/query, not evidence that the underlying label-generation processes are independent.
+## DR1 All-Sky Cube inventory
 
-The three-field intersection patterns in the exported candidate union are:
+The separate `spherex_dr1_cube` SIAv2 query returned 1,000 metadata rows at `maxrec=1000`, so `query_complete_below_row_cap=false`. The report is metadata-only; no native cube was downloaded and no temporal epoch series was constructed. The nominal product description is 102 spectral channels over 0.75–5.0 µm. The 1,000 returned rows are a capped sample, not a complete inventory.
 
-| YSO_PUB present | CLASS_1 contains YSO | STYPE_ML contains YSO | Candidate rows |
-|---|---|---|---:|
-| Yes | Yes | No | 1,256 |
-| No | No | Yes | 931 |
-| Yes | Yes | Yes | 234 |
-| **Total** |  |  | **2,421** |
+## Scientific boundary and remaining work
 
-No row in this candidate export has a disagreement between the `YSO_PUB` and `CLASS_1` YSO flags. The 931 ML-only records are candidates for independent review, not newly confirmed YSOs. The 234 rows with all three labels are catalogue-field agreement, not independent astrophysical confirmation.
+The live catalogue, region-centre Level-2 and six-region DR1/QR3 SIAv2 queries completed without required errors. The labels, source IDs, regional counts, archive metadata and report hashes are preserved in the artifact.
 
-All 2,421 exported candidate rows have a non-empty source ID, and the source IDs are unique within this five-region-plus-control export (2,421 unique IDs, zero repeated IDs). This says nothing about uniqueness outside the queried catalogue and sky regions.
-
-The 2,421 candidate-union rows are records matching at least one of the three fields. They are not 2,421 new YSOs, not 2,421 spectroscopically confirmed YSOs, and not a selection-function-corrected population.
-
-## Query implementation corrections
-
-The first live query iteration used a spatial aggregate form rejected by the IRSA TAP service. That workflow was not accepted as a result. The final query implementation:
-- uses an IRSA-compatible spatial predicate for the SPLICES cone query;
-- retrieves a bounded row table and computes label counts locally instead of relying on unsupported geometric `COUNT()` / `GROUP BY` aggregation;
-- keeps candidate details, full catalogue rows, and exposure-footprint rows separate;
-- uses the published SPHEREx exposure-polygon pattern to test whether the fixed predeclared region-centre coordinate lies inside each returned exposure footprint;
-- records per-query errors and returns a non-zero exit status if any required query fails;
-- records whether the query cap was reached; counts are described as exact for a completed query below the cap and as lower bounds if the cap is reached.
-
-The candidate table includes source identifiers, coordinates, published/harmonised/ML labels, probabilities, infrared photometry and variability fields, parallax/distance and neighbourhood fields where available. The CSVs are retained in the workflow artifact; the source IDs and per-field rows are not duplicated into this summary.
-
-## What this does and does not establish
-
-**Established:** the current IRSA TAP service returned the archived catalogue rows and Level-2 exposure rows covering each of the six fixed region-centre coordinates under the recorded query definitions; the live query completed without errors; the returned counts are below their declared row caps.
-
-**Not established:** an unbiased YSO census, physical classification of every candidate, independent verification of machine-learning classifications, completeness or contamination rates, a regional YSO formation rate, all exposures intersecting each full region cone, unique exposure counts after cross-region overlap removal, source-level temporal coverage, or any new astronomical discovery.
-
-Before a population estimate, the project still needs a frozen source inclusion rule, independent validation of candidate classes, a selection function, source-level epoch coverage, completeness and contamination estimates, null/control modelling, overlap deduplication, and a preregistered statistical analysis. Any later discovery claim needs independent astronomical reproduction and review.
-
-
-## Updated live reconnaissance and candidate-inventory audit — 25 November 2026
-
-The latest audited rerun is [GitHub Actions run 45636514684](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45636514684), code revision `a7d6647fb772987d3e3761445efa9e9be993653a`. Artifact ID `15033905878` has SHA-256 `32f080fe543063381eca4453f1df691312be8fcb9`. The catalogue, bounded candidate, region-centre Level-2 exposure and candidate-inventory audit steps completed successfully.
-
-The candidate union contains 2,421 rows; all 2,421 have non-empty source IDs and there are zero repeated source-ID groups within this export. The candidate label overlap is:
-- 1,490 rows with a non-null `YSO_PUB` field and 1,490 with `CLASS_1` containing YSO; those two flags had identical membership in this candidate export.
-- 1,165 rows with `STYPE_ML` containing YSO.
-- 1,256 rows with published/harmonised labels but no ML YSO label.
-- 931 ML-only YSO-labelled rows.
-- 234 rows with all three fields indicating YSO.
-
-These are catalogue-field overlaps, not independently confirmed astrophysical classifications. The 931 ML-only rows are review candidates, not newly discovered YSOs.
-
-The six regional query returns sum to 16,663 catalogue rows, 2,421 candidate-union rows and 1,540 centre-point Level-2 footprint rows. The 1,540 figure is a sum of regional centre-point queries, not a globally deduplicated unique-exposure count. The exposure query tests whether the single predeclared region-centre point is inside the exposure polygon; it is not a full-region intersection or source-visit count.
-
-**Source-level epoch coverage remains unavailable.** The optional candidate-source-to-exposure query still fails at the IRSA TAP metadata resolver (`unknown datasource / table: spherex / spherex.artifact`) after an explicit-join attempt. The optional full-region circle/polygon query is also rejected as an invalid/unsupported ADQL query. These outputs are null/unmeasured, not zero. Do not infer individual source exposure matches, visit counts or usable cadence from the centre-point footprint rows.
-
-This follow-up remains descriptive reconnaissance only. It does not establish a contamination-corrected YSO census, source-level time-domain completeness, a regional formation rate or a discovery.
+This does not establish an unbiased YSO census, independent ML-label validation, contamination/completeness, source-level visit/cadence coverage, a population rate, complete All-Sky Cube inventory or a discovery. Remaining work includes fixing and validating the source-to-exposure association, paginating the cube metadata query if a complete inventory is required, freezing the sample selection rule, independent class verification, estimating selection/contamination, preregistering population analysis and obtaining independent astronomical review.

@@ -39,43 +39,19 @@ Primary Actions record: [M101 real-data audit run 45623016499](https://github.co
 
 ## 3. SPLICES and DR1 population reconnaissance
 
-**Status: completed as catalogue/coverage reconnaissance; no population inference or discovery.**
+**Status: completed descriptive six-region reconnaissance; no YSO population result.** The latest workflow [#36 / run 45641583599](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583599) succeeded on the current repair revision. It returned 16,663 SPLICES catalogue rows, 2,421 candidate-union rows, 1,540 region-centre Level-2 footprint rows and 6,214 DR1/QR3 SIAv2 spectral-image product rows across five star-forming regions plus a high-latitude control.
 
-The completed live IRSA TAP workflow queried five predeclared star-forming regions and one high-latitude control. All catalogue and DR1 footprint queries completed below their row caps, with no TAP errors.
-
-| Region | SPLICES catalogue rows | Published YSO labels | ML YSO labels | ML-only labels | DR1 Level-2 footprint rows (all bands) |
-|---|---:|---:|---:|---:|---:|
-| Taurus–Auriga | 4,176 | 58 | 208 | 179 | 242 |
-| Perseus / NGC 1333 | 849 | 130 | 120 | 59 | 241 |
-| Orion A | 4,990 | 1,083 | 342 | 254 | 237 |
-| Rho Ophiuchi | 2,617 | 167 | 366 | 315 | 297 |
-| Lupus III | 4,016 | 52 | 129 | 124 | 235 |
-| High-latitude control | 15 | 0 | 0 | 0 | 288 |
-| **Total** | **16,663** | **1,490** | **1,165** | **931** | **1,540** |
-
-“Published YSO labels” are rows with \`yso_pub\`; the harmonised \`class_1\` counts were the same in these returned regions. “ML YSO labels” refer to \`stype_ml\` and are not independent confirmations. ML-only counts refer to catalogue rows labelled YSO by \`stype_ml\` but not by the published/harmonised columns. The full row-level snapshots, SQL queries, query hashes and class concordance records are retained in the Actions artifact.
-
-Within the 2,421-row candidate union, all source IDs are unique and the `YSO_PUB` and `CLASS_1` YSO flags have identical membership: 1,256 rows have both published/harmonised labels but no ML YSO label, 931 are ML-only, and 234 have all three labels. This overlap is a property of the returned catalogue fields, not independent confirmation.
-
-The 1,540 Level-2 rows are exposures whose native polygons contain each predeclared region-centre coordinate. They do **not** count every exposure intersecting the full region circles, do not establish source-level visits, and are not necessarily unique across the six region-centre queries. They are footprint-query rows, not extracted source spectra or independent astrophysical samples.
-
-The high-latitude control had 15 catalogue rows, no published/harmonised/ML YSO labels, and 288 centre-coordinate exposure rows. It is not a matched control sample with identical extinction, completeness or observing history.
-
-Primary Actions record: [SPLICES/DR1 reconnaissance run 45624672955](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45624672955).
-
-The results expose catalogue-label disagreement, especially ML-only candidates. That is a useful audit/follow-up list, not evidence those objects are YSOs. A real population-rate analysis still needs a well-defined source-selection function, completeness/contamination estimation, duplicate and overlap handling, epoch/source cross-matching, independent controls, uncertainty propagation and astronomical review.
+The candidate audit found 1,490 rows with non-null `YSO_PUB`, 1,490 `CLASS_1` YSO-labelled rows and 1,165 `STYPE_ML` YSO-labelled rows. The 931 ML-only records are review candidates, not confirmed sources. The optional source-to-exposure query failed in all six regions at the IRSA metadata resolver (`unknown datasource / table: spherex_postgres / splices`); source-level coverage is **unavailable**, not zero. The separate All-Sky Cube metadata query returned 1,000 rows at its maxrec cap and remains incomplete. Exact checksums, region counts and query boundaries are in [the current reconnaissance report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
 
 ## 4. Six-region calibrated Jy pilot
 
-**Status: completed as an exploratory six-field evaluation; strict field-gate revalidation passed 6/6; independent calibration review remains pending.**
+**Status: completed exploratory six-field evaluation; independent calibration review pending.** Workflow [#17 / run 45637115746](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45637115746) completed all six predeclared D2 fields. All six fields passed their 20 machine eligibility checks; the report contains six distinct science observation IDs and six distinct native science hashes. The artifact and embedded report digest are recorded in [the six-region pilot report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md).
 
-Workflow [45624461435](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45624461435) completed the six predeclared regions. Raw artifact 15029628060 has SHA-256 `250f3bfdbd3fe81b1d87aa00cd54389377f7c147639c408604cde672d2c31cfb`. The six raw field summaries were revalidated against the stricter `run_multifield_jy_pilot.py` field-gate checks (blob SHA `f346d00c7ce2b500a406e68c6ea2a20093dac3a9`). The post-hoc report SHA-256 is `a94c010a3d4cfd6d678d93fe32e598218a77d53f13acf61c57d010059ebae299`.
+Results differ materially by field. Most importantly, Lupus III recovered 0/20 at all three local flux levels, including twice its nominal local 5-sigma reference. All six gain-derived electron-conversion records remain `derived_pending_independent_review`. The pilot is non-blind, uses one exposure per field and does not compare the four CHRONOS baselines.
 
-All six fields have distinct DR1 D2 observation IDs and distinct science-file SHA-256 values. Every field passed all 20 strict checks, including native compatibility, direct WCS/gain provenance, archive MD5, invalid gain masking, completed Jy injection, three measured source-Poisson bins and an explicit pending-review state. The gain conversion valid fraction is 0.9999579489; 175 invalid gain pixels remain masked.
+## 4a. Current CI and M101 evidence verification — 25 November 2026
 
-The results are not uniformly strong: Lupus III recovered 0/20 at all three bins, including 2× its local 5-sigma reference. That field is retained and flagged for follow-up; a green data-integrity gate does not mean the completeness result is good. The field-specific flux levels are not pooled into a universal sensitivity curve. Full results and limitations are in [the six-region report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md).
-
-This remains exploratory: the run was not blind, does not compare all four CHRONOS methods on common held-out inputs, and does not establish survey-wide performance or a scientific discovery. Independent human calibration review is still required.
+The latest repair-branch Actions run [#888 / 45641583358](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583358), on commit `ab5b82fe11d1d592985fbfda5d4eb643584708f3`, completed successfully. The test job passed **314 tests with 7 warnings**; both JavaScript syntax checks passed. The companion M101 real-field job completed archive retrieval, native compatibility validation, machine-readable audit and artifact upload successfully. Artifact `15036066153` is 91,213,916 bytes with ZIP SHA-256 `fcc0af4dd3665e110fd4b864180e372a2dd8874ab673be56198338ea451b666c`. The field-summary SHA-256 is `4c723310f0b295ec716fdb1b96dc1fa04cc67ad15f623eebe0ccad1d64770890`; the injection-report SHA-256 is `437393e79e8c84124c041c1968a13f11594ab09f117ed392c93f9616a8f6defd`. M101 recovery remains 5/20, 14/20 and 17/20 at 54.198, 108.396 and 216.792 µJy. The gain-to-electron conversion still requires independent human review.
 
 ## 5. Acceptance gates
 
