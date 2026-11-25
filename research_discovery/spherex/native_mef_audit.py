@@ -79,7 +79,7 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
             for index, hdu in enumerate(science)
         ]
         required = ("IMAGE", "FLAGS", "VARIANCE", "ZODI", "WCS-WAVE")
-        missing = [name for name in required if name not in names]
+        missing = [name for name in required if name not in names or science[names.index(name)].data is None]
         report["checks"]["required_hdus"] = {"status": "pass" if not missing else "fail",
                                               "required": list(required), "missing": missing}
         if "IMAGE" not in names or science[names.index("IMAGE")].data is None:
@@ -94,6 +94,9 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
         report["image_shape"] = list(image.shape)
         report["image_bunit"] = image_hdu.header.get("BUNIT")
         report["science_detector"] = science_detector
+        report["science_pipeline_version"] = str(image_hdu.header.get("VERSION", science[0].header.get("VERSION", ""))).strip() or None
+        report["science_processing_date"] = str(image_hdu.header.get("PROCDATE", science[0].header.get("PROCDATE", ""))).strip() or None
+        report["coordinate_frame"] = "native_detector" if image_hdu.header.get("WCSNAMEA") else None
         report["checks"]["image_2d"] = {"status": "pass" if image.ndim == 2 else "fail"}
         if image.ndim != 2:
             report["status"] = "FAILED"
@@ -156,6 +159,8 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
 
         try:
             alternate = WCS(image_hdu.header, key="A")
+            if not alternate.has_celestial:
+                raise ValueError("alternate WCS A is not a celestial sky-to-detector transform")
             origin = detector_origin_offset(image_header)
             alternate_world_origin = alternate.all_pix2world([[0.0, 0.0]], 0)[0].tolist()
             report["alternate_wcs_a"] = {
@@ -182,16 +187,23 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
             report["checks"]["cwave_cband"] = {"status": "fail", "missing": missing_cal}
         else:
             image_shape = tuple(report["image_shape"])
-            with fits.open(science_path, memmap=True) as science:
-                grid = science_wavelength_cutout(calibration["CWAVE"].data,
-                    calibration["CBAND"].data, dict(science["IMAGE"].header), image_shape)
-            report["checks"]["cwave_cband"] = {
-                "status": "pass" if grid["invalid_pixels"] == 0 else "review_required",
-                "native_origin_xy": grid["native_origin_xy"],
-                "valid_fraction": grid["valid_fraction"], "invalid_pixels": grid["invalid_pixels"]}
-            good = grid["valid_mask"]
+            try:
+                with fits.open(science_path, memmap=True) as science:
+                    grid = science_wavelength_cutout(calibration["CWAVE"].data,
+                        calibration["CBAND"].data, dict(science["IMAGE"].header), image_shape)
+                report["checks"]["cwave_cband"] = {
+                    "status": "pass" if grid["invalid_pixels"] == 0 else "review_required",
+                    "native_grid_shape": [2040, 2040],
+                    "cutout_shape": list(grid["cwave_um"].shape),
+                    "native_origin_xy": grid["native_origin_xy"],
+                    "valid_fraction": grid["valid_fraction"], "invalid_pixels": grid["invalid_pixels"]}
+            except Exception as exc:
+                grid = None
+                report["checks"]["cwave_cband"] = {"status": "fail", "error": str(exc)}
+            good = grid["valid_mask"] if grid is not None else np.zeros(image_shape,dtype=bool)
             report["wavelength_summary"] = {
                 "source": "CWAVE/CBAND",
+                "cwave_native_shape": [2040, 2040], "cband_native_shape": [2040, 2040],
                 "cwave_min_um": float(np.min(grid["cwave_um"][good])) if good.any() else None,
                 "cwave_max_um": float(np.max(grid["cwave_um"][good])) if good.any() else None,
                 "cband_min_um": float(np.min(grid["cband_um"][good])) if good.any() else None,
