@@ -37,8 +37,9 @@ def test_candidate_query_is_bounded_and_deterministic():
     assert "ORDER BY source_id" in query
 
 
-def test_dr1_exposure_coverage_uses_irsa_spherex_polygon_pattern():
-    query = recon.build_region_queries(recon.REGIONS[0])["dr1_level2_exposures"]
+def test_dr1_exposure_coverage_uses_centre_point_and_optional_full_region_intersection():
+    queries = recon.build_region_queries(recon.REGIONS[0])
+    query = queries["dr1_level2_exposures"]
     assert "spherex.artifact" in query
     assert "spherex.plane" in query
     assert "p.poly" in query
@@ -46,8 +47,15 @@ def test_dr1_exposure_coverage_uses_irsa_spherex_polygon_pattern():
     assert "AND (LOWER(a.uri) LIKE" in query
     assert "COUNT(" not in query.upper()
     assert "GROUP BY" not in query.upper()
+
+    full_region = queries["dr1_level2_exposures_full_region"]
+    assert "spherex.artifact" in full_region
+    assert "spherex.plane" in full_region
+    assert "1 = INTERSECTS(CIRCLE('ICRS', 65.70000000, 26.00000000, 2.00000), p.poly)" in full_region
+    assert "AND (LOWER(a.uri) LIKE" in full_region
     for band in recon.DR1_BANDS:
         assert f"'{band}'" in query
+        assert f"'{band}'" in full_region
 
 
 def test_region_predicate_uses_irsa_adql_catalogue_cone_syntax():
@@ -119,6 +127,11 @@ def test_query_failures_are_explicit_not_zero_detections(monkeypatch):
     assert set(result["query_errors"]) == {
         "catalogue_sources", "candidate_sources", "dr1_level2_exposures"
     }
+    assert set(result["optional_query_errors"]) == {
+        "dr1_level2_exposures_full_region"
+    }
+    assert result["counts"]["dr1_level2_exposures_intersecting_full_region_total"] is None
+    assert result["counts"]["dr1_level2_full_region_optional_query_error"]
     assert result["counts"]["total_catalogue_rows"] is None
     assert result["counts"]["published_yso_label_rows"] is None
 
