@@ -186,18 +186,20 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
 
         try:
             alternate_report = audit_alternate_wcs_a(image_hdu.header, image.shape)
-            origin = detector_origin_offset(image_header)
             report["alternate_wcs_a"] = {
                 **alternate_report,
                 "crpix1a": image_hdu.header.get("CRPIX1A"),
                 "crpix2a": image_hdu.header.get("CRPIX2A")}
-            report["cutout_parent_origin_xy"] = list(origin)
             report["checks"]["alternate_wcs_a"] = {
                 "status": "pass", "pixel_n_dim": alternate_report["pixel_n_dim"],
                 "world_n_dim": alternate_report["world_n_dim"]}
-            report["checks"]["cutout_parent_origin"] = {"status": "pass"}
         except Exception as exc:
             report["checks"]["alternate_wcs_a"] = {"status": "review_required", "error": str(exc)}
+        try:
+            origin = detector_origin_offset(image_header)
+            report["cutout_parent_origin_xy"] = list(origin)
+            report["checks"]["cutout_parent_origin"] = {"status": "pass"}
+        except Exception as exc:
             report["checks"]["cutout_parent_origin"] = {"status": "review_required", "error": str(exc)}
 
     with fits.open(spectral_wcs_path, memmap=True, checksum=True) as calibration:
