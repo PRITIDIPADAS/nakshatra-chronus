@@ -472,3 +472,40 @@ def test_input_report_still_rejects_unknown_future_schema(tmp_path):
     })
     with pytest.raises(ValueError, match="unsupported SPLICES reconnaissance report schema"):
         _check_input_report(report, rows)
+
+
+def test_schema_1_1_missing_source_product_manifest_is_unavailable_not_zero(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    missing = tmp_path / "Taurus_Auriga" / "candidate_source_product_matches.csv"
+    missing.unlink()
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    assert first["candidate_source_exposure_query_status"] == "unavailable"
+    assert first["candidate_source_product_match_rows"] is None
+    assert first["candidate_source_product_match_error"] == "candidate source/product match manifest missing"
+    assert first["candidate_source_exposure_match_rows"] is None
+    assert result["candidate_source_exposure_coverage"]["matched_archive_product_pair_count"] is None
+    assert result["cross_region_candidate_source_exposure_overlap"]["source_archive_product_match_rows"] is None
+
+
+def test_schema_1_1_cross_region_source_product_overlap_uses_exact_archive_product_ids(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    for region in ("Taurus_Auriga", "Perseus_NGC1333"):
+        _write_csv(root / region / "candidate_source_product_matches.csv", [{
+            "source_id": "source-shared",
+            "archive_product_id": "ivo:shared-product",
+            "obs_id": "shared-obs",
+            "collection": "spherex_dr1",
+            "data_release": "dr1",
+            "energy_bandpassname": "SPHEREx-D2",
+            "match_method": "spherical-gnomonic-pip/1.0",
+            "metadata_only": True,
+        }])
+    result = analyze(tmp_path)
+    overlap = result["cross_region_candidate_source_exposure_overlap"]
+    assert overlap["source_archive_product_match_rows"] == 2
+    assert overlap["unique_source_archive_product_pairs_observed"] == 1
+    assert overlap["source_product_pairs_in_multiple_region_queries"] == 1
+    assert overlap["source_archive_product_region_memberships"]["source-shared|ivo:shared-product"] == [
+        "Perseus_NGC1333", "Taurus_Auriga"
+    ]

@@ -241,8 +241,9 @@ def _summarize_sia_products(rows: list[dict]) -> dict:
     result = {}
     for collection, members in sorted(by_collection.items()):
         identifiers = {
-            str(row.get("obs_id") or row.get("obsid") or row.get("access_url")
-                or row.get("uri") or row.get("ID") or "").strip()
+            str(row.get("obs_publisher_did") or row.get("access_url")
+                or row.get("obs_id") or row.get("obsid") or row.get("uri")
+                or row.get("ID") or "").strip()
             for row in members
         }
         identifiers.discard("")
@@ -517,13 +518,13 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
             ),
             "candidate_source_product_match_error": source_product_error,
             "candidate_source_exposure_match_rows": (
-                None if source_epoch_error else len(source_match_rows)
+                None if source_match_error else len(source_match_rows)
             ),
             "candidate_sources_with_any_level2_footprint_match": (
-                None if source_epoch_error else len(matched_source_ids)
+                None if source_match_error else len(matched_source_ids)
             ),
             "candidate_sources_without_level2_footprint_match": (
-                None if source_epoch_error
+                None if source_match_error
                 else max(0, len(candidate_ids) - len(matched_source_ids))
             ),
             "candidate_source_exposure_unique_plane_ids": (
@@ -642,8 +643,8 @@ def analyze(root: Path) -> dict:
             unidentified = 0
             for row in exposures:
                 product_id = str(
-                    row.get("obs_id") or row.get("obsid") or row.get("access_url")
-                    or row.get("uri") or row.get("ID") or ""
+                    row.get("obs_publisher_did") or row.get("access_url")
+                    or row.get("obs_id") or row.get("obsid") or row.get("uri") or row.get("ID") or ""
                 ).strip()
                 if product_id:
                     products[product_id].add(str(row.get("recon_region") or ""))
