@@ -128,6 +128,14 @@ def summarize_field_record(
         and row.get("post_injection_local_peak_offset_within_match_radius_px") is not None
         for row in report_rows
     )
+    source_only_diagnostic_rows = sum(
+        isinstance(row, dict)
+        and row.get("source_only_local_max_snr_within_match_radius") is not None
+        and row.get("source_only_local_peak_offset_within_match_radius_px") is not None
+        and row.get("source_only_peak_list_recovered") in (0, 1)
+        and row.get("source_only_diagnostic_uses_original_variance") is True
+        for row in report_rows
+    )
     report_rows_match_bins = report_bins_match and len(report_rows) == expected_injection_rows
     if report_rows_match_bins:
         for compact_bin in flux_bins:
@@ -151,6 +159,15 @@ def summarize_field_record(
         and report_rows_match_bins
         and expected_injection_rows > 0
         and local_snr_diagnostic_rows == len(report_rows) == expected_injection_rows
+    )
+    source_only_diagnostics_complete = (
+        response_diagnostics.get("isolated_source_response_available") is True
+        and response_diagnostics.get("source_only_uses_original_variance") is True
+        and response_diagnostics.get("source_only_peak_list_recovery_is_diagnostic_not_primary") is True
+        and report_identity_matches
+        and report_rows_match_bins
+        and expected_injection_rows > 0
+        and source_only_diagnostic_rows == len(report_rows) == expected_injection_rows
     )
     diagnostic_flux_bins = []
     if report_bins_match:
@@ -188,6 +205,11 @@ def summarize_field_record(
                     "median_baseline_local_max_snr": median_metric("baseline_local_max_snr_within_match_radius"),
                     "median_post_injection_local_max_snr": median_metric("post_injection_local_max_snr_within_match_radius"),
                     "median_local_snr_delta": median_metric("local_snr_delta_within_match_radius"),
+                    "median_source_only_local_max_snr": median_metric("source_only_local_max_snr_within_match_radius"),
+                    "source_only_peak_list_recovered_count": sum(
+                        int(row.get("source_only_peak_list_recovered", 0))
+                        for row in bin_rows
+                    ),
                 })
             except (TypeError, ValueError, OverflowError):
                 diagnostic_flux_bins.append({
@@ -209,6 +231,8 @@ def summarize_field_record(
         "expected_injection_rows": expected_injection_rows,
         "local_snr_diagnostic_rows": local_snr_diagnostic_rows,
         "local_snr_diagnostics_complete": local_snr_diagnostics_complete,
+        "source_only_diagnostic_rows": source_only_diagnostic_rows,
+        "source_only_diagnostics_complete": source_only_diagnostics_complete,
         "injection_report_identity_matches_science_and_gain": report_identity_matches,
         "injection_report_flux_bins_match_compact_summary": report_bins_match,
         "injection_report_recovery_counts_match_rows": report_rows_match_bins,
@@ -242,6 +266,7 @@ def summarize_field_record(
         "source_poisson_flux_bin_variances_measured": measured_poisson_bins,
         "injection_report_matches_science_and_calibration": report_identity_matches,
         "local_snr_diagnostics_complete_and_count_bound": local_snr_diagnostics_complete,
+        "source_only_diagnostics_complete_and_count_bound": source_only_diagnostics_complete,
         "electron_conversion_map_valid_fraction_gt_99pct": (
             isinstance(conversion_valid_fraction, (int, float))
             and 0.99 < float(conversion_valid_fraction) <= 1.0
@@ -476,6 +501,8 @@ def validate_aggregate_report(report: dict) -> dict:
         investigation = row.get("recovery_investigation") or {}
         if investigation.get("local_snr_diagnostics_complete") is not True:
             errors.append(f"{name}: local per-injection SNR diagnostics are incomplete or unbound")
+        if investigation.get("source_only_diagnostics_complete") is not True:
+            errors.append(f"{name}: isolated source-only response diagnostics are incomplete or unbound")
         if investigation.get("injection_report_identity_matches_science_and_gain") is not True:
             errors.append(f"{name}: per-injection report is not bound to the science/gain pair")
         science = row.get("science") or {}
