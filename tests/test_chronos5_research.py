@@ -199,13 +199,13 @@ def test_blind_truth_is_encrypted_and_unblinding_requires_frozen_config():
         "score_thresholds": frozen_config["score_thresholds"],
         "matched_target": frozen_config["matched_target"],
     }
-    report = unblind_benchmark(
-        public, encrypted, key, frozen, detection_run, bootstrap_draws=100
-    )
-    assert report["blind_protocol"]["truth_released_after_run_freeze"] is True
-    assert report["blind_protocol"]["blind_field_count"] == len(test_tokens)
-    assert report["blind_protocol"]["truth_access_record"]["action"] == "unblind_and_evaluate"
-    assert report["scientific_claim_eligible"] is False
+    # Matching hashes and a frozen configuration are not proof of independent
+    # custody. Held-out truth must remain sealed until the custodian signature
+    # and its out-of-band pinned public key have been verified.
+    with pytest.raises(PermissionError, match="held-out truth remains sealed"):
+        unblind_benchmark(
+            public, encrypted, key, frozen, detection_run, bootstrap_draws=100
+        )
 
 
 def test_pixel_forward_model_separates_components_and_marks_placeholders():
