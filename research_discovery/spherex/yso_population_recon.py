@@ -83,32 +83,22 @@ def region_predicate(region: dict, ra_col: str = "ra", dec_col: str = "dec") -> 
     )
 
 
-def build_region_queries(region: dict) -> dict[str, str]:
-    """Return deterministic TAP SQL for the predeclared region.
+CATALOGUE_ROW_LIMIT = 50000
+COVERAGE_ROW_LIMIT = 20000
 
-    YSO_PUB is an integer literature-reference identifier, CLASS_1 is the
-    published harmonised source class, and STYPE_ML is a separate ML label.
-    Keep their queries distinct so an ML assignment is never presented as a
-    literature classification.
+
+def build_region_queries(region: dict) -> dict[str, str]:
+    """Return exact, bounded TAP SQL used for the predeclared sky region.
+
+    IRSA's TAP documentation warns that COUNT() is unsupported in queries
+    with geometric constraints. Return rows and calculate summaries locally.
+    SPLICES literature, harmonised and ML labels remain independent columns.
     """
     where = region_predicate(region)
-    total_sql = f"SELECT COUNT(*) AS n FROM spherex.splices WHERE {where}"
-    published_sql = (
-        f"SELECT COUNT(*) AS n FROM spherex.splices WHERE {where} "
-        "AND yso_pub IS NOT NULL"
-    )
-    class1_yso_sql = (
-        f"SELECT COUNT(*) AS n FROM spherex.splices WHERE {where} "
-        "AND UPPER(class_1) LIKE '%YSO%'"
-    )
-    ml_yso_sql = (
-        f"SELECT COUNT(*) AS n FROM spherex.splices WHERE {where} "
-        "AND UPPER(stype_ml) LIKE '%YSO%'"
-    )
-    class_distribution_sql = (
-        "SELECT class_1, yso_pub, stype_ml, COUNT(*) AS n "
-        f"FROM spherex.splices WHERE {where} "
-        "GROUP BY class_1, yso_pub, stype_ml ORDER BY COUNT(*) DESC"
+    catalogue_sql = (
+        f"SELECT TOP {CATALOGUE_ROW_LIMIT} source_id, designation, ra, dec, "
+        "sel_type, class_1, yso_pub, stype_ml "
+        f"FROM spherex.splices WHERE {where} ORDER BY source_id"
     )
     candidate_sql = (
         f"SELECT TOP {CANDIDATE_LIMIT} source_id, designation, ra, dec, sel_type, class_1, yso_pub, "
@@ -121,32 +111,40 @@ def build_region_queries(region: dict) -> dict[str, str]:
         "AND (yso_pub IS NOT NULL OR UPPER(class_1) LIKE '%YSO%' "
         "OR UPPER(stype_ml) LIKE '%YSO%') ORDER BY source_id"
     )
+    # This follows the official SPHEREx TAP footprint pattern. Unlike a
+    # catalogue cone search, POINT(center) is tested against the exposure
+    # polygon; IRSA's own SPHEREx notebook uses the ICRS constructor here.
     exposure_sql = (
-        "SELECT p.energy_bandpassname, COUNT(*) AS n_exposures, "
-        "MIN(p.time_bounds_lower) AS first_time, MAX(p.time_bounds_upper) AS last_time "
+        f"SELECT TOP {COVERAGE_ROW_LIMIT} p.planeid, a.uri, p.energy_bandpassname, "
+        "p.time_bounds_lower, p.time_bounds_upper "
         "FROM spherex.artifact a JOIN spherex.plane p ON p.planeid = a.planeid "
-        "WHERE CONTAINS("
-        f"POINT({region['ra_deg']:.8f}, {region['dec_deg']:.8f}), p.poly) = 1 "
-        "AND LOWER(a.uri) LIKE '%/dr1/level2/%' "
-        "AND p.energy_bandpassname IN ("
+        "WHERE 1 = CONTAINS("
+        f"POINT('ICRS', {region['ra_deg']:.8f}, {region['dec_deg']:.8f}), p.poly) "
+        "AND (LOWER(a.uri) LIKE '%/dr1/level2/%' AND p.energy_bandpassname IN ("
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
-        + ") GROUP BY p.energy_bandpassname ORDER BY p.energy_bandpassname"
+        + ")) ORDER BY p.time_bounds_lower"
     )
     return {
-        "total": total_sql,
-        "published_yso_label": published_sql,
-        "class_1_yso": class1_yso_sql,
-        "ml_yso": ml_yso_sql,
-        "class_distribution": class_distribution_sql,
+        "catalogue_sources": catalogue_sql,
         "candidate_sources": candidate_sql,
-        "dr1_level2_coverage_by_band": exposure_sql,
+        "dr1_level2_exposures": exposure_sql,
     }
 
 
+def _is_yso_like(row: dict) -> bool:
+    class_1 = str(row.get("class_1") or "").upper()
+    ml_class = str(row.get("stype_ml") or "").upper()
+    return (
+        row.get("yso_pub") is not None
+        or "YSO" in class_1
+        or "YSO" in ml_class
+    )
+
+
 def inspect_region(region: dict) -> dict:
-    """Run each predeclared TAP query while preserving query-level failures."""
-    query_results = {}
+    """Execute TAP queries and derive counts without unsupported spatial COUNT()."""
     query_definitions = build_region_queries(region)
+    query_results = {}
     for name, sql in query_definitions.items():
         try:
             query_results[name] = query_rows(sql)
@@ -158,44 +156,84 @@ def inspect_region(region: dict) -> dict:
                 "rows": [],
             }
 
-    counts = {}
-    for name in ("total", "published_yso_label", "class_1_yso", "ml_yso"):
-        result = query_results[name]
-        rows = result.get("rows", [])
-        counts[name] = (
-            int(rows[0]["n"]) if rows and "n" in rows[0]
-            else None if result.get("error")
-            else 0
+    catalogue_result = query_results["catalogue_sources"]
+    catalogue_rows = catalogue_result.get("rows", [])
+    catalogue_error = catalogue_result.get("error")
+    catalogue_complete = (
+        not catalogue_error and len(catalogue_rows) < CATALOGUE_ROW_LIMIT
+    )
+    counts = {
+        "catalogue_rows_returned": len(catalogue_rows) if not catalogue_error else None,
+        "catalogue_row_limit": CATALOGUE_ROW_LIMIT,
+        "catalogue_query_complete": catalogue_complete,
+        "total_catalogue_rows": len(catalogue_rows) if catalogue_complete else None,
+        "published_yso_label_rows": sum(row.get("yso_pub") is not None for row in catalogue_rows) if not catalogue_error else None,
+        "class_1_yso_rows": sum("YSO" in str(row.get("class_1") or "").upper() for row in catalogue_rows) if not catalogue_error else None,
+        "ml_yso_rows": sum("YSO" in str(row.get("stype_ml") or "").upper() for row in catalogue_rows) if not catalogue_error else None,
+    }
+    counts["label_counts_are_lower_bounds"] = not catalogue_complete
+
+    class_counter = {}
+    for row in catalogue_rows:
+        key = (
+            str(row.get("class_1") or "NULL"),
+            str(row.get("yso_pub") if row.get("yso_pub") is not None else "NULL"),
+            str(row.get("stype_ml") or "NULL"),
         )
+        class_counter[key] = class_counter.get(key, 0) + 1
+    class_rows = [
+        {"class_1": key[0], "yso_pub": key[1], "stype_ml": key[2], "n": count}
+        for key, count in sorted(class_counter.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    query_results["class_distribution"] = {
+        "method": "local counts over catalogue_sources rows returned by bounded spatial query",
+        "source_row_count": len(catalogue_rows),
+        "source_query_complete": catalogue_complete,
+        "row_count": len(class_rows),
+        "rows": class_rows,
+    }
+
     candidate_result = query_results["candidate_sources"]
-    counts["candidate_rows_returned"] = (
-        candidate_result["row_count"] if not candidate_result.get("error") else None
-    )
+    candidate_rows = candidate_result.get("rows", [])
+    candidate_error = candidate_result.get("error")
+    counts["candidate_rows_returned"] = len(candidate_rows) if not candidate_error else None
     counts["candidate_query_limit"] = CANDIDATE_LIMIT
-    coverage_result = query_results["dr1_level2_coverage_by_band"]
-    coverage_rows = coverage_result.get("rows", [])
-    counts["dr1_level2_exposure_rows_by_band"] = (
-        {
-            str(row["energy_bandpassname"]): int(row["n_exposures"])
-            for row in coverage_rows
-        }
-        if not coverage_result.get("error") else None
+    counts["candidate_query_complete"] = (
+        not candidate_error and len(candidate_rows) < CANDIDATE_LIMIT
     )
-    counts["dr1_level2_exposure_total"] = (
-        sum(counts["dr1_level2_exposure_rows_by_band"].values())
-        if counts["dr1_level2_exposure_rows_by_band"] is not None else None
+
+    exposure_result = query_results["dr1_level2_exposures"]
+    exposure_rows = exposure_result.get("rows", [])
+    exposure_error = exposure_result.get("error")
+    by_band = {}
+    for row in exposure_rows:
+        band = str(row.get("energy_bandpassname") or "UNKNOWN")
+        record = by_band.setdefault(band, {
+            "exposure_rows": 0, "first_time": None, "last_time": None,
+        })
+        record["exposure_rows"] += 1
+        lo, hi = row.get("time_bounds_lower"), row.get("time_bounds_upper")
+        record["first_time"] = min(record["first_time"], lo) if record["first_time"] is not None else lo
+        record["last_time"] = max(record["last_time"], hi) if record["last_time"] is not None else hi
+    counts["dr1_level2_exposure_rows_by_band"] = None if exposure_error else by_band
+    counts["dr1_level2_exposure_rows_total"] = None if exposure_error else len(exposure_rows)
+    counts["dr1_level2_coverage_complete"] = (
+        not exposure_error and len(exposure_rows) < COVERAGE_ROW_LIMIT
     )
+
+    query_errors = {
+        name: result["error"]
+        for name, result in query_results.items()
+        if result.get("error")
+    }
     return {
         "region": region,
         "counts": counts,
         "queries": query_results,
-        "query_sha256": digest_json({k: v for k, v in query_definitions.items()}),
-        "query_errors": {
-            name: result["error"]
-            for name, result in query_results.items()
-            if result.get("error")
-        },
+        "query_sha256": digest_json(query_definitions),
+        "query_errors": query_errors,
     }
+
 
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -225,7 +263,7 @@ def main() -> None:
                 all_classes.append({**row, "recon_region": region["name"], "region_role": region["role"]})
             region_dir = OUTPUT / region["name"]
             for name, query_result in result["queries"].items():
-                if "rows" in query_result and name in {"candidate_sources", "class_distribution", "dr1_level2_coverage_by_band"}:
+                if "rows" in query_result and name in {"catalogue_sources", "candidate_sources", "class_distribution", "dr1_level2_exposures"}:
                     write_csv(region_dir / f"{name}.csv", query_result["rows"])
             (region_dir / "query_record.json").write_text(
                 json.dumps(result, indent=2, default=str), encoding="utf-8"
@@ -254,7 +292,7 @@ def main() -> None:
             "Machine-learning classification is not treated as independent confirmation.",
             "The regional counts are not a population rate; selection functions and contamination must be modelled.",
             "This reconnaissance does not establish a new YSO discovery.",
-            "L2 exposure coverage counts are not source-level extracted spectra or epoch completeness.",
+            "L2 exposure counts are bounded spatial footprint-row counts, not source-level extracted spectra or epoch completeness.",
         ],
         "report_sha256": None,
     }
