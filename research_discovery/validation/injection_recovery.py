@@ -820,9 +820,11 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
           "isolated_source_response_method": (
               "matched-filter SNR on the realized injected-component image "
               "(post-injection image minus pre-injection image), evaluated "
-              "with the original pre-injection VARIANCE map"
+              "with the post-injection VARIANCE map (native variance plus "
+              "the realized source-Poisson variance increment)"
           ),
-          "source_only_uses_original_variance": True,
+          "source_only_uses_injected_variance": True,
+          "source_only_preinjection_variance_reference_available": True,
           "source_only_peak_list_recovery_is_diagnostic_not_primary": True,
       },
       "flux_summary":injected,"new_unmatched_peak_summary":all_detected,"injections":rows,
