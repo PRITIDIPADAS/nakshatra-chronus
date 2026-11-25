@@ -13,8 +13,11 @@ REGION = "us-east-1"
 BASE = f"https://{BUCKET}.s3.{REGION}.amazonaws.com"
 PREFIXES = [
     "dr1/spectral_wcs/",
+    "dr1/spectral_wcs/cal-swcs-v5-2026-191/2/",
     "dr1/solid_angle_pixel_map/",
+    "dr1/solid_angle_pixel_map/cal-sapm-v3-2026-191/2/",
     "dr1/abs_gain_matrix/",
+    "dr1/abs_gain_matrix/cal-agm-v8-2026-191/2/",
     "dr1/level2/2025W19_2B/l2b-v27-2026-198/2/",
 ]
 
