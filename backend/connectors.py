@@ -183,6 +183,7 @@ def load(row, ra, dec, size, coll):
     if not (2 <= x < img.shape[1] - 2 and 2 <= y < img.shape[0] - 2):
         raise ValueError("Target outside the cutout")
     det = int(hd.get("DETECTOR", 0) or row_detector(row))
+    notes, lam_ok, src = [], True, "W lookup table of the file (display grade)"
     raw_exptime = row["t_exptime"] if "t_exptime" in row.colnames else hd.get("EXPTIME", 0.0)
     try:
         source_exptime = 0.0 if np.ma.is_masked(raw_exptime) else float(raw_exptime)
@@ -195,7 +196,6 @@ def load(row, ra, dec, size, coll):
         detector_origin = None
         notes.append(f"Native detector origin not verified: {type(err).__name__}.")
 
-    notes, lam_ok, src = [], True, "W lookup table of the file (display grade)"
     try:
         lam, bw = wavelength(h, hd, x, y)
     except Exception as err:
