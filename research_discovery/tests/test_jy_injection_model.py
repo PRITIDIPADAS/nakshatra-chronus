@@ -88,6 +88,38 @@ def test_real_image_jy_injection_path_uses_area_aware_filter_and_reports_contrac
     assert "injections_with_local_max_snr_ge_threshold_within_extended_radius" in result["new_unmatched_peak_summary"][0]
 
 
+def test_isolated_source_only_snr_recovers_clean_injected_psf_without_native_sky():
+    shape = (96, 96)
+    image = np.zeros(shape, dtype=float)
+    variance = np.full(shape, 0.04, dtype=float)
+    flags = np.zeros(shape, dtype=np.uint16)
+    omega = np.full(shape, 8.0e-7, dtype=float)
+    psf = _psf()
+    flux_jy = 30.0
+
+    result = run_injection_recovery(
+        image, variance, flags, psf,
+        flux_levels=[flux_jy],
+        n_per_level=1,
+        snr_threshold=5.0,
+        seed=11,
+        min_injection_separation=6,
+        source_exclusion_radius=0,
+        solid_angle_sr_map=omega,
+        flux_unit="Jy",
+        psf_reference_xy=(48.0, 48.0),
+        psf_region_radius=18.0,
+    )
+
+    row = result["injections"][0]
+    assert row["source_only_local_max_snr_within_match_radius"] is not None
+    assert row["source_only_peak_list_recovered"] == 1
+    assert row["source_only_nearest_peak_distance_px"] <= 2.5
+    assert row["source_only_diagnostic_uses_original_variance"] is True
+    assert result["local_response_diagnostics"]["isolated_source_response_available"] is True
+    assert result["local_response_diagnostics"]["source_only_uses_original_variance"] is True
+
+
 def test_nonnegative_psf_helper_clips_only_subthreshold_interpolation_overshoot():
     from research_discovery.spherex.psf_physicality import enforce_nonnegative_interpolation_psf
 
