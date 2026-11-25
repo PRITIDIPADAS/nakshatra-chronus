@@ -8,6 +8,7 @@ from research_discovery.spherex.analyze_splices_candidate_inventory import (
     analyze,
     label_flags,
     sha256_json,
+    read_csv,
     write_candidate_inventory,
     _check_input_report,
 )
