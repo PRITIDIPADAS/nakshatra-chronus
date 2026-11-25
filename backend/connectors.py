@@ -162,7 +162,9 @@ def version_tuple(v):
 
 def load(row, ra, dec, size, coll):
     """Read one cutout into an exposure. The target must be inside the cutout."""
-    h = fits.open(io.BytesIO(cutout(row["access_url"], ra, dec, size)))
+    cutout_bytes = cutout(row["access_url"], ra, dec, size)
+    cutout_sha256 = hashlib.sha256(cutout_bytes).hexdigest()
+    h = fits.open(io.BytesIO(cutout_bytes))
     hd = h["IMAGE"].header
     img = np.asarray(h["IMAGE"].data, float)
     var = np.asarray(h["VARIANCE"].data, float)
@@ -206,7 +208,8 @@ def load(row, ra, dec, size, coll):
         notes.append("Detector position (WCS A) not read.")
     return Exp(str(hd.get("OBSID") or row.get("obs_id") or row["access_url"][-40:]) + (f"_D{det}" if det else ""), float(row["t_min"]), lam, bw, det,
                coll, "REAL SPHEREx", img, var, flags, zod, w, (x, y), psf=psf, bits=bits, lam_src=src, lam_ok=lam_ok, notes=notes,
-               dxy=dxy, frame=f"{float(row['t_min']):.5f}")
+               dxy=dxy, frame=f"{float(row['t_min']):.5f}", source_uri=str(row["access_url"]),
+               source_sha256=cutout_sha256, image_unit=str(hd.get("BUNIT", "")))
 
 
 @plugin("gaia")
