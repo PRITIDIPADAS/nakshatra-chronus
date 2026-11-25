@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 import hashlib
-import json
 import math
 
 import numpy as np
@@ -19,7 +18,7 @@ def reference_wcs_sha256(reference_wcs) -> str:
     if reference_wcs is None or not hasattr(reference_wcs, "to_header"):
         raise ValueError("a reference WCS with to_header() is required for sky-pixel matching")
     header = reference_wcs.to_header(relax=True)
-    serialized = header.tostring(sep="\\n", endcard=True, padding=False)
+    serialized = header.tostring(sep="\n", endcard=True, padding=False)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
@@ -130,6 +129,8 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
     if not isinstance(state, Mapping) or not state.get("exps"):
         raise ValueError("state must contain the exposure list from one pipeline.run result")
     signature = _signature(input_signature)
+    if signature.get("coordinate_frame") != "sky" or signature.get("coordinate_unit") != "pixel":
+        raise ValueError("pipeline baseline detections and truth must use the registered sky-pixel coordinate frame")
     state_exposure_ids = sorted(str(getattr(exposure, "id", "")) for exposure in state["exps"])
     if any(not value for value in state_exposure_ids) or len(set(state_exposure_ids)) != len(state_exposure_ids):
         raise ValueError("prepared exposures need unique, non-empty IDs")
