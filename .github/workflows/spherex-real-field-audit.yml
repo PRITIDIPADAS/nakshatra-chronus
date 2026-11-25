@@ -12,6 +12,11 @@ on:
       - research_discovery/spherex/discover_calibrations.py
       - research_discovery/spherex/probe_calibration_tap.py
       - research_discovery/spherex/native_mef_audit.py
+      - research_discovery/spherex/calibration_compatibility.py
+      - research_discovery/spherex/extract_epsf_stamp.py
+      - research_discovery/spherex/flag_policy.py
+      - research_discovery/spherex/coordinate_transform.py
+      - research_discovery/validation/injection_recovery.py
   workflow_dispatch:
 
 permissions:
