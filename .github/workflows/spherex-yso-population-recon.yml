@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: spherex-yso-population-recon
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   catalogue-and-field-coverage:
