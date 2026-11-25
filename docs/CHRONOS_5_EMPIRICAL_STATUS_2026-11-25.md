@@ -76,3 +76,24 @@ The test-only companion [#897 / run 45648724365](https://github.com/PRITIDIPADAS
 6. Only after independent reproduction/review and all empirical gates pass, prepare a scientific release and paper.
 
 No blind benchmark, new YSO discovery, external review or validated scientific release is claimed by this report.
+
+
+## Latest strict six-region and M101 evidence — 25 November 2026
+
+This section supersedes the older six-field post-hoc-revalidation-only wording above where the same field set is concerned.
+
+The dedicated strict six-region runner completed on [workflow #19 / run 45639895735](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45639895735). It retrieved all six predeclared D2 fields sequentially and the final aggregate validator reported:
+- six requested, six returned, six completed and zero incomplete fields;
+- exact expected field manifest, roles and field names;
+- all per-field eligibility checks true;
+- unique native science observation IDs and unique science-file SHA-256 values;
+- per-field audit-summary SHA-256 values valid; and
+- aggregate JSON SHA-256 recomputed and matched: `26e237fec2b0e1f5571dd5e527c009a5a2d3de44186c4a240bf63ac4b9bb64e6`.
+
+Artifact 15036382990 is 138,771 bytes with ZIP SHA-256 `09978b42c6d626f65fe385d7d004c4a5d120ac7302ae06d8831f231e3dc65a35`. The results are the same field-specific recovery counts documented in [the six-region report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md), including Lupus III's 0/20 at all three bins. The run completes the **exploratory multi-field injection/recovery** gate, not instrument calibration approval, a blind benchmark or all-sky completeness.
+
+The latest completed combined test/M101 run available for this refresh is [45652295910](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45652295910), commit `f9f315bf35fcb0a46a69cc30b7c4a434ed165e1d`: 316 tests passed with 7 warnings, both JavaScript checks passed, and M101 native retrieval, compatibility/provenance audit, evidence validator and artifact upload passed. Artifact 15041901578 has SHA-256 `7f0451a82e979d1abd3c77e9a433f44fefd3e51a09470fd18a99a8f0e7b20e4f`. The test-only companion [45652301839](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45652301839) passed 316 tests with 12 warnings.
+
+The population software has since been hardened so a source must have feature and both continuum sidebands in the same repeated epochs; duplicate/reused source IDs across fields are rejected; and null counts cannot be used without an explicit science-to-control solid-angle-times-time ratio. Tests for these controls are committed on the current feature branch. The current CI triggered by those changes was still in progress at the time of this status update, so no passing result is claimed for that latest population-gate change until its workflow completes.
+
+The following gates remain open: gain-to-electron calibration review; external preregistration and an independent custodian; blind four-method testing on common real held-out fields; a source-level, selection- and contamination-aware YSO population study; independent astronomical reproduction/review; and a validated scientific release.
