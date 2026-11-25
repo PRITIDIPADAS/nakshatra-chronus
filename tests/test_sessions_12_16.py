@@ -588,6 +588,8 @@ def _population_real_field(field_id="FIELD-1", source_id="YSO-1", *,
         "null_control_to_science_exposure_ratio": 0.25,
         "area_deg2": 0.5,
         "baseline_days": 20.0,
+        "null_control_area_deg2": 2.0,
+        "null_control_baseline_days": 20.0,
         "n_injected": 100,
         "n_recovered": 90,
         "observed_events": 12,
@@ -718,3 +720,26 @@ def test_population_event_rate_rejects_modified_coverage_audit_or_field_records(
     modified_field["observed_events"] += 1
     with pytest.raises(ValueError, match="field digest mismatch"):
         estimate_event_rate([modified_field], coverage_audit=audit, draws=1000, seed=31)
+
+
+def test_population_coverage_derives_null_control_ratio_from_area_time():
+    from chronos_population.coverage import assess_population_coverage
+
+    field = _population_real_field()
+    field["null_control_to_science_exposure_ratio"] = 0.5
+    result = _population_coverage_audit([field])
+    assert result["eligible_for_predeclared_population_protocol"] is False
+    assert "null_control_exposure_ratio_inconsistent_with_area_time" in result["fields"][0]["reasons"]
+
+
+def test_population_coverage_rejects_unbridged_calibration_group_changes():
+    from chronos_population.coverage import assess_population_coverage
+
+    field = _population_real_field()
+    row = field["sources"][0]["observations"][-1]
+    row["calibration_group"] = "DR1-D2-SECOND-CAL"
+    row["wavelength_provenance"]["compatibility_group"] = "DR1-D2-SECOND-CAL"
+    result = _population_coverage_audit([field])
+    source = result["fields"][0]["sources"][0]
+    assert result["eligible_for_predeclared_population_protocol"] is False
+    assert "multiple_calibration_groups_without_verified_bridge" in source["reasons"]
