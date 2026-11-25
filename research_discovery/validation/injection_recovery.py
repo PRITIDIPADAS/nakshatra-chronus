@@ -74,14 +74,24 @@ def validate_electron_calibration_record(record, *, allow_unreviewed: bool = Fal
             raise ValueError("pending-review record requires a complete IRSA provenance_input link")
         if link["input_table"] != "spherex.provenance_input":
             raise ValueError("electron calibration provenance must come from spherex.provenance_input")
+        if link.get("status") != "verified_from_live_irsa_foreign_key_query":
+            raise ValueError("provenance link must be returned by the live IRSA foreign-key audit")
+        if link.get("artifact_md5_status") != "pass":
+            raise ValueError("absolute-gain archive MD5 must pass before pending-review conversion")
         if str(link["inputid"]) != str(link["calibration_planeid"]):
             raise ValueError("provenance inputid does not match calibration plane ID")
         if str(link["outputid"]) != str(link["science_planeid"]):
             raise ValueError("provenance outputid does not match science plane ID")
+        if str(link.get("artifact_planeid")) != str(link["calibration_planeid"]):
+            raise ValueError("provenance artifact plane ID does not match calibration plane ID")
         if str(record["calibration_uri"]) != str(link.get("calibration_native_uri", "")):
             raise ValueError("calibration URI does not match the provenance-linked calibration artifact")
         if str(record["science_source_uri"]) != str(link.get("science_native_uri", "")):
             raise ValueError("science URI does not match the provenance-linked science artifact")
+        if str(link.get("calibration_sha256", "")).lower() != str(record["calibration_sha256"]).lower():
+            raise ValueError("local calibration SHA-256 does not match the linked artifact record")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", str(link.get("query_sha256", ""))):
+            raise ValueError("live provenance query must have a recorded SHA-256")
         from datetime import datetime
         try:
             derived_at = datetime.fromisoformat(str(record["derived_utc"]).replace("Z", "+00:00"))
