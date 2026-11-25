@@ -329,7 +329,7 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
     result["calibrated_flux_definition"] = "Integrated source flux density in Jy; IMAGE is MJy/sr and pixel solid angle is converted from arcsec^2 to sr."
     result["local_reference_5sigma_sensitivity_jy"] = five_sigma_jy
     result["local_reference_1sigma_flux_uncertainty_jy"] = five_sigma_jy / 5.0
-    result["local_matched_filter_information_jy_inverse2"] = matched_filter_information / (1.0e-12)
+    result["local_matched_filter_information_jy_inverse2"] = matched_filter_information * 1.0e-12
     result["local_psf_footprint_solid_angle_fractional_range"] = float(
         (np.max(local_omega) - np.min(local_omega)) / np.median(local_omega)
     )
