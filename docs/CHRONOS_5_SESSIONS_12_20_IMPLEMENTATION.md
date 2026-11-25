@@ -132,12 +132,11 @@ Do not tag a validated CHRONOS 5.0 scientific release until real archive calibra
 
 ## Empirical status update — 25 November 2026
 
-The original software-only status above is superseded by the current, separately documented empirical pilot. One real M101 DR1 D2 Level-2 exposure has now been retrieved with its exact archive provenance, native spectral-WCS calibration, detector solid-angle map and absolute-gain input. The native MEF/calibration audit returned compatible, and a local calibrated-Jy injection/recovery experiment completed. Its electron-conversion record remains pending independent human review and the result is one-exposure exploratory evidence only.
+Current evidence includes the M101 single-exposure D2 DR1 native calibration/injection audit (source-Poisson enabled; gain review pending), the six-field D2 exploratory Jy injection/recovery workflow (6/6 fields and all 20 runner checks per field passed), and the six-region SPLICES/DR1/QR3 archive reconnaissance with candidate label/source-ID audit. Checksums and limitations are in [CHRONOS 5 empirical status](CHRONOS_5_EMPIRICAL_STATUS_2026-11-25.md), [the M101 report](SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md), [the six-region Jy report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md) and [the SPLICES/DR1 report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
 
-A separate SPLICES/DR1 reconnaissance completed for five star-forming regions and one high-latitude control. It reports catalogue labels and footprint coverage but does not establish a population rate or discover new YSOs. The six-region calibrated-Jy pilot, blind held-out benchmark, independent astronomical review/reproduction and scientific release gates remain open until separately evidenced.
+Repair-branch CI [#888](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583358) passed 314 tests with 7 warnings and both JavaScript syntax checks; its M101 real-field audit/upload job passed. SPLICES workflow [#36](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583599) also passed. These are code and archive-evidence validations, not independent instrument review, a blind four-method comparison, a YSO population discovery, external reproduction or scientific release.
 
-See [CHRONOS 5 empirical status — 25 November 2026](CHRONOS_5_EMPIRICAL_STATUS_2026-11-25.md) for the precise measurements, archive identities, report hashes, limitations and acceptance-gate table. Do not substitute software-test success, catalogue ML labels or a running GitHub Actions job for those empirical gates.
-
+Source-to-exposure linkage remains unavailable in all six SPLICES regions; the All-Sky Cube metadata query reached its 1,000-row cap and is incomplete. Gain-derived electron conversion remains pending external instrument/calibration review. These gaps are not converted into zero counts or marked complete.
 
 ## Archive-coverage update — DR1 + QR3 (25 November 2026)
 
@@ -150,4 +149,4 @@ The DR1 All-Sky Cube (`spherex_dr1_cube`) is a separate 102-channel spatial-spec
 
 ## DR1 All-Sky Cube metadata inventory
 
-The SPLICES/DR1/QR3 reconnaissance now performs a separate IRSA SIAv2 inventory query against `spherex_dr1_cube`. The inventory records the actual archive metadata rows, native access URI fields returned by SIAv2, product type, row cap, release and query errors. It is deliberately not joined to exposure timestamps or counted as a Level-2 epoch series. The report retains the nominal 102-channel, 0.75–5.0 μm specification, marks the inventory as metadata-only and explicitly records that the native cube has not been downloaded by this reconnaissance. This makes the archive product discoverable without overstating what has been extracted or analysed.
+The SPLICES/DR1/QR3 reconnaissance now performs a separate IRSA SIAv2 inventory query against `spherex_dr1_cube`. The latest run #36 inventory returned 1,000 SIAv2 metadata rows at `maxrec=1000`; `query_complete_below_row_cap=false`. It is a capped metadata sample, not a complete cube inventory. It is deliberately not joined to exposure timestamps or counted as a Level-2 epoch series. The nominal product specification is 102 channels over 0.75–5.0 μm; the native cube was not downloaded by this reconnaissance.

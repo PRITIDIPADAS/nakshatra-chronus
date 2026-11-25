@@ -80,9 +80,13 @@ The source-Poisson pilot is not blind: injection positions and seed are visible 
 
 ## Six-region calibrated-Jy result — evidence-qualified status
 
-Workflow [45624461435](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45624461435) completed all six predeclared regions and uploaded artifact 15029628060. The raw artifact SHA-256 is `250f3bfdbd3fe81b1d87aa00cd54389377f7c147639c408604cde672d2c31cfb`. The archived summaries were subsequently checked with the stricter field validator; its separately retained report SHA-256 is `a94c010a3d4cfd6d678d93fe32e598218a77d53f13acf61c57d010059ebae299`. See [the complete six-region revalidation report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md).
+Workflow [#17 / run 45637115746](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45637115746) completed all six predeclared D2 fields. The machine report confirms six unique observations, six unique native science hashes and 20/20 successful eligibility checks in each field (120/120 checks). Artifact 15034299164 has ZIP SHA-256 `96ff0c2025d098ebb3d63d64bd1361aabdeb2c4830920227a53ce53364c01afb`; the embedded report digest is `cfd0ce32a6ce5f8206a64ebb6927cc186784259af2914b846bd633d5a74e626e`. Full recovery data and limits are in [the six-region report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md).
 
-This completes the exploratory multi-field injection/recovery gate only. It does not complete independent detector-calibration approval or Session 07/08 blind comparison. The most consequential field result is Lupus III: 0/20 recoveries at each of 105.579, 211.158 and 422.317 µJy, including twice its local nominal 5σ reference. Preserve this as an adverse result and investigate local background, mask, ePSF/matched-filter and detection-pipeline behaviour before drawing a sensitivity conclusion.
+This completes the exploratory six-field injection/recovery workflow only. Gain-to-electron conversion still requires independent instrument/calibration review, and the Session 07/08 four-baseline blind benchmark remains unsatisfied. Lupus III is retained as a critical adverse result: 0/20 recoveries at each of 105.579, 211.158 and 422.317 µJy, including twice its local nominal 5σ reference. Investigate local background, masks, ePSF/matched-filter response and detection behaviour before drawing a sensitivity conclusion.
+
+## Current repair-branch CI — 25 November 2026
+
+Workflow [#888 / run 45641583358](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583358) passed **314 tests with 7 warnings**, including both JavaScript syntax checks. Its M101 real-field job also completed archive retrieval, native compatibility audit, machine-readable evidence validation and artifact upload. This validates code and evidence handling, not human calibration review or blind scientific acceptance.
 
 ## Acceptance gates that remain open
 
@@ -94,7 +98,7 @@ This completes the exploratory multi-field injection/recovery gate only. It does
 | Session 10 local Jacobian/SVD identifiability and covariance checks | Implemented; depends on supplied model and covariance |
 | Session 11 falsification, interval correction and complete-family gate | Implemented; conditional checks, not full joint Bayesian PPC |
 | Calibration review for M101 gain-to-electron conversion | Pending independent human review |
-| Multi-field calibration-compatible injection evaluation | Completed exploratory six-region D2 evaluation; post-hoc strict validation passed 6/6 field summaries; gain conversion review pending |
+| Multi-field calibration-compatible injection evaluation | Completed exploratory run #17; 6/6 fields passed all 20 runner checks; gain conversion review pending |
 | Four-baseline blind benchmark on actual held-out SPHEREx fields | Not satisfied |
 | Population-level YSO discovery | Not satisfied |
 | Independent astronomical reproduction/review | Not satisfied |

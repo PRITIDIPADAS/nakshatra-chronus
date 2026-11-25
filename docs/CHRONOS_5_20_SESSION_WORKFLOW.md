@@ -478,3 +478,10 @@ The demonstration should follow one candidate from raw observation to a cautious
 8. Export the evidence graph and reproduce the same result.
 
 **Core statement:** CHRONOS does not just ask whether the sky changed. It tests whether the sky is the only explanation that survives.
+
+
+## Evidence refresh — 25 November 2026
+
+The current repair-branch validation is recorded in [CHRONOS 5 empirical status](CHRONOS_5_EMPIRICAL_STATUS_2026-11-25.md). Latest evidence: workflow #888 passed 314 tests with 7 warnings, both JavaScript syntax checks and the M101 archive/native-audit/artifact-upload job; workflow #17 completed the six-field exploratory D2 calibrated-Jy pilot (6/6 fields, 20/20 checks per field); workflow #36 completed the six-region SPLICES/DR1/QR3 reconnaissance and candidate inventory. The corresponding reports are [M101](SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md), [six-field Jy pilot](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md) and [SPLICES/DR1 reconnaissance](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
+
+These runs do not satisfy independent gain-calibration review, the custodian-controlled blind four-method benchmark, source-level SPHEREx exposure/epoch association, a selection-function- and contamination-aware YSO population result, independent astronomical reproduction or scientific release. Source-to-exposure linkage remains unavailable in all six regions; the All-Sky Cube inventory query reached its 1,000-row cap. Do not convert these limitations into zero measurements or passed gates.
