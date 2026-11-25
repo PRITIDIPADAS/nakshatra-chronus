@@ -133,7 +133,9 @@ def summarize_field_record(
         and row.get("source_only_local_max_snr_within_match_radius") is not None
         and row.get("source_only_local_peak_offset_within_match_radius_px") is not None
         and row.get("source_only_peak_list_recovered") in (0, 1)
-        and row.get("source_only_diagnostic_uses_original_variance") is True
+        and row.get("source_only_diagnostic_uses_injected_variance") is True
+        and row.get("source_only_reference_local_max_snr_preinjection_variance") is not None
+        and row.get("source_only_reference_uses_preinjection_variance") is True
         for row in report_rows
     )
     report_rows_match_bins = report_bins_match and len(report_rows) == expected_injection_rows
@@ -162,7 +164,8 @@ def summarize_field_record(
     )
     source_only_diagnostics_complete = (
         response_diagnostics.get("isolated_source_response_available") is True
-        and response_diagnostics.get("source_only_uses_original_variance") is True
+        and response_diagnostics.get("source_only_uses_injected_variance") is True
+        and response_diagnostics.get("source_only_preinjection_variance_reference_available") is True
         and response_diagnostics.get("source_only_peak_list_recovery_is_diagnostic_not_primary") is True
         and report_identity_matches
         and report_rows_match_bins
@@ -206,6 +209,9 @@ def summarize_field_record(
                     "median_post_injection_local_max_snr": median_metric("post_injection_local_max_snr_within_match_radius"),
                     "median_local_snr_delta": median_metric("local_snr_delta_within_match_radius"),
                     "median_source_only_local_max_snr": median_metric("source_only_local_max_snr_within_match_radius"),
+                    "median_source_only_reference_local_max_snr_preinjection_variance": median_metric(
+                        "source_only_reference_local_max_snr_preinjection_variance"
+                    ),
                     "source_only_peak_list_recovered_count": sum(
                         int(row.get("source_only_peak_list_recovered", 0))
                         for row in bin_rows
