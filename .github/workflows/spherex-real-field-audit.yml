@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/spherex-real-field-audit.yml
       - research_discovery/spherex/run_real_field_audit.py
+      - research_discovery/spherex/psf_physicality.py
       - research_discovery/spherex/run_provenance_calibration_audit.py
       - research_discovery/spherex/fetch_native_mefs.py
       - research_discovery/spherex/discover_calibrations.py
