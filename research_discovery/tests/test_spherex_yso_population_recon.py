@@ -71,7 +71,7 @@ def test_local_catalogue_summary_reports_exact_counts_when_below_cap(monkeypatch
     ]
     def fake_query(sql):
         if "spherex.splices" in sql and "stype_ml" in sql:
-            if "SELECT TOP 5000" in sql:
+            if sql.startswith("SELECT TOP 5000 "):
                 return {"query": sql, "row_count": 2, "rows": rows[:2]}
             return {"query": sql, "row_count": len(rows), "rows": rows}
         return {
