@@ -128,7 +128,7 @@ jobs:
           poisson = injection["source_photon_noise"]
           assert poisson["enabled"] is True
           assert poisson["calibration_record"]["review_status"] == "pending"
-          assert poisson["calibration_record"]["independent_human_reviewed"] is False
+          assert poisson["independent_human_reviewed"] is False
 
           print("M101 DR1 D2 science/calibration provenance, SHA-256, compatibility and 3x20 Jy pilot verified.")
           print("Electron-conversion review remains pending; this check does not mark it human-reviewed.")
