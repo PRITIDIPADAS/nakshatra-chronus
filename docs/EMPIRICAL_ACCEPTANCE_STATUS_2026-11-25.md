@@ -149,7 +149,7 @@ protocol, and external astronomical reproduction/review.
 |---|---|
 | M101 D2 DR1 calibration compatibility | **Passed for one exposure** |
 | Calibrated real-data injection/recovery | **Completed one-exposure exploratory pilot; 20 injections at each of three Jy levels** |
-| Multi-field calibration-compatible evaluation | Not satisfied |
+| Multi-field calibration-compatible evaluation | Workflow implemented; live six-region Jy run pending verification |
 | Four-baseline blind benchmark on actual held-out SPHEREx fields | Not satisfied |
 | Population-level YSO discovery | Not satisfied |
 | Independent astronomical reproduction / review | Not satisfied |
@@ -161,3 +161,15 @@ change a corresponding gate.
 
 
 Detailed single-exposure evidence, exact product hashes and injection/recovery intervals: [M101 DR1 D2 pilot report](SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md).
+
+## Live SPLICES / DR1 catalogue reconnaissance
+
+**Status: COMPLETED AS A DESCRIPTIVE RECONNAISSANCE; NOT A POPULATION RESULT.** Workflow [45619403576](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45619403576) completed the predeclared catalogue and footprint queries for Taurus/Auriga, Perseus/NGC 1333, Orion A, Rho Ophiuchi, Lupus III and a high-latitude control. It returned 16,663 catalogue rows and a 2,421-row candidate union across regional queries. The three YSO-related fields were retained separately: 1,490 rows with non-null `YSO_PUB`, 1,490 `CLASS_1` YSO-labelled rows, and 1,165 `STYPE_ML` YSO-labelled rows. All regions were below query caps and all query errors were empty. The detailed report, exact region-level counts, report SHA-256 and artifact SHA-256 are in [the reconnaissance report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
+
+The 1,540 Level-2 footprint rows summed across regions are not deduplicated unique exposures. SPLICES is a target compilation, the ML class is not independent confirmation, the regional counts are not an unbiased YSO census, and no population rate or discovery is claimed.
+
+## Gain-derived source Poisson implementation and multi-field workflow
+
+A detector-pixel electron conversion is now derived as exposure time divided by the exact provenance-linked absolute-gain matrix. The conversion validator checks the native calibration SHA-256, archive MD5 result, detector and unit identity, live `spherex.provenance_input` relation, both plane IDs, exact native URIs, and query digest. A provenance-derived record remains `derived_pending_independent_review`; source Poisson modelling is enabled only by an explicit exploratory opt-in. The absolute-gain matrix validates the existing Level-2 calibration and supplies the electron conversion; it is not applied again to Level-2 science pixels. Invalid gain pixels remain masked.
+
+The new six-region workflow requires each field to pass native calibration compatibility, exact provenance, a completed Jy recovery and source Poisson modelling with an explicitly pending review status. Its aggregate gate is deliberately marked exploratory and cannot satisfy the blind four-baseline, YSO population or validated-release gates. Its real-data run is pending in the current branch; no multi-field result is claimed until the artifact is inspected.
