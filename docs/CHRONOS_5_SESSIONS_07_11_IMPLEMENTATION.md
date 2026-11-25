@@ -270,7 +270,7 @@ The flux model-comparison likelihood also accepts a full covariance matrix. Its 
 
 ## Session 11 — Falsification and predictive checks
 
-Endpoint: **POST /api/v5/causal/falsify**.
+Endpoint: **POST /api/v5/causal/falsify**. The request may include **candidate_family**, a complete list of candidate ID, observations and optional flux covariance records for all candidates considered in the field-wide transient search.
 
 Python entry point: **chronos_causal.falsification.run_falsification_suite**.
 
@@ -282,13 +282,13 @@ The suite fits the existing static, moving, achromatic, chromatic, transient, in
 4. replays declared sky-only, detector-only and mixed measurement interventions;
 5. retains each intervention, parameter set, result and relative model score.
 
-The transient bootstrap repeats the full interval scan under each simulated null realization. This estimates a family-wise false-alarm probability conditional on the supplied null prediction and Gaussian uncertainties. It is not a substitute for a frozen real-field negative-control experiment.
+The single-candidate transient bootstrap repeats the full interval scan under each simulated null realization. It corrects for the set of contiguous intervals scanned for that candidate, conditional on the supplied null prediction and Gaussian uncertainties. A second maximum-statistic bootstrap accepts the complete searched candidate family and corrects across every supplied candidate as well as its interval scan. A transient-leading interpretation is forced to unknown unless that complete family includes the current candidate and the family-wise false-alarm probability passes the declared alpha. The correction cannot account for candidates omitted from the family, upstream image-detection thresholds, field selection or other post-hoc search decisions. It is not a substitute for a frozen real-field negative-control experiment.
 
 The current predictive bootstrap is conditional on supplied point predictions. It does not draw model parameters from a posterior and therefore is not a full Bayesian posterior-predictive check. It can use the same supplied full flux covariance as the model comparison; its diagonal must match sigma squared. The report also returns observation-level residual records and conditional pointwise predictive intervals for plotting by epoch, wavelength, detector and brightness bin. Uncertainty rows must explicitly carry uncertainty_status equal to validated or calibrated before the suite can return a provisional survival verdict. Otherwise it returns unknown, even if residual plots look reassuring.
 
-Counterfactual challenges are measurement-level transformations. They do not edit or regenerate original FITS pixels. If an intervention plan is preregistered, hash its canonical JSON representation and supply that SHA-256 as challenge_plan_sha256; the report will distinguish a verified plan seal from an unsealed exploratory replay. Original observation rows are copied, not mutated.
+Counterfactual challenges are measurement-level transformations. They do not edit or regenerate original FITS pixels. Hashing the canonical intervention plan and supplying challenge_plan_sha256 verifies plan-content integrity only. It does not prove that the plan was registered before inspecting the data. This version has no independently timestamped or signed preregistration record, so the report explicitly marks predeclaration_verified=false. A genuine preregistration needs a separate custodian or trusted timestamp/signature before the held-out data are opened. Original observation rows are copied, not mutated.
 
-A candidate returns unknown when the model is not decisively supported, uncertainties are not validated, or predictive checks fail. A passing result is provisional and conditional on the model and noise assumptions. Preserve contradictory checks and failed interventions in the evidence package.
+A candidate returns unknown when the model is not decisively supported, uncertainties are not validated, predictive checks fail, or a transient-leading model lacks a passing candidate-family correction. A passing result is provisional and conditional on the model and noise assumptions. Preserve contradictory checks and failed interventions in the evidence package.
 
 ---
 
