@@ -11,7 +11,7 @@ Files:
 - research_discovery/spherex/fetch_native_mefs.py
 - research_discovery/spherex/fetch_calibration.py
 
-Standard science retrieval uses the uniformly processed DR1 and QR3 collections. QR2 is not included in the standard query. SIA2 records retain the archive publisher identifier when present; otherwise the exact original native URI is the product identity. TAP retrieval preserves the artifact URI and does not invent a publisher ID.
+Standard science retrieval uses the uniformly processed DR1 and QR3 collections, including both wide and deep SIA2 collections: spherex_dr1, spherex_dr1_deep, spherex_qr3 and spherex_qr3_deep. IRSA states that DR1 and QR3 together supersede QR2 and are the uniformly processed set. Calibration files are not exposed through SIA2; retrieve them from the browsable archive directories. [IRSA data access](https://irsa.ipac.caltech.edu/spherex-archive-documentation/spherex-data-access/) · [IRSA release guidance](https://irsa.ipac.caltech.edu/spherex-archive-documentation/spherex-data-releases/). SIA2 records retain the archive publisher identifier when present; otherwise the exact original native URI is the product identity. TAP retrieval preserves the artifact URI and does not invent a publisher ID.
 
 Example SIA2 query and retrieval:
 
@@ -102,3 +102,12 @@ The legacy backend/inject.py path now carries the loaded cutout's original archi
 | S06 photon-noise injection | Implemented with strict provenance gate | Deterministic mode is the only defensible mode until an exposure-specific calibration record and calibration bytes are supplied |
 
 A synthetic FITS fixture or unit test can test the code path, but it does not pass the real-file acceptance gate. Do not publish a real-data validation claim from this software-only tranche.
+
+
+## Official archive references checked for this implementation
+
+- [SPHEREx Data Access, IRSA](https://irsa.ipac.caltech.edu/spherex-archive-documentation/spherex-data-access/): confirms SIA2 access to DR1 and QR3 science MEFs, the four wide/deep collections, and that calibration files must be retrieved from browsable directories rather than SIA2.
+- [SPHEREx Data Releases, IRSA](https://irsa.ipac.caltech.edu/spherex-archive-documentation/spherex-data-releases/): confirms DR1 plus QR3 are the uniformly processed set and supersede QR2.
+- [SPHEREx Explanatory Supplement v2.1](https://irsa.ipac.caltech.edu/data/SPHEREx/docs/SPHEREx_Expsupp.pdf): documents the absolute gain matrix format, detector dimensions and physical units.
+
+The archive manifest stores the exact query and original product URI. The calibration retrieval command deliberately accepts only an explicitly selected URI, because SIA2 does not return calibration products. Do not treat a nearby filename or detector number as a match.
