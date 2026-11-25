@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const $=id=>document.getElementById(id);
-const state={observations:[],analysis:null,manifest:null,apiReady:false};
+const state={observations:[],analysis:null,manifest:null,apiReady:false,spectral:null,spectralSourceRows:[],selectedSpectralCell:null};
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=(v,n=3)=>Number.isFinite(Number(v))?Number(v).toFixed(n):"n/a";
 const pretty=x=>JSON.stringify(x,null,2);
@@ -37,11 +37,29 @@ function track(id,rows,prefix){
  g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y));g.strokeStyle=prefix==="sky"?"#8fe0cd":"#e7bd86";g.stroke();
  pts.forEach(p=>{g.beginPath();g.arc(p.x,p.y,3.3,0,Math.PI*2);g.fillStyle=prefix==="sky"?"#8fe0cd":"#e7bd86";g.fill();});
 }
-function heat(id,matrix){
- const c=$(id),g=c.getContext("2d"),h=matrix.length,w=matrix[0]?.length||0;g.clearRect(0,0,c.width,c.height);g.fillStyle="#071721";g.fillRect(0,0,c.width,c.height);
- const a=matrix.flat().map(Number).filter(Number.isFinite);if(!a.length||!w){g.fillStyle="#91a8ab";g.fillText("No supported measurements",18,30);return;}
+function heat(id,matrix,options={}){
+ const c=$(id),g=c.getContext("2d"),h=matrix.length,w=matrix[0]?.length||0;
+ g.clearRect(0,0,c.width,c.height);g.fillStyle="#071721";g.fillRect(0,0,c.width,c.height);
+ const a=matrix.flat().map(Number).filter(Number.isFinite);
+ if(!a.length||!w){g.fillStyle="#91a8ab";g.fillText("No supported measurements",18,30);return;}
  const lo=Math.min(...a),span=Math.max(Math.max(...a)-lo,1e-12),cw=c.width/w,ch=c.height/h;
- matrix.forEach((row,y)=>row.forEach((v,x)=>{if(!Number.isFinite(Number(v))){g.fillStyle="#10232d";g.fillRect(x*cw,y*ch,cw+.4,ch+.4);}else{const t=(v-lo)/span;g.fillStyle="hsl("+(196-48*t)+" 48% "+(22+44*t)+"%)";g.fillRect(x*cw,y*ch,cw+.4,ch+.4);}}));
+ matrix.forEach((row,y)=>row.forEach((v,x)=>{
+  const supported=options.valid?options.valid[y]?.[x]===true:Number.isFinite(Number(v));
+  if(!supported||!Number.isFinite(Number(v))){
+   g.fillStyle="#10232d";g.fillRect(x*cw,y*ch,cw+.4,ch+.4);
+   g.save();g.beginPath();g.rect(x*cw,y*ch,cw,ch);g.clip();g.strokeStyle="rgba(137,164,169,.35)";g.lineWidth=1;
+   for(let d=-ch;d<cw+ch;d+=7){g.beginPath();g.moveTo(x*cw+d,y*ch);g.lineTo(x*cw+d+ch,y*ch+ch);g.stroke();}
+   g.restore();
+  }else{
+   const t=(v-lo)/span;g.fillStyle="hsl("+(196-48*t)+" 48% "+(22+44*t)+"%)";g.fillRect(x*cw,y*ch,cw+.4,ch+.4);
+  }
+ }));
+ if(options.selected){
+  const {timeIndex,wavelengthIndex}=options.selected;
+  if(timeIndex>=0&&timeIndex<h&&wavelengthIndex>=0&&wavelengthIndex<w){
+   g.strokeStyle="#f1d7a6";g.lineWidth=2;g.strokeRect(wavelengthIndex*cw+1,timeIndex*ch+1,Math.max(1,cw-2),Math.max(1,ch-2));
+  }
+ }
 }
 async function loadCase(){
  try{needAPI();const x=await call("/benchmark/synthetic-case",{scenario:$("scenario").value,seed:7,n_observations:14});updateRows(x.observations);state.analysis=null;
@@ -71,18 +89,87 @@ async function counterfactual(){
  catch(e){error("counterfactual-result",e);}
 }
 async function spectral(){
- try{needAPI();const rows=state.observations.filter(r=>r.valid!==false);if(rows.length<3)throw Error("Load observations first.");
- const w=rows.map(r=>Number(r.wavelength_um)),t=rows.map(r=>Number(r.mjd)),a=Math.min(...w),b=Math.max(...w),c=Math.min(...t),d=Math.max(...t);
- const groups=[...new Set(rows.map(r=>r.calibration_group))];if(groups.length!==1||!groups[0])throw Error("Use one calibration group per reconstruction.");
- const x=await call("/spectrotemporal/reconstruct",{samples:rows,wavelength_grid_um:Array.from({length:36},(_,i)=>a+(b-a)*i/35),time_grid_mjd:Array.from({length:20},(_,i)=>c+(d-c)*i/19),wavelength_bandwidth_um:Number($("wave-bandwidth").value),time_bandwidth_days:Number($("time-bandwidth").value),min_neighbors:2,calibration_group:groups[0]});
- heat("spectral-heatmap",x.flux);const count=x.valid.flat().filter(Boolean).length;$("spectrum-summary").textContent=count+" supported grid cells. "+x.missing_data_policy+" "+x.limitations.join(" ");
- }catch(e){$("spectrum-summary").textContent=e.message||String(e);}
+ try{
+  needAPI();
+  const rows=state.observations.filter(r=>r.valid!==false);
+  if(rows.length<3)throw Error("Load observations first.");
+  const w=rows.map(r=>Number(r.wavelength_um)),t=rows.map(r=>Number(r.mjd));
+  if(w.some(v=>!Number.isFinite(v)||v<=0)||t.some(v=>!Number.isFinite(v)))throw Error("Observation wavelengths and epochs must be finite.");
+  const a=Math.min(...w),b=Math.max(...w),timeMin=Math.min(...t),timeMax=Math.max(...t);
+  if(!(b>a)||!(timeMax>timeMin))throw Error("Reconstruction needs a wavelength range and more than one epoch.");
+  const groups=[...new Set(rows.map(r=>r.calibration_group))];
+  if(groups.length!==1||!groups[0])throw Error("Use one calibration group per reconstruction.");
+  const x=await call("/spectrotemporal/reconstruct",{
+   samples:rows,
+   wavelength_grid_um:Array.from({length:36},(_,i)=>a+(b-a)*i/35),
+   time_grid_mjd:Array.from({length:20},(_,i)=>timeMin+(timeMax-timeMin)*i/19),
+   wavelength_bandwidth_um:Number($("wave-bandwidth").value),
+   time_bandwidth_days:Number($("time-bandwidth").value),
+   min_neighbors:2,
+   calibration_group:groups[0],
+   shared_calibration_fractional_sigma:Number($("shared-calibration-fraction").value)
+  });
+  state.spectral=x;state.spectralSourceRows=rows;state.selectedSpectralCell=null;
+  heat("spectral-heatmap",x.flux,{valid:x.valid});
+  const count=x.valid.flat().filter(Boolean).length;
+  $("spectrum-summary").textContent=count+" supported grid cells in calibration group "+groups[0]+". "+x.missing_data_policy;
+  $("spectral-provenance").innerHTML='<div class="panel-note">Select any supported heatmap cell to inspect its source rows, generalized least-squares coefficients and separated uncertainty components. Diagonally hatched cells are unsupported.</div>';
+ }catch(e){$("spectrum-summary").textContent=e.message||String(e);error("spectral-provenance",e);}
+}
+function inspectSpectralCell(event){
+ const result=state.spectral,canvas=$("spectral-heatmap");
+ if(!result||!canvas)return;
+ const rect=canvas.getBoundingClientRect(),x=(event.clientX-rect.left)*canvas.width/rect.width,y=(event.clientY-rect.top)*canvas.height/rect.height;
+ const nTime=result.time_mjd.length,nWave=result.wavelength_um.length;
+ if(!nTime||!nWave)return;
+ const timeIndex=Math.max(0,Math.min(nTime-1,Math.floor(y/(canvas.height/nTime))));
+ const wavelengthIndex=Math.max(0,Math.min(nWave-1,Math.floor(x/(canvas.width/nWave))));
+ state.selectedSpectralCell={timeIndex,wavelengthIndex};
+ heat("spectral-heatmap",result.flux,{valid:result.valid,selected:state.selectedSpectralCell});
+ const panel=$("spectral-provenance"),supported=result.valid?.[timeIndex]?.[wavelengthIndex]===true;
+ const wave=result.wavelength_um[wavelengthIndex],mjd=result.time_mjd[timeIndex];
+ if(!supported){
+  panel.innerHTML='<div class="spectral-cell-heading"><b>Unsupported cell</b><span>MJD '+fmt(mjd,5)+' · '+fmt(wave,5)+' µm</span></div><p>This location has insufficient local temporal/spectral support. It remains missing; no measurement or extrapolated value is presented.</p><div class="counter-row"><span>Available neighbors</span><b>'+esc(result.n_samples?.[timeIndex]?.[wavelengthIndex]??0)+'</b></div>';
+  return;
+ }
+ const get=key=>result[key]?.[timeIndex]?.[wavelengthIndex];
+ const src=result.source_indices?.[timeIndex]?.[wavelengthIndex]||[];
+ const weights=result.linear_weights?.[timeIndex]?.[wavelengthIndex]||[];
+ const provenance=weights.map(row=>{
+  const sourceIndex=Number(row.source_index);
+  const source=state.spectralSourceRows.find((r,i)=>Number(r.source_index??i)===sourceIndex)||state.spectralSourceRows[sourceIndex];
+  const id=source?.observation_id??("input row "+sourceIndex);
+  return '<div class="spectral-source-row"><span>'+esc(id)+'<small>row '+sourceIndex+'</small></span><b>'+fmt(row.coefficient,5)+'</b></div>';
+ }).join("");
+ panel.innerHTML=
+  '<div class="spectral-cell-heading"><b>Selected reconstruction cell</b><span>MJD '+fmt(mjd,5)+' · '+fmt(wave,5)+' µm</span></div>'+
+  '<div class="spectral-cell-metrics">'+
+   '<div><small>Flux estimate</small><b>'+fmt(get("flux"),5)+'</b></div>'+
+   '<div><small>Measurement σ</small><b>'+fmt(get("sigma_measurement"),5)+'</b></div>'+
+   '<div><small>Shared calibration σ</small><b>'+fmt(get("sigma_shared_calibration"),5)+'</b></div>'+
+   '<div><small>Total σ</small><b>'+fmt(get("sigma_total"),5)+'</b></div>'+
+   '<div><small>Samples</small><b>'+esc(get("n_samples"))+'</b></div>'+
+   '<div><small>Effective N</small><b>'+fmt(get("effective_n"),3)+'</b></div>'+
+  '</div>'+
+  '<details open><summary>Source observations and GLS coefficients ('+src.length+')</summary>'+
+  (provenance||'<p>No source-row coefficient record was returned.</p>')+
+  '</details>'+
+  '<p class="panel-note">These coefficients identify which supplied rows form this local estimate. Shared calibration uncertainty is an explicit group-level approximation; it is not independent noise per row.</p>';
 }
 async function featureEvolution(){
- try{needAPI();const epochs=parse("feature-epochs","Epoch spectra"),feature=pair("feature-interval","Feature interval"),blue=pair("feature-blue","Blue continuum"),red=pair("feature-red","Red continuum");
- const x=await call("/spectrotemporal/feature-evolution",{epochs,feature_interval_um:feature,continuum_intervals_um:[blue,red]});
- $("feature-evolution-result").innerHTML=x.epochs.map(r=>'<div class="counter-row"><span>'+esc(r.epoch_id)+' · MJD '+esc(r.mjd)+'</span><b>EW '+fmt(r.equivalent_width_um,5)+' µm</b></div>').join("")+'<p class="panel-note">'+esc(x.warning)+'</p>';}
- catch(e){error("feature-evolution-result",e);}
+ try{
+  needAPI();
+  const epochs=parse("feature-epochs","Epoch spectra"),feature=pair("feature-interval","Feature interval"),blue=pair("feature-blue","Blue continuum"),red=pair("feature-red","Red continuum");
+  const x=await call("/spectrotemporal/feature-evolution",{epochs,feature_interval_um:feature,continuum_intervals_um:[blue,red]});
+  $("feature-evolution-result").innerHTML=x.epochs.map(r=>{
+   const resolution=r.resolution_diagnostics||{},blend=r.blend_diagnostics||{};
+   const lsf=resolution.lsf_fwhm_um==null?"not supplied":fmt(resolution.lsf_fwhm_um,5)+" µm";
+   const sampling=resolution.samples_per_fwhm==null?"unknown":fmt(resolution.samples_per_fwhm,2)+" pixels/FWHM";
+   return '<div class="counter-row"><span>'+esc(r.epoch_id)+' · MJD '+fmt(r.mjd,5)+'</span><b>EW '+fmt(r.equivalent_width_um,5)+' µm</b></div>'+
+    '<div class="spectral-source-row"><span>Resolution · '+esc(lsf)+'<small>'+esc(sampling)+'</small></span><b>'+esc(resolution.sampling_status||"not assessed")+'</b></div>'+
+    '<div class="spectral-source-row"><span>Blend screen</span><b>'+esc(blend.status||"not assessed")+'</b></div>';
+  }).join("")+'<p class="panel-note">'+esc(x.warning)+' A possible-blend flag is a screening result, not molecular identification or deblending.</p>';
+ }catch(e){error("feature-evolution-result",e);}
 }
 async function identity(){
  try{needAPI();const x=await call("/identity/associate",{candidate:parse("identity-candidate","Candidate"),catalogue_rows:parse("identity-catalogue","Catalogue"),search_radius_arcsec:10,background_density_per_arcsec2:.001,prior_match_probability:.9});
@@ -142,6 +229,7 @@ $("apply-json").addEventListener("click",()=>{try{updateRows(parse("observations
 $("copy-schema").addEventListener("click",copySchema);$("run-identifiability").addEventListener("click",identifiability);
 $("run-counterfactual").addEventListener("click",counterfactual);$("reconstruct-spectrum").addEventListener("click",spectral);
 $("measure-feature-evolution").addEventListener("click",featureEvolution);$("run-identity").addEventListener("click",identity);
+$("spectral-heatmap").addEventListener("click",inspectSpectralCell);
 $("run-plan").addEventListener("click",planner);$("run-detector").addEventListener("click",detector);
 $("run-benchmark").addEventListener("click",benchmark);$("run-baselines").addEventListener("click",baselines);
 $("run-population").addEventListener("click",population);$("create-manifest").addEventListener("click",manifest);
