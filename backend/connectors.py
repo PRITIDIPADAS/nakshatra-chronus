@@ -223,6 +223,11 @@ def load(row, ra, dec, size, coll):
 
     try:
         lam, bw = wavelength(h, hd, x, y)
+        # Keep the existing observatory's approximate WCS-WAVE display
+        # comparisons available. The source remains labelled display-grade;
+        # CHRONOS 5 science APIs require independent CWAVE/CBAND provenance.
+        lam_ok, src = True, "W lookup table of the file (display grade)"
+        notes.append("WCS-WAVE is display-grade only; it is not admitted by CHRONOS 5 scientific wavelength gates.")
     except Exception as err:
         lo, hi, R = core.BANDS.get(det, (0.75, 5.0, 40))
         lam, bw = math.sqrt(lo * hi), math.sqrt(lo * hi) / R
