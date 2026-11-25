@@ -264,6 +264,15 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         encrypted_truth_store=encrypted_truth_store,
         frozen_configuration=frozen_configuration,
     )
+    # Fail before decrypting held-out truth. A false eligibility label after
+    # unblinding would still leak the answers to a team that failed attestation.
+    if not custodian_attestation_report.get("valid"):
+        raise PermissionError(
+            "held-out truth remains sealed until an independent custodian's "
+            "detached signature and out-of-band pinned public key verify: "
+            + str(custodian_attestation_report.get("reason")
+                  or custodian_attestation_report.get("status"))
+        )
 
     try:
         private = json.loads(_fernet(key).decrypt(encrypted_truth_store).decode("utf-8"))
