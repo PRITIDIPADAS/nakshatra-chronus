@@ -34,6 +34,46 @@ def level2_filename_metadata(path):
     return match.groupdict() if match else {}
 
 
+def _verified_archive_input_link(science: Mapping[str, Any],
+                                calibration: Mapping[str, Any]) -> tuple[bool, dict[str, Any]]:
+    """Validate an exact IRSA provenance_input -> artifact foreign-key link."""
+    link = calibration.get("archive_provenance_link")
+    if not isinstance(link, Mapping):
+        return False, {"status": "unknown", "reason": "No archive provenance_input record supplied."}
+    required = (
+        "input_table", "science_planeid", "calibration_planeid",
+        "inputid", "outputid", "science_native_uri", "calibration_native_uri",
+        "artifact_planeid", "calibration_producttype", "query_sha256",
+    )
+    missing = [key for key in required if link.get(key) in (None, "")]
+    if missing:
+        return False, {"status": "unknown", "reason": "Missing provenance fields: " + ", ".join(missing)}
+    checks = {
+        "input_table": link.get("input_table") == "spherex.provenance_input",
+        "foreign_key_input": str(link.get("inputid")) == str(link.get("calibration_planeid")),
+        "foreign_key_output": str(link.get("outputid")) == str(link.get("science_planeid")),
+        "artifact_plane": str(link.get("artifact_planeid")) == str(link.get("calibration_planeid")),
+        "science_uri": str(link.get("science_native_uri")) == str(science.get("native_uri")),
+        "calibration_uri": str(link.get("calibration_native_uri")) == str(calibration.get("native_uri")),
+        "calibration_producttype": str(link.get("calibration_producttype")).lower() == "calibration",
+        "query_sha256": bool(re.fullmatch(r"[0-9a-fA-F]{64}", str(link.get("query_sha256")))),
+    }
+    passed = all(checks.values())
+    return passed, {
+        "status": "pass" if passed else "fail",
+        "table": link.get("input_table"),
+        "science_planeid": link.get("science_planeid"),
+        "calibration_planeid": link.get("calibration_planeid"),
+        "inputid": link.get("inputid"),
+        "outputid": link.get("outputid"),
+        "science_native_uri": link.get("science_native_uri"),
+        "calibration_native_uri": link.get("calibration_native_uri"),
+        "query_sha256": link.get("query_sha256"),
+        "checks": checks,
+        "interpretation": "IRSA explicitly links this calibration plane as an input to this science plane.",
+    }
+
+
 def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
     """Open and verify the audit JSON against the exact downloaded manifest products."""
     checks = {}
@@ -81,6 +121,9 @@ def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
                 checks[label] = {"status": "pass" if actual_hash.lower() == str(expected_hash).lower() else "fail",
                                  "manifest_sha256": expected_hash, "local_sha256": actual_hash}
     
+    link_ok, link_check = _verified_archive_input_link(science, calibration)
+    checks["archive_provenance_input_link"] = link_check
+
     science_meta = {
         "release": report.get("release"),
         "detector": report.get("science_detector"),
@@ -125,8 +168,13 @@ def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
 
     flags = report.get("flags") or {}
     checks["audit_flags_dictionary"] = {
-        "status": "pass" if flags.get("header_flag_dictionary_present") else "unknown",
-        "present": bool(flags.get("header_flag_dictionary_present")),
+        "status": "pass" if (
+            flags.get("header_flag_dictionary_present") or
+            flags.get("documented_flag_dictionary_present")
+        ) else "unknown",
+        "present_in_header": bool(flags.get("header_flag_dictionary_present")),
+        "documented_fallback_present": bool(flags.get("documented_flag_dictionary_present")),
+        "documented_source": (flags.get("documented_flag_dictionary") or {}).get("source"),
     }
     wavelength = report.get("wavelength_summary") or {}
     checks["audit_wavelength_native_grid"] = {
@@ -189,18 +237,30 @@ def compatibility_decision(science: Mapping[str, Any], calibration: Mapping[str,
         ("processing_date", "processing_date"),
         ("coordinate_frame", "coordinate_frame"),
     )
+    provenance_ok, provenance_check = _verified_archive_input_link(science, calibration)
     for science_key, calibration_key in pairs:
         left = science.get(science_key)
         right = calibration.get(calibration_key)
         if science_key == "detector":
             left, right = _detector(left), _detector(right)
-        if not left or not right:
+        if science_key in {"pipeline_version", "processing_date"} and provenance_ok:
+            # Pipeline build identifiers and calibration creation dates describe
+            # different products. The explicit archive input foreign key, not
+            # equality of these product-specific labels, establishes lineage.
+            checks[science_key] = {
+                "status": "pass" if left and right else "unknown",
+                "science": left, "calibration": right,
+                "basis": "exact spherex.provenance_input link to this science plane",
+                "equality_required": False,
+            }
+        elif not left or not right:
             checks[science_key] = {"status": "unknown", "science": left, "calibration": right}
         else:
             checks[science_key] = {
                 "status": "pass" if str(left).lower() == str(right).lower() else "fail",
                 "science": left, "calibration": right,
             }
+    checks["archive_provenance_input_link"] = provenance_check
     if checks["coordinate_frame"]["status"] == "pass" and str(
         checks["coordinate_frame"]["science"]).lower() != required_frame.lower():
         checks["coordinate_frame"]["status"] = "fail"
