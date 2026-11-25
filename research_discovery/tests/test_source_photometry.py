@@ -1,3 +1,4 @@
+import json
 import csv
 import hashlib
 from pathlib import Path
@@ -105,6 +106,21 @@ def _photometry_inputs(tmp_path):
     audit_path = tmp_path / "native_mef_audit.json"
     audit_path.write_text(json.dumps(audit_report, sort_keys=True), encoding="utf-8")
     files["native_mef_audit_file"] = _record(audit_path)
+    product = {
+        "archive_product_id": product_id,
+        "observation_id": "OBS-1",
+        "mjd": 60000.0,
+        "release": "DR1",
+        "detector": "D2",
+        "calibration_group": "DR1:D2:7.0.5:2025-001",
+    }
+    source = {
+        "source_id": "S1",
+        "ra_deg": 10.0,
+        "dec_deg": 20.0,
+        "sample_class": "test_source",
+        "classification_reference": "https://catalogue.example/S1",
+    }
     return files, product, source, compatibility
 
 
@@ -250,7 +266,6 @@ def test_native_source_photometry_batch_assembles_two_real_product_epochs(tmp_pa
     files, product, source, compatibility = _photometry_inputs(tmp_path)
     first = extract_source_photometry(
         **files, product_record=product, source_record=source,
-        native_mef_audit_sha256="b" * 64,
         compatibility_decision=compatibility,
         code_commit="1" * 40, output_dir=tmp_path / "out-1",
         epsf_extractor=_fake_epsf_extractor,
@@ -262,20 +277,30 @@ def test_native_source_photometry_batch_assembles_two_real_product_epochs(tmp_pa
         hdul.writeto(science_2_path)
     files_2 = dict(files)
     files_2["science_file"] = _record(science_2_path)
+    audit_2_path = tmp_path / "native_mef_audit-epoch-2.json"
+    audit_2 = {
+        "status": "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS",
+        "science_sha256": files_2["science_file"]["sha256"],
+        "spectral_wcs_sha256": files_2["spectral_wcs_file"]["sha256"],
+        "solid_angle": {"sha256": files_2["solid_angle_file"]["sha256"]},
+        "checks": {
+            "cwave_cband": {"status": "pass"},
+            "wavelength_units": {"status": "pass"},
+            "solid_angle": {"status": "pass"},
+        },
+        "calibration_compatibility": compatibility,
+    }
+    audit_2_path.write_text(json.dumps(audit_2, sort_keys=True), encoding="utf-8")
+    files_2["native_mef_audit_file"] = _record(audit_2_path)
     product_2 = {
         **product,
         "archive_product_id": product["archive_product_id"] + "-epoch-2",
         "observation_id": "OBS-2",
         "mjd": 60001.0,
     }
-    compatibility_2 = {
-        **compatibility,
-        "sha256": "c" * 64,
-        "science_sha256": files_2["science_file"]["sha256"],
-    }
+    compatibility_2 = dict(compatibility)
     second = extract_source_photometry(
         **files_2, product_record=product_2, source_record=source,
-        native_mef_audit_sha256="d" * 64,
         compatibility_decision=compatibility_2,
         code_commit="1" * 40, output_dir=tmp_path / "out-2",
         epsf_extractor=_fake_epsf_extractor,
@@ -309,7 +334,7 @@ def test_native_source_photometry_batch_rejects_mixed_source_identity(tmp_path):
     files, product, source, compatibility = _photometry_inputs(tmp_path)
     result = extract_source_photometry(
         **files, product_record=product, source_record=source,
-        native_mef_audit_sha256="b" * 64,
+
         compatibility_decision=compatibility,
         code_commit="1" * 40, output_dir=tmp_path / "out",
         epsf_extractor=_fake_epsf_extractor,
@@ -318,3 +343,22 @@ def test_native_source_photometry_batch_rejects_mixed_source_identity(tmp_path):
     other["sources"][0]["source_id"] = "OTHER-SOURCE"
     with pytest.raises(ValueError, match="different source identities"):
         assemble_source_photometry_series([result, other])
+
+
+
+def test_native_source_photometry_rejects_audit_json_with_different_native_file_hashes(tmp_path):
+    from research_discovery.spherex.source_photometry import extract_source_photometry
+
+    files, product, source, compatibility = _photometry_inputs(tmp_path)
+    audit_path = Path(files["native_mef_audit_file"]["local_path"])
+    report = json.loads(audit_path.read_text(encoding="utf-8"))
+    report["science_sha256"] = "0" * 64
+    audit_path.write_text(json.dumps(report, sort_keys=True), encoding="utf-8")
+    files["native_mef_audit_file"] = _record(audit_path)
+    with pytest.raises(ValueError, match="refers to different science MEF bytes"):
+        extract_source_photometry(
+            **files, product_record=product, source_record=source,
+            compatibility_decision=compatibility,
+            code_commit="1" * 40, output_dir=tmp_path / "mismatched-native-audit",
+            epsf_extractor=_fake_epsf_extractor,
+        )
