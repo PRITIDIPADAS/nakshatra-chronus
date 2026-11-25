@@ -334,109 +334,126 @@ def main():
     p.add_argument("--psf-hdu",default="0");p.add_argument("--flux",nargs="+",type=float,required=True)
     p.add_argument("--n",type=int,default=100);p.add_argument("--threshold",type=float,default=5.0)
     p.add_argument("--flag-policy",choices=("conservative-photometry", "photometry", "background", "none"),
-                   default="conservative-photometry", help="Named SPHEREx Level-2 flag mask policy")
-    p.add_argument("--flag-bits",type=int,default=0,
-                   help="Additional raw flag bits to exclude, ORed with --flag-policy")
+                   default="conservative-photometry",help="Named SPHEREx Level-2 flag mask policy")
+    p.add_argument("--flag-bits",type=int,default=0,help="Additional raw flag bits to exclude")
     p.add_argument("--seed",type=int,default=20261114)
-    p.add_argument("--electrons-per-image-unit",type=float,
-                   help="Optional assertion that must equal the value in --electron-calibration-record")
     p.add_argument("--electron-calibration-record",type=Path,
-                   help="Signed-off JSON record binding conversion to this exact science file and calibration bytes")
-    p.add_argument("--science-uri", help="Exact native HTTPS archive URI recorded for this science MEF; required for photon-noise mode")
-    p.add_argument("--source-exclusion-radius",type=int,default=7,
-                   help="Exclude positions near pre-existing >threshold peaks (pixels)")
-    p.add_argument("--flux-unit",choices=("image_sum","Jy"),default="image_sum",
-                   help="Use Jy only with --solid-angle-map; otherwise levels are sums of IMAGE pixel values")
-    p.add_argument("--solid-angle-map",type=Path,
-                   help="Detector solid-angle FITS map; required for --flux-unit Jy")
+                   help="Verified JSON binding this exact science MEF to its absolute-gain calibration")
+    p.add_argument("--science-uri",help="Exact native HTTPS archive URI for this science MEF")
+    p.add_argument("--exposure-time-s",type=float,
+                   help="Exposure time in seconds from the matching archive record")
+    p.add_argument("--source-exclusion-radius",type=int,default=7)
+    p.add_argument("--flux-unit",choices=("image_sum","Jy"),default="image_sum")
+    p.add_argument("--solid-angle-map",type=Path,help="Native detector pixel solid-angle FITS map")
     p.add_argument("--solid-angle-hdu",default="0")
     p.add_argument("--solid-angle-unit",choices=("arcsec2","sr"),default="arcsec2")
     p.add_argument("--background-hdu",default="ZODI",
-                   help="Aligned MEF background model HDU to subtract before detection (default ZODI); pass NONE to disable")
-    p.add_argument("--psf-region-radius",type=float,default=30.0,
-                   help="Injection radius around the PSF's extraction position; limits spatial PSF extrapolation")
+                   help="Aligned MEF background model HDU (default ZODI); pass NONE to disable")
+    p.add_argument("--psf-region-radius",type=float,default=30.0)
     p.add_argument("--out",type=Path,default=Path("injection_recovery"))
     a=p.parse_args()
-    try: from astropy.io import fits
-    except ImportError as exc: raise SystemExit("Install astropy to read FITS files") from exc
+    try:
+        from astropy.io import fits
+    except ImportError as exc:
+        raise SystemExit("Install astropy to read FITS files") from exc
     psf_sel=int(a.psf_hdu) if a.psf_hdu.isdigit() else a.psf_hdu
     omega=None
-    electron_record = json.loads(a.electron_calibration_record.read_text()) if a.electron_calibration_record else None
+    electron_record=json.loads(a.electron_calibration_record.read_text()) if a.electron_calibration_record else None
+    electrons_per_image_unit=None
     with fits.open(a.science_mef,memmap=True) as sci, fits.open(a.psf_stamp,memmap=True) as pf:
-        science_sha = hashlib.sha256(a.science_mef.read_bytes()).hexdigest()
-        science_obsid = str(sci[a.image_hdu].header.get("OBSID", sci[0].header.get("OBSID", ""))).strip()
-        science_detector = str(sci[a.image_hdu].header.get("DETECTOR", "")).strip()
-        science_bunit = str(sci[a.image_hdu].header.get("BUNIT", "")).strip()
-
-        image=np.asarray(sci[a.image_hdu].data,float);variance=np.asarray(sci[a.variance_hdu].data,float);flags=np.asarray(sci[a.flags_hdu].data)
-        background = None
-        if a.background_hdu.upper() != "NONE":
+        image_header=dict(sci[a.image_hdu].header)
+        science_sha=hashlib.sha256(a.science_mef.read_bytes()).hexdigest()
+        science_obsid=str(image_header.get("OBSID",sci[0].header.get("OBSID",""))).strip()
+        science_detector=str(image_header.get("DETECTOR","")).strip()
+        science_bunit=str(image_header.get("BUNIT","")).strip()
+        image=np.asarray(sci[a.image_hdu].data,float)
+        variance=np.asarray(sci[a.variance_hdu].data,float)
+        flags=np.asarray(sci[a.flags_hdu].data)
+        if image.ndim!=2 or variance.shape!=image.shape or flags.shape!=image.shape:
+            raise ValueError("IMAGE, VARIANCE and FLAGS must be aligned 2D arrays")
+        background=None
+        if a.background_hdu.upper()!="NONE":
             if a.background_hdu not in sci:
-                raise ValueError(f"background HDU {a.background_hdu!r} is not present; pass --background-hdu NONE to disable")
-            background = np.asarray(sci[a.background_hdu].data, float)
+                raise ValueError(f"background HDU {a.background_hdu!r} is not present")
+            background=np.asarray(sci[a.background_hdu].data,float)
         psf=np.asarray(pf[psf_sel].data,float)
         psf_header=pf[psf_sel].header
         if "SRCX" not in psf_header or "SRCY" not in psf_header:
-            raise ValueError("PSF stamp must be created by extract_epsf_stamp.py and include SRCX/SRCY metadata")
+            raise ValueError("PSF stamp must include SRCX/SRCY metadata from extract_epsf_stamp.py")
         psf_reference_xy=(float(psf_header["SRCX"]),float(psf_header["SRCY"]))
+        from research_discovery.spherex.coordinate_transform import detector_origin_offset
+        origin_xy=detector_origin_offset(image_header)
+
         if a.solid_angle_map:
-            def _detector_offset(header):
-                if int(header.get("NAXIS1", -1)) == 2040 and int(header.get("NAXIS2", -1)) == 2040:
-                    return 0.0, 0.0
-                if "CRPIX1A" in header and "CRPIX2A" in header:
-                    return 1.0-float(header["CRPIX1A"]), 1.0-float(header["CRPIX2A"])
-                raise ValueError("cutout IMAGE header missing CRPIX1A/CRPIX2A")
             hdu_sel=int(a.solid_angle_hdu) if a.solid_angle_hdu.isdigit() else a.solid_angle_hdu
-            with fits.open(a.solid_angle_map,memmap=True) as om:
-                omega_native=np.asarray(om[hdu_sel].data,float)
-                sci_det=str(sci[a.image_hdu].header.get("DETECTOR","" )).strip()
-                om_det=str(om[hdu_sel].header.get("DETECTOR",om[0].header.get("DETECTOR",""))).strip()
-                if sci_det and om_det and sci_det != om_det:
-                    raise ValueError(f"solid-angle map detector {om_det} does not match science detector {sci_det}")
-                if omega_native.shape != (2040,2040):
+            with fits.open(a.solid_angle_map,memmap=True,checksum=True) as om:
+                hdu=om[hdu_sel]
+                omega_native=np.asarray(hdu.data,float)
+                sci_det=str(science_detector).upper().replace("D","")
+                om_det=str(hdu.header.get("DETECTOR",om[0].header.get("DETECTOR",""))).upper().replace("D","")
+                if not sci_det or not om_det or sci_det!=om_det:
+                    raise ValueError(f"solid-angle calibration detector mismatch: science={science_detector!r}, calibration={om_det!r}")
+                if omega_native.shape!=(2040,2040):
                     raise ValueError(f"solid-angle map must be native 2040x2040, got {omega_native.shape}")
-                offx,offy=_detector_offset(dict(sci[a.image_hdu].header))
-                yy,xx=np.mgrid[:image.shape[0],:image.shape[1]]
-                from scipy.ndimage import map_coordinates
-                omega=map_coordinates(omega_native,[yy+offy,xx+offx],order=1,mode="constant",cval=np.nan,prefilter=False)
-            if a.solid_angle_unit == "arcsec2":
-                omega = omega * (np.pi / (180.0 * 3600.0))**2
-    if a.flux_unit == "Jy" and omega is None:
+                if not np.isfinite(omega_native).all() or np.any(omega_native<=0):
+                    raise ValueError("solid-angle map contains invalid or nonpositive pixels; no interpolation/filling is allowed")
+                x0,y0=origin_xy
+                y1,x1=y0+image.shape[0],x0+image.shape[1]
+                if x0<0 or y0<0 or x1>2040 or y1>2040:
+                    raise ValueError("science cutout exceeds native solid-angle map")
+                omega=omega_native[y0:y1,x0:x1].copy()
+            if a.solid_angle_unit=="arcsec2":
+                omega=omega*(np.pi/(180.0*3600.0))**2
+        if electron_record is not None:
+            if not a.science_uri or str(electron_record.get("science_source_uri",""))!=a.science_uri:
+                raise ValueError("electron calibration record science_source_uri does not match --science-uri")
+            if a.exposure_time_s is None or not np.isfinite(a.exposure_time_s) or a.exposure_time_s<=0:
+                raise ValueError("--exposure-time-s from the matching archive record is required for photon-noise mode")
+            validate_electron_calibration_record(electron_record)
+            if not np.isclose(float(electron_record["exposure_time_s"]),a.exposure_time_s,rtol=0,atol=1e-6):
+                raise ValueError("record exposure_time_s does not match --exposure-time-s")
+            for key,actual in (("science_file_sha256",science_sha),("science_observation_id",science_obsid),
+                               ("detector",science_detector),("image_unit",science_bunit)):
+                if str(electron_record.get(key,"")).lower()!=str(actual).lower():
+                    raise ValueError(f"electron calibration record {key} does not match this science MEF")
+            from research_discovery.spherex.electron_conversion import derive_electrons_per_image_unit
+            electrons_per_image_unit=derive_electrons_per_image_unit(
+                calibration_path=electron_record["calibration_file_path"],
+                expected_sha256=electron_record["calibration_sha256"],
+                detector=science_detector,calibration_bunit=electron_record["calibration_bunit"],
+                exposure_time_s=a.exposure_time_s,origin_xy=origin_xy,image_shape=image.shape,
+                science_image_unit=science_bunit)
+        elif a.exposure_time_s is not None:
+            raise ValueError("--exposure-time-s is only valid with --electron-calibration-record")
+    if a.flux_unit=="Jy" and omega is None:
         raise SystemExit("--flux-unit Jy requires --solid-angle-map")
-    if a.electrons_per_image_unit is not None and electron_record is None:
-        raise SystemExit("A numeric conversion alone is not accepted. Supply --electron-calibration-record tied to the exact science MEF.")
-    if electron_record is not None:
-        if not a.science_uri or str(electron_record.get("science_source_uri","")) != a.science_uri:
-            raise ValueError("electron calibration record science_source_uri does not match --science-uri")
-        calibration_path = Path(electron_record.get("calibration_file_path", ""))
-        if not calibration_path.is_file():
-            raise FileNotFoundError("electron calibration record must point to the locally downloaded calibration file")
-        calibration_sha = hashlib.sha256(calibration_path.read_bytes()).hexdigest()
-        if calibration_sha.lower() != str(electron_record.get("calibration_sha256","")).lower():
-            raise ValueError("local calibration file SHA-256 does not match the electron calibration record")
-        for key, actual in (("science_file_sha256",science_sha),("science_observation_id",science_obsid),
-                            ("detector",science_detector),("image_unit",science_bunit)):
-            if str(electron_record.get(key,"")).lower() != str(actual).lower():
-                raise ValueError(f"electron calibration record {key} does not match this science MEF")
-        electrons_per_image_unit=validate_electron_calibration_record(
-            electron_record,electrons_per_image_unit=a.electrons_per_image_unit)
-    else:
-        electrons_per_image_unit=None
+    if electron_record is not None and electrons_per_image_unit is None:
+        raise RuntimeError("absolute-gain conversion map was not derived")
     from research_discovery.spherex.flag_policy import policy_mask
-    policy_bits, policy_names = policy_mask(a.flag_policy)
-    excluded_bits = int(policy_bits) | int(a.flag_bits)
-    r=run_injection_recovery(image,variance,flags,psf,flux_levels=a.flux,n_per_level=a.n,
+    policy_bits,policy_names=policy_mask(a.flag_policy)
+    excluded_bits=int(policy_bits)|int(a.flag_bits)
+    result=run_injection_recovery(
+        image,variance,flags,psf,flux_levels=a.flux,n_per_level=a.n,
         snr_threshold=a.threshold,excluded_flag_bits=excluded_bits,seed=a.seed,
-        source_exclusion_radius=a.source_exclusion_radius,solid_angle_sr_map=omega,flux_unit=a.flux_unit,
-        psf_reference_xy=psf_reference_xy,psf_region_radius=a.psf_region_radius,background=background,
-        electrons_per_image_unit=electrons_per_image_unit, electron_calibration_record=electron_record)
+        source_exclusion_radius=a.source_exclusion_radius,
+        solid_angle_sr_map=omega,flux_unit=a.flux_unit,
+        psf_reference_xy=psf_reference_xy,psf_region_radius=a.psf_region_radius,
+        background=background,electrons_per_image_unit=electrons_per_image_unit,
+        electron_calibration_record=electron_record)
     a.out.mkdir(parents=True,exist_ok=True)
-    r["flag_policy"] = {"name": a.flag_policy, "excluded_flag_names": list(policy_names),
-                        "excluded_flag_bits_additional": int(a.flag_bits),
-                        "excluded_flag_mask_combined": int(excluded_bits)}
-    (a.out/"summary.json").write_text(json.dumps({k:v for k,v in r.items() if k!="injections"},indent=2))
-    with (a.out/"injections.csv").open("w",newline="") as f:
-        w=csv.DictWriter(f,fieldnames=list(r["injections"][0]) if r["injections"] else ["flux_level","x","y","recovered","nearest_detection_distance_px"]);w.writeheader();w.writerows(r["injections"])
-    print(json.dumps(r["flux_summary"],indent=2));print(f"Saved {a.out}")
+    result["science_provenance"]={"native_uri":a.science_uri,"local_path":str(a.science_mef),
+        "sha256":science_sha,"observation_id":science_obsid,"detector":science_detector,
+        "image_unit":science_bunit,"exposure_time_s":a.exposure_time_s,"detector_origin_xy":list(origin_xy)}
+    result["flag_policy"]={"name":a.flag_policy,"excluded_flag_names":list(policy_names),
+        "excluded_flag_bits_additional":int(a.flag_bits),"excluded_flag_mask_combined":int(excluded_bits)}
+    (a.out/"summary.json").write_text(json.dumps({k:v for k,v in result.items() if k!="injections"},indent=2))
+    with (a.out/"injections.csv").open("w",newline="") as handle:
+        writer=csv.DictWriter(handle,fieldnames=list(result["injections"][0]) if result["injections"] else
+            ["flux_level","x","y","recovered","nearest_detection_distance_px"])
+        writer.writeheader();writer.writerows(result["injections"])
+    print(json.dumps(result["flux_summary"],indent=2))
+    print(f"Saved {a.out}")
+
+
 
 if __name__=="__main__":main()
