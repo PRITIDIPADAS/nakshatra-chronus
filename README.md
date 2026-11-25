@@ -18,7 +18,11 @@ NASA Space Apps Challenge · Planet X and SPHEREx
 
 [Open the Causal Sky Twin workspace](causal-lab.html) · [Read the 20-session research workflow](docs/CHRONOS_5_20_SESSION_WORKFLOW.md)
 
-The new research preview adds measurement-level sky/detector model competition, an identifiability screen, counterfactual experiments, spectral-temporal reconstruction, epoch-aware counterpart association, detector experiments, four-baseline metric comparison and claim-to-measurement provenance. The new endpoints are mounted under /api/v5.
+The research preview adds measurement-level sky/detector model competition, local identifiability analysis, counterfactual experiments, spectral-temporal reconstruction, epoch-aware counterpart association, controlled detector experiments, common-input four-baseline comparison, encrypted blind validation and claim-to-measurement provenance. The API is mounted under /api/v5.
+
+**Sessions 07–11 implementation:** [technical implementation and runbook](docs/CHRONOS_5_SESSIONS_07_11_IMPLEMENTATION.md). Run the common-input report with scripts/chronos_benchmark.py. The new modules enforce shared field/exposure/mask/truth signatures, retain unmatched detections, support matched false-alarm and completeness operating points, and provide sealed whole-field unblinding, a generic pixel forward experiment, a Jacobian identifiability audit and conditional falsification checks.
+
+These are software capabilities, not completed real-sky results. The four-baseline acceptance gate still requires all four methods to be run on the same calibrated real held-out SPHEREx fields. The generic pixel model is not calibrated SPHEREx detector physics, and the conditional bootstrap is not a full Bayesian posterior-predictive analysis.
 
 This is a research preview. Relative BIC weights are not calibrated posterior probabilities. Generic detector experiments are not calibrated SPHEREx simulations. Synthetic challenge cases are not evidence of real-sky performance. The real-data calibration, blind-field benchmark and independent reproduction gates remain mandatory.
 
