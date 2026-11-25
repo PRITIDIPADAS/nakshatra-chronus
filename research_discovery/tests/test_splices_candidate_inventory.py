@@ -159,9 +159,7 @@ def _fixture_sia_v11(root):
     for result in report["region_results"]:
         region = result["region"]["name"]
         result["optional_sia_errors"] = {}
-        result["optional_query_errors"] = {
-            "candidate_source_exposure_matches": "IRSA TAP rejected optional source-to-plane join"
-        }
+        result["optional_query_errors"] = {}
         result["counts"]["region_intersecting_spectral_image_rows_by_collection"] = {
             "spherex_dr1": {"product_rows": 2, "query_complete_below_row_cap": True},
             "spherex_dr1_deep": {"product_rows": 0, "query_complete_below_row_cap": True},
@@ -293,8 +291,8 @@ def test_schema_1_1_siav2_products_and_cube_are_not_epochs(tmp_path):
     assert first["qr3_level2_full_region_spectral_image_product_rows"] == 1
     assert first["all_release_full_region_spectral_image_product_rows"] == 3
     assert first["dr1_level2_full_region_intersection_exposure_rows"] is None
-    assert first["candidate_source_exposure_query_status"] == "unavailable"
-    assert first["candidate_source_exposure_match_rows"] is None
+    assert first["candidate_source_exposure_query_status"] == "complete_below_declared_row_cap"
+    assert first["candidate_source_exposure_match_rows"] == 1
     assert first["candidate_source_product_match_rows"] == 1
     assert report["cross_region_candidate_source_exposure_overlap"]["unique_source_archive_product_pairs_observed"] == 2
     cube = report["dr1_all_sky_cube_inventory"]
