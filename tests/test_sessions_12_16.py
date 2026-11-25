@@ -599,8 +599,8 @@ def _population_real_field(field_id="FIELD-1", source_id="YSO-1", *,
         "baseline_days": 20.0,
         "null_control_area_deg2": 2.0,
         "null_control_baseline_days": 20.0,
-        "n_injected": 100,
-        "n_recovered": 90,
+        "n_injected": 4,
+        "n_recovered": 3,
         "observed_events": 12,
         "null_events": 8,
         "sources": [source],
@@ -622,27 +622,75 @@ def _population_selection_bin_spec():
 
 
 def _population_selection_inputs(fields):
+    from chronos_population.selection import (
+        RECOVERY_RULE_ID,
+        RECOVERY_RULE_SHA256,
+        _canonical_sha256,
+    )
+
     spec = _population_selection_bin_spec()
     covariates = {
         "flux_jy": 0.5, "wavelength_um": 3.1,
         "crowding_index": 0.4, "background_rms": 0.2,
         "epoch_count": 4, "detector_zone": "center",
     }
+    quality_policy = {
+        "policy_id": "test-yso-photometry-quality-v1",
+        "flag_policy": "photometry",
+        "fit_ql_max": 1.5,
+        "max_abs_background_to_flux_ratio": 0.2,
+    }
+    quality_policy_sha256 = _canonical_sha256(quality_policy)
+    preregistration_sha256 = "d" * 64
     trials = []
     for field in fields:
         field_id = field["field_id"]
+        detector_output_sha256 = _canonical_sha256({"field_id": field_id, "output": "frozen"})
         for index in range(4):
+            recovered = index != 0
+            evidence = {
+                "rule_id": RECOVERY_RULE_ID,
+                "detector_output_sha256": detector_output_sha256,
+                "injection_truth_sha256": _canonical_sha256(
+                    {"field_id": field_id, "injection": index}
+                ),
+                "image_id": f"{field_id}-IMAGE-001",
+                "peak_id": f"{field_id}-PEAK-{index}" if recovered else None,
+                "peak_snr": 8.0 if recovered else 2.0,
+                "threshold_sigma": 5.0,
+                "separation_pixels": 0.5 if recovered else 9.0,
+                "match_radius_pixels": 1.5,
+                "fit_ql": 1.1,
+                "fit_ql_max": 1.5,
+                "background_fraction": 0.1,
+                "background_fraction_max": 0.2,
+                "flags": 0,
+                "photometry_flags_pass": True,
+                "peak_is_local_maximum": recovered,
+                "one_to_one_assignment": recovered,
+                "primary_selection_rule_passed": recovered,
+                "fit_quality_pass": True,
+                "background_quality_pass": True,
+            }
+            if recovered:
+                evidence["injected_xy"] = [10.0 + index, 10.0]
+                evidence["peak_xy"] = [10.5 + index, 10.0]
             trials.append({
                 "trial_id": f"{field_id}-SELECTION-{index}",
                 "field_id": field_id,
                 "dataset_class": "real",
                 "release": "DR1",
-                "recovered": index != 0,
+                "recovered": recovered,
                 "covariates": dict(covariates),
                 "method_id": "test-frozen-yso-source-selection-v1",
                 "processing_config_sha256": "a" * 64,
                 "injection_protocol_sha256": "b" * 64,
                 "calibration_manifest_sha256": "c" * 64,
+                "preregistration_sha256": preregistration_sha256,
+                "recovery_rule_sha256": RECOVERY_RULE_SHA256,
+                "quality_policy_sha256": quality_policy_sha256,
+                "quality_policy": dict(quality_policy),
+                "recovery_evidence": evidence,
                 "independence_group_id": field.get("independence_group_id", field_id),
             })
     return trials, spec
@@ -943,3 +991,141 @@ def test_observation_planner_rejects_verified_feasibility_without_a_bounded_wind
     }
     with pytest.raises(ValueError, match="requires both window_start_utc and window_end_utc"):
         plan_observations([candidate])
+
+
+
+def test_selection_function_derives_full_recovery_rule_and_field_cluster_uncertainty():
+    from chronos_population.selection import fit_selection_function
+
+    fields = _five_population_fields()
+    trials, spec = _population_selection_inputs(fields)
+    result = fit_selection_function(
+        trials,
+        spec,
+        field_records=fields,
+        minimum_trials_per_cell=20,
+        minimum_independent_fields=5,
+        minimum_fields_per_cell=5,
+        posterior_draws=2000,
+        seed=13,
+    )
+    assert result["supported"] is True
+    assert result["frozen_provenance"]["preregistration_sha256"] == "d" * 64
+    assert result["cells"][0]["injected"] == 20
+    assert result["cells"][0]["recovered"] == 15
+    assert result["cells"][0]["independent_field_count"] == 5
+    assert result["cells"][0]["posterior"]["distribution"].startswith("field-cluster bootstrap")
+    assert result["cells"][0]["posterior"]["field_group_count"] == 5
+    assert len(result["field_trial_counts"]) == 5
+    assert all(row["injected"] == 4 and row["recovered"] == 3
+               for row in result["field_trial_counts"])
+
+    contradictory = [dict(row) for row in trials]
+    contradictory[0] = {**contradictory[0], "recovered": True}
+    with pytest.raises(ValueError, match="disagrees with the full production peak/matching rule"):
+        fit_selection_function(
+            contradictory, spec, field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+            minimum_fields_per_cell=5, posterior_draws=2000,
+        )
+
+
+def test_selection_function_rejects_peak_reuse_and_collapsed_independence_groups():
+    from chronos_population.selection import fit_selection_function
+
+    fields = _five_population_fields()
+    trials, spec = _population_selection_inputs(fields)
+    duplicate_peak = [dict(row) for row in trials]
+    first, second = duplicate_peak[1], duplicate_peak[2]
+    second_evidence = dict(second["recovery_evidence"])
+    second_evidence["peak_id"] = first["recovery_evidence"]["peak_id"]
+    duplicate_peak[2] = {**second, "recovery_evidence": second_evidence}
+    with pytest.raises(ValueError, match="reuses a production peak"):
+        fit_selection_function(
+            duplicate_peak, spec, field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+            minimum_fields_per_cell=5, posterior_draws=2000,
+        )
+
+    for field in fields[:2]:
+        field["independence_group_id"] = "SAME-OBSERVING-FIELD-GROUP"
+    grouped_trials, spec = _population_selection_inputs(fields)
+    with pytest.raises(ValueError, match="at least 5 independently attested real fields"):
+        fit_selection_function(
+            grouped_trials, spec, field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+            minimum_fields_per_cell=5, posterior_draws=2000,
+        )
+
+
+def test_population_coverage_binds_field_completeness_to_selection_trial_rows():
+    from chronos_population.coverage import assess_population_coverage
+
+    fields = _five_population_fields()
+    trials, spec = _population_selection_inputs(fields)
+    fields[0]["n_injected"] += 1
+    result = assess_population_coverage(
+        fields,
+        minimum_independent_fields=5,
+        selection_trials=trials,
+        selection_bin_spec=spec,
+        feature_interval_um=[3.05, 3.15],
+        blue_continuum_um=[2.8, 2.95],
+        red_continuum_um=[3.3, 3.4],
+    )
+    first = next(row for row in result["fields"] if row["field_id"] == "FIELD-0")
+    assert result["eligible_for_predeclared_population_protocol"] is False
+    assert "selection_trial_count_mismatch" in first["reasons"]
+
+
+def test_population_rate_rejects_modified_selection_provenance_even_when_input_hashes_match():
+    from chronos_population.rates import estimate_event_rate
+
+    fields = _five_population_fields()
+    audit = _population_coverage_audit(fields)
+    trials, spec = _population_selection_inputs(fields)
+    forged = {
+        **audit,
+        "selection_function": {
+            **audit["selection_function"],
+            "frozen_provenance": {
+                **audit["selection_function"]["frozen_provenance"],
+                "preregistration_sha256": "e" * 64,
+            },
+        },
+    }
+    with pytest.raises(ValueError, match="frozen selection provenance mismatch"):
+        estimate_event_rate(
+            fields,
+            coverage_audit=forged,
+            selection_trials=trials,
+            selection_bin_spec=spec,
+            draws=1000,
+            seed=31,
+        )
+
+
+def test_yso_rate_endpoint_requires_the_actual_selection_preregistration_digest():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from chronos_causal.api import router
+
+    fields = _five_population_fields()
+    trials, spec = _population_selection_inputs(fields)
+    app = FastAPI()
+    app.include_router(router)
+    response = TestClient(app).post("/api/v5/population/yso/rate", json={
+        "fields": fields,
+        "target_class": "young_stellar_object",
+        "feature_interval_um": [3.05, 3.15],
+        "blue_continuum_um": [2.8, 2.95],
+        "red_continuum_um": [3.3, 3.4],
+        "minimum_independent_fields": 5,
+        "selection_trials": trials,
+        "selection_bin_spec": spec,
+        "minimum_trials_per_selection_cell": 20,
+        "minimum_fields_per_cell": 5,
+        "preregistration_sha256": "e" * 64,
+    })
+    assert response.status_code == 422
+    assert "does not match the preregistration frozen" in response.json()["detail"]["message"]

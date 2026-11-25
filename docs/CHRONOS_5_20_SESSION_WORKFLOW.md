@@ -507,3 +507,11 @@ Current SIAv2 source/product reconnaissance [45670644451](https://github.com/PRI
 The earlier six-region exact-roster Jy pilot [45663010413](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663010413) completed six of six fields with zero incomplete and exact field-manifest validation. The newer all-field local-SNR diagnostic rerun [45670018299](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670018299) remained in progress when this update was written; do not claim it produced complete Lupus III diagnostic data yet.
 
 The blind four-baseline evaluation on real held-out fields, independently reviewed gain-to-electron conversion, source-level selection/contamination-aware YSO population analysis, independent reproduction and validated scientific release all remain unsatisfied.
+
+
+
+## 26 November 2026 — outstanding Session 12–20 acceptance status
+
+See [the detailed remaining-work status](CHRONOS_5_SESSIONS_12_20_REMAINING_WORK_STATUS_2026-11-26.md). The code path now includes an IRSA source-photometry export adapter and native source-series verifier, a field-cluster multidimensional selection model tied to production-recovery diagnostics and field-level counts, and a strict independent astronomical reproduction protocol.
+
+These are implementation and synthetic-test deliverables only. Real source-level epochs still require an IRSA export plus exact native product/calibration files. The four-baseline blind evaluation still requires an independent custodian and held-out real fields. The YSO population remains unreported until the source sample, selection/contamination model, preregistration and null controls are empirical. No independent astronomical reproduction has been obtained. The CHRONOS scientific release gate remains closed.

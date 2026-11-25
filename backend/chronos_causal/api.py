@@ -131,6 +131,7 @@ class PopulationCoverageRequest(BaseModel):
     selection_trials: list[dict[str, Any]] = Field(default_factory=list)
     selection_bin_spec: dict[str, Any] | None = None
     minimum_trials_per_selection_cell: int = 20
+    minimum_fields_per_cell: int | None = None
     minimum_selection_probability: float = 0.05
 
 class PopulationRateRequest(BaseModel):
@@ -417,12 +418,22 @@ def population_yso_rate(request: YSOPopulationRateRequest):
             selection_trials=request.selection_trials,
             selection_bin_spec=request.selection_bin_spec,
             minimum_trials_per_selection_cell=request.minimum_trials_per_selection_cell,
+            minimum_fields_per_cell=request.minimum_fields_per_cell,
             minimum_selection_probability=request.minimum_selection_probability,
         )
         if not coverage["eligible_for_predeclared_population_protocol"]:
             raise HTTPException(status_code=422, detail={
                 "message": "Population analysis blocked: real-data coverage gates were not met.",
                 "coverage_audit": coverage,
+            })
+        frozen_selection = (
+            (coverage.get("selection_function") or {}).get("frozen_provenance") or {}
+        )
+        if frozen_selection.get("preregistration_sha256") != digest:
+            raise HTTPException(status_code=422, detail={
+                "message": "The submitted preregistration digest does not match the preregistration frozen into the source-selection trials.",
+                "request_preregistration_sha256": digest,
+                "selection_preregistration_sha256": frozen_selection.get("preregistration_sha256"),
             })
         rate = estimate_event_rate(
             request.fields, coverage_audit=coverage,
@@ -432,7 +443,7 @@ def population_yso_rate(request: YSOPopulationRateRequest):
             draws=request.draws, seed=request.seed,
         )
         return {
-            "scientific_status": "coverage_passed_preregistration_digest_supplied",
+            "scientific_status": "coverage_and_selection_preregistration_bound",
             "preregistration_sha256": digest,
             "coverage_audit": coverage,
             "population_rate": rate,

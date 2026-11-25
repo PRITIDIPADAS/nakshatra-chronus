@@ -131,6 +131,10 @@ def assess_population_coverage(
             if source_id:
                 source_field_memberships[source_id].add(field_id)
 
+    selection_field_counts = {
+        row["field_id"]: row
+        for row in (selection_fit or {}).get("field_trial_counts", [])
+    }
     field_reports: list[dict[str, Any]] = []
     eligible_sources: list[dict[str, Any]] = []
     seen_field_ids: set[str] = set()
@@ -193,6 +197,15 @@ def assess_population_coverage(
         else:
             if completeness < minimum_completeness:
                 reasons.append("completeness_below_threshold")
+            if selection_fit is not None and selection_fit.get("supported") is True:
+                field_trials = selection_field_counts.get(field_id)
+                if field_trials is None:
+                    reasons.append("selection_trials_missing_for_field")
+                elif (
+                    int(field_trials.get("injected", -1)) != injected_count
+                    or int(field_trials.get("recovered", -1)) != recovered_count
+                ):
+                    reasons.append("selection_trial_count_mismatch")
 
         source_reports: list[dict[str, Any]] = []
         seen_source_ids: set[str] = set()
@@ -411,7 +424,9 @@ def assess_population_coverage(
             "CWAVE/CBAND provenance is required for every valid real measurement.",
             "Independent-field and source-identification attestations remain operator supplied.",
             "Feature and both continuum intervals must be measured within the same repeated epochs; aggregate sample counts alone are not enough.",
-            "The joint-bin selection function uses Jeffreys beta-binomial intervals and refuses unsupported covariate cells; it does not extrapolate.",
+            "The joint-bin selection function uses fixed bins and refuses unsupported covariate cells; it does not extrapolate.",
+            "Selection-function recovery and per-field injected/recovered totals must derive from the same frozen production-selection trial records.",
+            "Per-field completeness totals are checked against the individual selection trials; they cannot be supplied as a separate optimistic summary.",
             "Selection-function validity still depends on the injection distribution representing the target population and on independent calibration review.",
             "A coverage pass is not evidence for a physical population trend.",
         ],

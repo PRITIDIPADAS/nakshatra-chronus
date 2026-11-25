@@ -100,6 +100,16 @@ def _revalidate_coverage(
         raise ValueError("coverage_audit field digest mismatch")
     if coverage_audit.get("input_selection_trials_sha256") != verified.get("input_selection_trials_sha256"):
         raise ValueError("coverage_audit selection-trial digest mismatch")
+    archived_selection = coverage_audit.get("selection_function") or {}
+    verified_selection = verified.get("selection_function") or {}
+    for key, label in (
+        ("bin_spec_sha256", "predeclared bin-specification"),
+        ("injection_trials_sha256", "selection-trial"),
+    ):
+        if archived_selection.get(key) != verified_selection.get(key):
+            raise ValueError(f"coverage_audit {label} digest mismatch")
+    if archived_selection.get("frozen_provenance") != verified_selection.get("frozen_provenance"):
+        raise ValueError("coverage_audit frozen selection provenance mismatch")
     return verified
 
 

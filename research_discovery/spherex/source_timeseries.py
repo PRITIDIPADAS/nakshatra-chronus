@@ -68,29 +68,72 @@ def _verified_file(record: Mapping[str, Any], label: str, *, verify_files: bool)
 
 
 
+def _bilinear_sample(array: np.ndarray, x: float, y: float, label: str) -> float:
+    """Sample a native detector map at a sub-pixel position without extrapolation."""
+    values = np.asarray(array, dtype=float)
+    if values.ndim != 2:
+        raise ValueError(f"{label} must be a two-dimensional native map")
+    x0, y0 = math.floor(x), math.floor(y)
+    dx, dy = x - x0, y - y0
+    if abs(dx) < 1e-12 and abs(dy) < 1e-12:
+        if x0 < 0 or y0 < 0 or y0 >= values.shape[0] or x0 >= values.shape[1]:
+            raise ValueError(f"{label} sample lies outside the native map")
+        samples = np.asarray([values[y0, x0]], dtype=float)
+        weights = np.asarray([1.0])
+    else:
+        x1, y1 = x0 + 1, y0 + 1
+        if x0 < 0 or y0 < 0 or x1 >= values.shape[1] or y1 >= values.shape[0]:
+            raise ValueError(f"{label} interpolation footprint lies outside the native map")
+        samples = np.asarray([
+            values[y0, x0], values[y0, x1],
+            values[y1, x0], values[y1, x1],
+        ], dtype=float)
+        weights = np.asarray([
+            (1 - dx) * (1 - dy),
+            dx * (1 - dy),
+            (1 - dx) * dy,
+            dx * dy,
+        ])
+    if np.any(~np.isfinite(samples)):
+        raise ValueError(f"{label} interpolation footprint contains non-finite pixels")
+    if label in {"CWAVE", "CBAND", "solid angle", "VARIANCE"} and np.any(samples <= 0):
+        raise ValueError(f"{label} interpolation footprint contains non-positive pixels")
+    return float(np.dot(samples, weights))
+
+
 def _verify_native_pixel(
     product: Mapping[str, Any],
     measurement: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Verify a measurement's zero-based pixel against its native FITS maps."""
+    """Verify exact measurement position and wavelength against native FITS products."""
     measurement_id = str(measurement.get("measurement_id", "")).strip()
     if measurement.get("pixel_valid") is not True:
         raise ValueError(f"measurement {measurement_id} pixel_valid must be explicitly true")
+
+    pixel_position = measurement.get("pixel_position")
     pixel_index = measurement.get("pixel_index")
-    if not isinstance(pixel_index, Mapping):
+    if isinstance(pixel_position, Mapping):
+        if pixel_position.get("convention") != "zero-based":
+            raise ValueError(f"measurement {measurement_id} pixel_position must declare zero-based coordinates")
+        x = _finite(pixel_position.get("x"), f"measurement {measurement_id} pixel_position.x")
+        y = _finite(pixel_position.get("y"), f"measurement {measurement_id} pixel_position.y")
+    elif isinstance(pixel_index, Mapping):
+        x_raw, y_raw = pixel_index.get("x"), pixel_index.get("y")
+        try:
+            x, y = int(x_raw), int(y_raw)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError(f"measurement {measurement_id} pixel_index x/y must be integers") from None
+        if (
+            isinstance(x_raw, bool) or isinstance(y_raw, bool)
+            or x != x_raw or y != y_raw
+        ):
+            raise ValueError(f"measurement {measurement_id} pixel_index is not a valid zero-based image pixel")
+    else:
         raise ValueError(
-            f"measurement {measurement_id} requires a zero-based pixel_index object with x and y"
+            f"measurement {measurement_id} requires zero-based pixel_index or pixel_position coordinates"
         )
-    x_raw, y_raw = pixel_index.get("x"), pixel_index.get("y")
-    try:
-        x, y = int(x_raw), int(y_raw)
-    except (TypeError, ValueError, OverflowError):
-        raise ValueError(f"measurement {measurement_id} pixel_index x/y must be integers") from None
-    if (
-        isinstance(x_raw, bool) or isinstance(y_raw, bool)
-        or x != x_raw or y != y_raw or x < 0 or y < 0
-    ):
-        raise ValueError(f"measurement {measurement_id} pixel_index is not a valid zero-based image pixel")
+    if x < 0 or y < 0:
+        raise ValueError(f"measurement {measurement_id} native pixel position must be non-negative")
 
     try:
         from astropy.io import fits
@@ -133,8 +176,8 @@ def _verify_native_pixel(
                 raise ValueError(f"product {product['archive_product_id']} CWAVE/CBAND dimensions do not match the native science image")
             if solid_angle.shape != image.shape:
                 raise ValueError(f"product {product['archive_product_id']} solid-angle dimensions do not match the native science image")
-            if y >= image.shape[0] or x >= image.shape[1]:
-                raise ValueError(f"measurement {measurement_id} pixel_index lies outside the native image")
+            if math.floor(y) >= image.shape[0] or math.floor(x) >= image.shape[1]:
+                raise ValueError(f"measurement {measurement_id} pixel position lies outside the native image")
 
             image_unit = str(image_hdu.header.get("BUNIT", "")).lower().replace(" ", "")
             cwave_unit = str(cwave_hdu.header.get("BUNIT", "")).strip().lower()
@@ -174,34 +217,60 @@ def _verify_native_pixel(
                     f"product {product['archive_product_id']} science OBSID does not match the archive observation_id"
                 )
 
-            actual_wavelength = float(cwave[y, x])
-            actual_bandwidth = float(cband[y, x])
-            pixel_area = float(solid_angle[y, x])
-            pixel_flux = float(image[y, x])
-            pixel_variance = float(variance[y, x])
+            source_ra = measurement.get("ra_deg")
+            source_dec = measurement.get("dec_deg")
+            wcs_residual = None
+            if source_ra is not None or source_dec is not None:
+                if source_ra is None or source_dec is None:
+                    raise ValueError(f"measurement {measurement_id} must provide both ra_deg and dec_deg")
+                try:
+                    import astropy.units as u
+                    from astropy.coordinates import SkyCoord
+                    from astropy.wcs import WCS
+                    sky = SkyCoord(
+                        ra=_finite(source_ra, f"measurement {measurement_id} RA") * u.deg,
+                        dec=_finite(source_dec, f"measurement {measurement_id} Dec") * u.deg,
+                        frame="icrs",
+                    )
+                    image_wcs = WCS(image_hdu.header).celestial
+                    if not image_wcs.has_celestial:
+                        raise ValueError("science IMAGE has no celestial WCS for the supplied sky position")
+                    expected_x, expected_y = image_wcs.world_to_pixel(sky)
+                    expected_x, expected_y = float(expected_x), float(expected_y)
+                    wcs_residual = math.hypot(expected_x - x, expected_y - y)
+                    tolerance = _finite(
+                        measurement.get("image_wcs_tolerance_pixels", 0.5),
+                        f"measurement {measurement_id} image_wcs_tolerance_pixels",
+                    )
+                    if not math.isfinite(wcs_residual) or tolerance <= 0 or wcs_residual > tolerance:
+                        raise ValueError(
+                            f"measurement {measurement_id} source sky position disagrees with image WCS "
+                            f"by {wcs_residual:.6g} pixels (limit {tolerance})"
+                        )
+                except (ImportError, TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"measurement {measurement_id} image-WCS position verification failed: {exc}"
+                    ) from exc
+
+            actual_wavelength = _bilinear_sample(cwave, x, y, "CWAVE")
+            actual_bandwidth = _bilinear_sample(cband, x, y, "CBAND")
+            pixel_area = _bilinear_sample(solid_angle, x, y, "solid angle")
+            pixel_flux = _bilinear_sample(image, x, y, "IMAGE")
+            pixel_variance = _bilinear_sample(variance, x, y, "VARIANCE")
             wavelength = _finite(measurement.get("wavelength_um"), f"measurement {measurement_id} wavelength")
             bandwidth = _finite(measurement.get("bandwidth_um"), f"measurement {measurement_id} bandwidth")
-            if not math.isfinite(actual_wavelength) or actual_wavelength <= 0:
-                raise ValueError(f"measurement {measurement_id} points to an invalid CWAVE pixel")
-            if not math.isfinite(actual_bandwidth) or actual_bandwidth <= 0:
-                raise ValueError(f"measurement {measurement_id} points to an invalid CBAND pixel")
             if not math.isclose(wavelength, actual_wavelength, rel_tol=0.0, abs_tol=1e-6):
-                raise ValueError(f"measurement {measurement_id} wavelength_um does not match the native CWAVE pixel")
+                raise ValueError(f"measurement {measurement_id} wavelength_um does not match the native CWAVE position")
             if not math.isclose(bandwidth, actual_bandwidth, rel_tol=0.0, abs_tol=1e-6):
-                raise ValueError(f"measurement {measurement_id} bandwidth_um does not match the native CBAND pixel")
-            if not math.isfinite(pixel_area) or pixel_area <= 0:
-                raise ValueError(f"measurement {measurement_id} points to an invalid solid-angle pixel")
-            if not math.isfinite(pixel_flux):
-                raise ValueError(f"measurement {measurement_id} points to a non-finite science IMAGE pixel")
-            if not math.isfinite(pixel_variance) or pixel_variance <= 0:
-                raise ValueError(f"measurement {measurement_id} points to an invalid VARIANCE pixel")
+                raise ValueError(f"measurement {measurement_id} bandwidth_um does not match the native CBAND position")
+
     except OSError as exc:
         raise ValueError(
             f"measurement {measurement_id} native FITS file could not be read: {exc}"
         ) from exc
 
-    return {
-        "pixel_index": {"x": x, "y": y, "convention": "zero-based"},
+    output = {
+        "pixel_position": {"x": x, "y": y, "convention": "zero-based"},
         "cwave_pixel_value_um": actual_wavelength,
         "cband_pixel_value_um": actual_bandwidth,
         "cwave_abs_error_um": abs(wavelength - actual_wavelength),
@@ -215,6 +284,14 @@ def _verify_native_pixel(
         "native_map_shape": list(cwave.shape),
         "spectral_pixel_value_tolerance_um": 1e-6,
     }
+    if abs(x - round(x)) < 1e-12 and abs(y - round(y)) < 1e-12:
+        output["pixel_index"] = {
+            "x": int(round(x)), "y": int(round(y)), "convention": "zero-based"
+        }
+    if wcs_residual is not None:
+        output["image_wcs_position_residual_pixels"] = wcs_residual
+    return output
+
 
 def assemble_source_timeseries(
     manifest: Mapping[str, Any],
@@ -238,12 +315,59 @@ def assemble_source_timeseries(
     extractor = manifest.get("extraction_method")
     if not isinstance(extractor, Mapping):
         raise ValueError("a versioned extraction_method record is required")
-    for key in ("name", "version", "code_commit"):
+    extractor_kind = str(extractor.get("kind", "version_controlled")).strip()
+    for key in ("name", "version"):
         if not str(extractor.get(key, "")).strip():
             raise ValueError(f"extraction_method.{key} is required")
-    if not re.fullmatch(r"[0-9a-fA-F]{40,64}", str(extractor["code_commit"])):
-        raise ValueError("extraction_method.code_commit must be a full Git commit SHA")
+    if extractor_kind == "hosted_service":
+        service_uri = str(extractor.get("service_uri", "")).strip()
+        job_id = str(extractor.get("job_id", "")).strip()
+        retrieved_utc = str(extractor.get("retrieved_utc", "")).strip()
+        if not service_uri.startswith("https://") or not job_id or not retrieved_utc:
+            raise ValueError("hosted-service extraction requires exact HTTPS service_uri, job_id and retrieved_utc")
+    elif extractor_kind == "version_controlled":
+        if not str(extractor.get("code_commit", "")).strip():
+            raise ValueError("extraction_method.code_commit is required")
+        if not re.fullmatch(r"[0-9a-fA-F]{40,64}", str(extractor["code_commit"])):
+            raise ValueError("extraction_method.code_commit must be a full Git commit SHA")
+    else:
+        raise ValueError("extraction_method.kind must be version_controlled or hosted_service")
     extraction_config_sha = _require_sha(extractor.get("configuration_sha256"), "extraction configuration SHA-256")
+    quality_policy = manifest.get("photometry_quality_policy")
+    quality_policy_sha256 = None
+    quality_policy_mask = 0
+    if extractor_kind == "hosted_service":
+        if not isinstance(quality_policy, Mapping):
+            raise ValueError("hosted-service photometry requires a predeclared photometry_quality_policy")
+        policy_payload = {
+            "policy_id": str(quality_policy.get("policy_id", "")).strip(),
+            "flag_policy": str(quality_policy.get("flag_policy", "")).strip(),
+            "fit_ql_max": _finite(quality_policy.get("fit_ql_max"), "photometry_quality_policy.fit_ql_max"),
+            "max_abs_background_to_flux_ratio": _finite(
+                quality_policy.get("max_abs_background_to_flux_ratio"),
+                "photometry_quality_policy.max_abs_background_to_flux_ratio",
+            ),
+            "background_fraction_definition": "abs(flux_bkg) / max(abs(flux), flux_err)",
+        }
+        if (
+            not policy_payload["policy_id"] or policy_payload["fit_ql_max"] <= 0
+            or policy_payload["max_abs_background_to_flux_ratio"] <= 0
+        ):
+            raise ValueError("photometry quality thresholds must be named and positive")
+        quality_policy_sha256 = _require_sha(
+            quality_policy.get("sha256"), "photometry quality-policy SHA-256"
+        )
+        expected_policy_sha = hashlib.sha256(json.dumps(
+            policy_payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False, default=str,
+        ).encode("utf-8")).hexdigest()
+        if quality_policy_sha256 != expected_policy_sha:
+            raise ValueError("photometry quality-policy SHA-256 does not match its frozen contents")
+        try:
+            from research_discovery.spherex.flag_policy import policy_mask
+            quality_policy_mask, _ = policy_mask(policy_payload["flag_policy"])
+        except (ImportError, ValueError) as exc:
+            raise ValueError(f"photometry quality policy has an invalid flag policy: {exc}") from exc
 
     source_catalogue = manifest.get("source_catalogue")
     if not isinstance(source_catalogue, Mapping):
@@ -366,14 +490,52 @@ def assemble_source_timeseries(
         if measurement.get("fit_status") != "success":
             raise ValueError(f"measurement {measurement_id} was not produced by a successful extraction fit")
         raw_n_pixels = measurement.get("n_pixels")
-        try:
-            n_pixels = int(raw_n_pixels)
-        except (TypeError, ValueError, OverflowError):
-            raise ValueError(f"measurement {measurement_id} must record a positive integer n_pixels") from None
-        if isinstance(raw_n_pixels, bool) or n_pixels < 1 or n_pixels != raw_n_pixels:
-            raise ValueError(f"measurement {measurement_id} must record a positive integer n_pixels")
+        n_pixels = None
+        if raw_n_pixels is not None:
+            try:
+                n_pixels = int(raw_n_pixels)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError(f"measurement {measurement_id} must record a positive integer n_pixels") from None
+            if isinstance(raw_n_pixels, bool) or n_pixels < 1 or n_pixels != raw_n_pixels:
+                raise ValueError(f"measurement {measurement_id} must record a positive integer n_pixels")
+        elif not (
+            extractor_kind == "hosted_service"
+            and str(measurement.get("photometry_method", "")) == "IRSA_SPHEREX_SPECTROPHOTOMETRY_TOOL"
+        ):
+            raise ValueError(
+                f"measurement {measurement_id} must record n_pixels or identify the IRSA hosted photometry method"
+            )
         if str(measurement.get("flux_unit", "")).strip() != "Jy":
             raise ValueError(f"measurement {measurement_id} integrated flux unit must be Jy")
+        if extractor_kind == "hosted_service":
+            if str(measurement.get("photometry_method", "")) != "IRSA_SPHEREX_SPECTROPHOTOMETRY_TOOL":
+                raise ValueError(f"measurement {measurement_id} hosted-service photometry method is not identified")
+            if _require_sha(
+                measurement.get("quality_policy_sha256"),
+                f"measurement {measurement_id} quality-policy SHA-256",
+            ) != quality_policy_sha256:
+                raise ValueError(f"measurement {measurement_id} uses a different quality policy")
+            fit_ql = _finite(measurement.get("fit_ql"), f"measurement {measurement_id} fit_ql")
+            flux_background = _finite(
+                measurement.get("flux_background"),
+                f"measurement {measurement_id} flux_background",
+            )
+            flags = measurement.get("photometry_flags")
+            if isinstance(flags, bool):
+                raise ValueError(f"measurement {measurement_id} photometry_flags must be an integer")
+            try:
+                flags_int = int(flags)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError(f"measurement {measurement_id} photometry_flags must be an integer") from None
+            if flags_int < 0 or flags_int != flags:
+                raise ValueError(f"measurement {measurement_id} photometry_flags must be a non-negative integer")
+            background_fraction = abs(flux_background) / max(abs(flux), sigma)
+            if flags_int & quality_policy_mask:
+                raise ValueError(f"measurement {measurement_id} fails the predeclared photometry flag policy")
+            if fit_ql < 0 or fit_ql > float(quality_policy["fit_ql_max"]):
+                raise ValueError(f"measurement {measurement_id} fails the predeclared fit_ql quality cut")
+            if background_fraction > float(quality_policy["max_abs_background_to_flux_ratio"]):
+                raise ValueError(f"measurement {measurement_id} fails the predeclared background quality cut")
         if measurement.get("valid") is not True:
             raise ValueError(f"measurement {measurement_id} is not marked valid")
         key = (source_id, product_id, round(wavelength, 8), product["calibration_group"])
@@ -396,12 +558,14 @@ def assemble_source_timeseries(
             **native_pixel,
             "pixel_valid": True,
         }
+        measurement_mjd = _finite(measurement.get("mjd", product["mjd"]), f"measurement {measurement_id} MJD")
         row = {
             "source_id": source_id,
             "measurement_id": measurement_id,
             "observation_id": product["observation_id"],
             "archive_product_id": product_id,
-            "mjd": product["mjd"],
+            "mjd": measurement_mjd,
+            "product_mjd": product["mjd"],
             "release": product["release"],
             "detector": product["detector"],
             "wavelength_um": wavelength,
@@ -419,8 +583,16 @@ def assemble_source_timeseries(
             "extraction_method": dict(extractor),
             "quality_flags": list(measurement.get("quality_flags") or []),
             "fit_status": "success",
-            "n_pixels": n_pixels,
+            "photometry_method": measurement.get("photometry_method"),
+            "fit_ql": measurement.get("fit_ql"),
+            "flux_background": measurement.get("flux_background"),
+            "photometry_flags": measurement.get("photometry_flags"),
+            "photometry_quality_policy_sha256": quality_policy_sha256,
         }
+        if n_pixels is not None:
+            row["n_pixels"] = n_pixels
+        if "quality_policy_sha256" in measurement:
+            row["quality_policy_sha256"] = measurement["quality_policy_sha256"]
         validate_science_wavelength(row, index=index)
         rows_by_source[source_id].append(row)
         product_measurement_counts[product_id] += 1
@@ -456,6 +628,8 @@ def assemble_source_timeseries(
         "dataset_class": "real",
         "extraction_method": dict(extractor),
         "extraction_configuration_sha256": extraction_config_sha,
+        "photometry_quality_policy": dict(quality_policy) if isinstance(quality_policy, Mapping) else None,
+        "photometry_quality_policy_sha256": quality_policy_sha256,
         "source_catalogue": verified_catalogue,
         "products": list(products.values()),
         "sources": source_series,

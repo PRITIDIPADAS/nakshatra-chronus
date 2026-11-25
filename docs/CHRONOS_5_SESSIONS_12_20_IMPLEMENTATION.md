@@ -188,3 +188,31 @@ The legacy and structured observation-planning paths no longer treat a caller-su
 Deployment trust is configured by `CHRONOS_FEASIBILITY_ATTESTATION_KEY_ID` and `CHRONOS_FEASIBILITY_ATTESTATION_PUBLIC_KEY_B64`. Without those values, the planner remains science-ranked/feasibility-unverified and does not return a feasible recommendation. A verified signature authenticates the record as signed by that key; it does not certify the service’s physical or operational accuracy.
 
 Tests cover unsigned caller claims, a valid pinned test-key signature, and record tampering after signing. The deployment still needs a real external signer, a production public key provisioned out of band, and an end-to-end signed availability query before any observing window is claimed feasible. See [the attestation trust model](OBSERVATION_FEASIBILITY_ATTESTATION.md).
+
+
+
+## 26 November 2026 — source-series import and selection-gate hardening
+
+This update adds a concrete import route for the official IRSA SPHEREx Spectrophotometry Tool output and strengthens the Session 19 selection evidence contract.
+
+### Session 12 source-series path
+
+\`research_discovery.spherex.irsa_spectrophotometry\` reads IRSA VOTable/XML or CSV rows and binds them to an explicit sidecar containing source catalogue coordinates/classification references and exact \`(lvf_id, detector, release) → archive_product_id\` mappings. It converts µJy to Jy, preserves uncertainty/MJD/wavelength/bandwidth/quality fields, and applies a predeclared photometry flag, fit-QL and background-fraction policy. Rejected rows remain in the import audit.
+
+\`research_discovery.spherex.source_timeseries\` now supports sub-pixel native-map sampling and an optional celestial-WCS check against the supplied IRSA sky coordinate. The assembler verifies native IMAGE/VARIANCE, CWAVE, CBAND, solid-angle and ePSF file provenance; checks archive observation/product/calibration binding; and uses per-measurement MJD when constructing the series. Hosted-service provenance is distinguished from a version-controlled extractor.
+
+Regression tests cover conversion, product mapping, quality exclusions, coordinate-origin declaration and the native-source-series audit. These use synthetic fixtures. No genuine source photometry export and product roster were supplied in this implementation run; Session 12 is therefore **software path implemented, real source series not yet established**.
+
+### Session 19 selection-function path
+
+The injection model now requires a digest-bound recovery evidence record. Recovery is recomputed from the frozen local-maximum/primary-selection rule, SNR threshold, one-to-one peak assignment, match radius, flag mask, fit-QL and background cuts. A reused selected peak is rejected.
+
+The uncertainty estimate is a field-cluster bootstrap of per-group Jeffreys beta posteriors. Multiple injections within one observing field do not count as independent fields. Field-level injection/recovery totals must match the exact trial rows. The YSO rate route checks that the request preregistration digest is identical to the digest frozen into the selection trials, and event-rate revalidation binds the fixed selection bins, trial digest and frozen provenance.
+
+This is a conditional selection-function model, not a full hierarchical model. The current field-level event-rate estimator still does not consume source-level inverse-probability weights as an event likelihood because its input does not link each event to a source. Do not present it as a fully selection-corrected YSO population rate.
+
+### Session 20
+
+The independent-reproduction protocol now specifies the package, original-data checks, blind benchmark, source-level measurement reproduction, selection curve reproduction, discrepancies and signed report needed for external acceptance. No independent astronomer report was obtained or generated. Session 20 and the scientific release gate remain **NOT SATISFIED**.
+
+See [the source-series import guide](SPHEREX_SOURCE_TIMESERIES_IMPORT_2026-11-26.md), [selection-function specification](CHRONOS_5_SELECTION_FUNCTION_SPEC.md), [independent reproduction protocol](CHRONOS_5_INDEPENDENT_REPRODUCTION_PROTOCOL.md) and [Sessions 12–20 remaining-work status](CHRONOS_5_SESSIONS_12_20_REMAINING_WORK_STATUS_2026-11-26.md).
