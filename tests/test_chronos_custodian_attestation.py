@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -196,12 +198,12 @@ def test_custodian_attestation_fails_on_unpinned_key_or_changed_manifest():
     assert "public_manifest_sha256" in rejected["reason"]
 
 
-def test_missing_custodian_signature_keeps_blind_scoring_exploratory():
+def test_missing_custodian_signature_keeps_heldout_truth_sealed():
     key, blind, public, run_manifest, frozen, detection_run = _sealed_fixture()
-    report = unblind_benchmark(
-        public, blind["encrypted_truth_store"], key, frozen, detection_run,
-        bootstrap_draws=100,
-    )
-    assert report["blind_protocol"]["custodian_attestation"]["valid"] is False
-    assert report["scientific_claim_eligible"] is False
-    assert "independent_custodian_attestation_missing_or_invalid" in report["scientific_eligibility_reasons"]
+    # A valid Fernet truth store is supplied so this assertion distinguishes
+    # the attestation gate from a later decryption/format failure.
+    with pytest.raises(PermissionError, match="held-out truth remains sealed"):
+        unblind_benchmark(
+            public, blind["encrypted_truth_store"], key, frozen, detection_run,
+            bootstrap_draws=100,
+        )
