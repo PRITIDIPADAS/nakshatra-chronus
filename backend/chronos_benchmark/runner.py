@@ -368,6 +368,8 @@ def _paired_superiority_bootstrap(per_field, matched, *, draws: int, seed: int):
 
     rng = np.random.default_rng(int(seed))
     comparisons = {}
+    comparator_count = len(REQUIRED_METHODS) - 1
+    bonferroni_tail_percent = 100.0 * 0.05 / (2.0 * comparator_count)
     for comparator in REQUIRED_METHODS:
         if comparator == "sky_detector_twin":
             continue
@@ -394,18 +396,18 @@ def _paired_superiority_bootstrap(per_field, matched, *, draws: int, seed: int):
         comparisons[comparator] = {
             "delta_completeness_twin_minus_comparator": {
                 "mean": float(np.mean(delta_completeness)) if delta_completeness else None,
-                "paired_field_group_bootstrap_95_interval": (
-                    [float(np.percentile(delta_completeness, 2.5)),
-                     float(np.percentile(delta_completeness, 97.5))]
+                "familywise_95_interval_bonferroni": (
+                    [float(np.percentile(delta_completeness, bonferroni_tail_percent)),
+                     float(np.percentile(delta_completeness, 100.0 - bonferroni_tail_percent))]
                     if delta_completeness else None
                 ),
                 "bootstrap_draws_with_defined_metric": len(delta_completeness),
             },
             "delta_false_candidates_per_field_twin_minus_comparator": {
                 "mean": float(np.mean(delta_false_candidates)) if delta_false_candidates else None,
-                "paired_field_group_bootstrap_95_interval": (
-                    [float(np.percentile(delta_false_candidates, 2.5)),
-                     float(np.percentile(delta_false_candidates, 97.5))]
+                "familywise_95_interval_bonferroni": (
+                    [float(np.percentile(delta_false_candidates, bonferroni_tail_percent)),
+                     float(np.percentile(delta_false_candidates, 100.0 - bonferroni_tail_percent))]
                     if delta_false_candidates else None
                 ),
                 "bootstrap_draws_with_defined_metric": len(delta_false_candidates),
@@ -418,6 +420,7 @@ def _paired_superiority_bootstrap(per_field, matched, *, draws: int, seed: int):
         "seed": int(seed),
         "resampling_unit": "independent sky-field group; paired same group for Twin and comparator",
         "operating_point_policy": "each method's nearest frozen false-candidates-per-field threshold; no interpolation",
+        "multiple_comparison_interval": "two-sided 95% family-wise Bonferroni intervals across the three Twin-versus-comparator tests",
         "comparisons": comparisons,
         "superiority_supported": False,
         "note": "A superiority verdict additionally requires a verified real blind protocol, a predeclared false-candidate non-inferiority margin, correction across comparator tests and all paired confidence-bound gates.",
@@ -647,9 +650,9 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
     comparator_gates = []
     for comparator, values in paired_superiority.get("comparisons", {}).items():
         comp_ci = (values["delta_completeness_twin_minus_comparator"]
-                   ["paired_field_group_bootstrap_95_interval"])
+                   ["familywise_95_interval_bonferroni"])
         fpf_ci = (values["delta_false_candidates_per_field_twin_minus_comparator"]
-                  ["paired_field_group_bootstrap_95_interval"])
+                  ["familywise_95_interval_bonferroni"])
         comparator_gates.append(bool(
             comp_ci is not None and comp_ci[0] > 0
             and fpf_ci is not None and margin_valid
@@ -660,15 +663,15 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
     )
     paired_superiority["multiple_comparator_correction"] = {
         "required": True,
-        "method": blind_record.get("multiple_comparison_correction"),
-        "verified_predeclared": bool(blind_record.get("multiple_comparison_correction")),
-        "note": "Intervals are unadjusted percentile bootstrap intervals; the final superiority gate remains closed until the specified family-wise correction is applied."
+        "method": "bonferroni_95_familywise",
+        "verified_predeclared": blind_record.get("multiple_comparison_correction") == "bonferroni_95_familywise",
+        "note": "The paired percentile bootstrap intervals use two-sided 1 - 0.05/3 coverage per comparator, providing a Bonferroni 95% family-wise interval family."
     }
     paired_superiority["superiority_supported"] = bool(
         scientifically_eligible and margin_valid
         and len(comparator_gates) == 3 and all(comparator_gates)
         and paired_superiority.get("status") == "paired_field_group_bootstrap_completed"
-        and bool(blind_record.get("multiple_comparison_correction"))
+        and blind_record.get("multiple_comparison_correction") == "bonferroni_95_familywise"
     )
     if not scientifically_eligible:
         paired_superiority["verdict_status"] = "not_scientifically_eligible"
