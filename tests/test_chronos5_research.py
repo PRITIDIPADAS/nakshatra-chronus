@@ -202,6 +202,15 @@ def test_pixel_forward_model_separates_components_and_marks_placeholders():
     assert frame["parameter_provenance"]["psf"]["status"] == "placeholder"
     assert components["source_electrons"][8][8] > 0
     assert components["detector_fixed_electrons"][2][2] == 4.0
+    photon_expected = components["photon_generated_expected_electrons"]
+    total_expected = components["expected_total_electrons_including_fixed_detector_term"]
+    assert total_expected[2][2] == pytest.approx(photon_expected[2][2] + 4.0)
+    assert components["variance_electrons_squared"][2][2] == pytest.approx(photon_expected[2][2] + 4.0)
+    assert components["measured_electrons"][2][2] == pytest.approx(
+        components["poisson_realisation_electrons"][2][2]
+        + components["detector_fixed_electrons"][2][2]
+        + components["read_noise_realisation_electrons"][2][2]
+    )
     assert components["measured_electrons"][0][0] is None
     assert components["poisson_realisation_electrons"][0][0] is None
     assert frame["original_inputs_mutated"] is False
@@ -518,3 +527,38 @@ def test_population_rate_is_seeded_and_reports_completeness_selection():
     assert a == b
     assert a["field_count"] == 1
     assert a["skipped_fields"][0]["field_id"] == "FIELD-B"
+
+
+
+def test_snr_adapter_collects_below_five_sigma_when_requested_thresholds_include_it():
+    from chronos_benchmark.adapters import build_four_baseline_records
+    from chronos_benchmark.runner import truth_catalogue_digest
+    truth = [{"truth_id": "T1", "x": 10.0, "y": 10.0}]
+    signature = {
+        "field_id": "SNR-FLOOR-FIELD", "dataset_class": "synthetic",
+        "exposure_ids": ["E1", "E2"], "mask_sha256": "a" * 64,
+        "truth_catalogue_sha256": truth_catalogue_digest(truth),
+        "coordinate_frame": "detector", "coordinate_unit": "pixel",
+    }
+    deep = np.zeros((32, 32), dtype=float)
+    deep[10, 10] = 12.0
+    deep[22, 22] = 3.0
+    state = {
+        "exps": [object()],
+        "DEEPS": deep,
+        "RB": np.zeros((1, 32, 32), dtype=bool),
+        "cands": [],
+    }
+    thresholds = {name: [5.0, 1.0] for name in (
+        "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
+    )}
+    records = build_four_baseline_records(
+        state, signature, sky_detector_twin_detections=[],
+        score_thresholds=thresholds,
+    )
+    scores = sorted(
+        [row["score"] for row in records["methods"]["snr_only"]["detections"]],
+        reverse=True,
+    )
+    assert scores == [12.0, 3.0]
+    assert records["baseline_contract"]["snr_detection_floor"] == 1.0
