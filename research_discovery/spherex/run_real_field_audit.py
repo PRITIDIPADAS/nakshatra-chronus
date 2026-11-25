@@ -19,7 +19,7 @@ import numpy as np
 from astropy.io import fits
 from astroquery.ipac.irsa import Irsa
 
-from research_discovery.spherex.fetch_native_mefs import Field, run as fetch_native
+from research_discovery.spherex.fetch_native_mefs import Field, run as fetch_native, download_native_mef
 from research_discovery.spherex.discover_calibrations import find_products
 from research_discovery.spherex.fetch_calibration import download_calibration
 from research_discovery.spherex.native_mef_audit import audit as audit_native_mef
@@ -34,6 +34,14 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def md5_file(path: Path) -> str:
+    digest = hashlib.md5()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def clean(value):
@@ -157,7 +165,7 @@ def resolve_archive_provenance(science_uri: str) -> dict:
     """Resolve exact input calibration artifacts through IRSA's foreign-key table."""
     uri_value = urlparse(science_uri).path.lstrip("/").replace("'", "''")
     q1 = (
-        "SELECT a.uri, a.planeid, a.producttype, a.contentchecksum, "
+        "SELECT a.uri, a.planeid, a.producttype, a.contentlength, a.contentchecksum, "
         "p.provenance_version, p.provenance_name, p.time_exposure, "
         "p.energy_bandpassname, p.position_dimension_naxis1, p.position_dimension_naxis2 "
         "FROM spherex.artifact a JOIN spherex.plane p ON p.planeid = a.planeid "
@@ -203,7 +211,8 @@ def resolve_archive_provenance(science_uri: str) -> dict:
     }
 
 
-def provenance_link_for_uri(provenance: dict, science_uri: str, calibration_uri: str) -> dict | None:
+def provenance_link_for_uri(provenance: dict, science_uri: str, calibration_uri: str,
+                           local_path: Path | None = None) -> dict | None:
     target = normalise_irsa_uri(calibration_uri)
     matches = [
         item for item in provenance.get("calibration_artifacts", [])
@@ -213,6 +222,16 @@ def provenance_link_for_uri(provenance: dict, science_uri: str, calibration_uri:
     if len(matches) != 1:
         return None
     artifact = matches[0]
+    archive_checksum = str(artifact.get("contentchecksum") or "").strip().lower()
+    md5_expected = archive_checksum.split(":", 1)[1] if archive_checksum.startswith("md5:") else None
+    md5_actual = md5_file(local_path) if local_path and Path(local_path).is_file() else None
+    md5_status = (
+        "pass" if md5_expected and md5_actual and md5_expected == md5_actual.lower()
+        else "not_checked" if not local_path or not md5_expected
+        else "fail"
+    )
+    if md5_status == "fail":
+        return None
     plane_id = str(artifact.get("planeid") or "")
     relations = [
         row for row in provenance.get("input_relations", [])
@@ -233,6 +252,10 @@ def provenance_link_for_uri(provenance: dict, science_uri: str, calibration_uri:
         "calibration_native_uri": normalise_irsa_uri(calibration_uri),
         "calibration_producttype": artifact.get("producttype"),
         "calibration_contentchecksum": artifact.get("contentchecksum"),
+        "artifact_md5_expected": md5_expected,
+        "artifact_md5_actual": md5_actual,
+        "artifact_md5_status": md5_status,
+        "calibration_sha256": sha256(local_path) if local_path and Path(local_path).is_file() else None,
         "query_sha256": provenance["query_sha256"],
         "status": "verified_from_live_irsa_foreign_key_query",
     }
@@ -336,6 +359,8 @@ def candidate_sort_key(uri: str, wanted_date: str | None):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--field", default="M101,210.80227,54.34895")
+    p.add_argument("--science-uri", default=None,
+                   help="Optional exact native DR1/QR3 Level-2 URI; bypasses field-level science selection")
     p.add_argument("--bandpass", default="SPHEREx-D2")
     p.add_argument("--release", choices=("dr1", "qr3"), default="dr1")
     p.add_argument("--limit-per-family", type=int, default=5)
@@ -348,19 +373,40 @@ def main():
         p.error("--field must be NAME,RA_DEG,DEC_DEG")
     field = Field(field_parts[0].strip(), float(field_parts[1]), float(field_parts[2]))
 
-    inventory = fetch_native([field], args.bandpass, args.out / "science",
-                             limit_per_field=1, download=True, release=args.release)
-    downloads = [x for f in inventory["field_results"] for x in f["downloads"]
-                 if x.get("status") == "downloaded"]
-    if not downloads:
-        raise RuntimeError("IRSA TAP returned no downloadable native science MEF for this field/bandpass")
-    science_dl = downloads[0]
-    science_path = Path(science_dl["local_path"])
-    science_uri = science_dl.get("source_url") or science_dl.get("artifact_uri")
+    if args.science_uri:
+        science_uri = normalise_irsa_uri(args.science_uri)
+        science_name = Path(urlparse(science_uri).path).name
+        science_path = args.out / "science" / science_name
+        science_download = download_native_mef(science_uri, science_path)
+        if science_download.get("status") != "downloaded":
+            raise RuntimeError(f"Exact native science MEF download failed: {science_download}")
+        inventory = {
+            "field_results": [{
+                "query": "Exact science URI selected by explicit --science-uri; TAP provenance metadata follows.",
+                "tap_row_count": 1,
+                "downloads": [science_download],
+            }]
+        }
+    else:
+        inventory = fetch_native([field], args.bandpass, args.out / "science",
+                                 limit_per_field=1, download=True, release=args.release)
+        downloads = [x for f in inventory["field_results"] for x in f["downloads"]
+                     if x.get("status") == "downloaded"]
+        if not downloads:
+            raise RuntimeError("IRSA TAP returned no downloadable native science MEF for this field/bandpass")
+        science_dl = downloads[0]
+        science_path = Path(science_dl["local_path"])
+        science_uri = science_dl.get("source_url") or science_dl.get("artifact_uri")
     science = science_record(science_path, science_uri)
     if science["detector"] is None:
         raise RuntimeError("Downloaded science IMAGE HDU has no usable DETECTOR identity")
     provenance = resolve_archive_provenance(science_uri)
+    expected_science_md5 = str(provenance["science"].get("contentchecksum") or "").lower()
+    actual_science_md5 = md5_file(science_path)
+    if not expected_science_md5.startswith("md5:") or actual_science_md5 != expected_science_md5.split(":", 1)[1]:
+        raise RuntimeError("Science MEF MD5 does not match the exact IRSA artifact checksum")
+    if provenance["science"].get("contentlength") and science_path.stat().st_size != int(provenance["science"]["contentlength"]):
+        raise RuntimeError("Science MEF byte count does not match the exact IRSA artifact record")
     science["archive_planeid"] = provenance["science_planeid"]
     science["processing_date"] = science["processing_date"] or (
         re.search(r"-v[0-9.]+-(20[0-9]{2}-[0-9]{3})\\.fits$", science_path.name, re.I).group(1)
@@ -431,9 +477,9 @@ def main():
     audit_report = None
     provenance_links = {}
     if chosen_wcs:
-        provenance_links["spectral_wcs"] = provenance_link_for_uri(provenance, science_uri, chosen_wcs["uri"])
+        provenance_links["spectral_wcs"] = provenance_link_for_uri(provenance, science_uri, chosen_wcs["uri"], Path(chosen_wcs["local_path"]))
     if chosen_gain:
-        provenance_links["absolute_gain"] = provenance_link_for_uri(provenance, science_uri, chosen_gain["uri"])
+        provenance_links["absolute_gain"] = provenance_link_for_uri(provenance, science_uri, chosen_gain["uri"], Path(chosen_gain["local_path"]))
     # The native MEF embeds the position-dependent EPSF table. Record the
     # archive input link for its calibration family as an independent check.
     epsf_artifacts = [
