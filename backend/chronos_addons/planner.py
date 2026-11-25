@@ -131,7 +131,7 @@ def expected_information_gain(
         "hypotheses": names,
         "prior": dict(zip(names, prior.tolist())),
         "predictive_mean": dict(zip(names, means.tolist())),
-        "predictive_model_sigma": dict(zip(names, [float(p[name].get("sigma", 0.0)) for name in names])),
+        "predictive_model_sigma": dict(zip(names, [float(predictions[name].get("sigma", 0.0)) for name in names])),
         "measurement_sigma": float(measurement_sigma),
         "predictive_total_sigma": dict(zip(names, sigmas.tolist())),
         "prior_entropy_bits": prior_entropy,
