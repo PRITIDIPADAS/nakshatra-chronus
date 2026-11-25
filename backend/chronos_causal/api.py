@@ -116,12 +116,6 @@ class CandidateObservationPlanRequest(BaseModel):
     prior_sets: dict[str, dict[str, float]] = Field(default_factory=dict)
     measurement_sigma: float = 1.0
 
-class PopulationRateRequest(BaseModel):
-    fields: list[dict[str, Any]]
-    minimum_completeness: float = 0.1
-    draws: int = 10000
-    seed: int = 1
-
 class PopulationCoverageRequest(BaseModel):
     fields: list[dict[str, Any]]
     target_class: str = "young_stellar_object"
@@ -134,6 +128,14 @@ class PopulationCoverageRequest(BaseModel):
     minimum_continuum_samples: int = 4
     minimum_median_snr: float = 5.0
     minimum_completeness: float = 0.5
+
+class PopulationRateRequest(BaseModel):
+    fields: list[dict[str, Any]]
+    coverage_audit: dict[str, Any]
+    # Inherit the audit's frozen threshold unless an explicit matching value is supplied.
+    minimum_completeness: float | None = None
+    draws: int = 10000
+    seed: int = 1
 
 class ResidualRequest(BaseModel):
     observed: list[float]
@@ -354,8 +356,11 @@ def observations_plan_candidate(request: CandidateObservationPlanRequest):
 def population_rate(request: PopulationRateRequest):
     from chronos_population.rates import estimate_event_rate
     return guarded(lambda: estimate_event_rate(
-        request.fields, minimum_completeness=request.minimum_completeness,
-        draws=request.draws, seed=request.seed,
+        request.fields,
+        coverage_audit=request.coverage_audit,
+        minimum_completeness=request.minimum_completeness,
+        draws=request.draws,
+        seed=request.seed,
     ))
 
 @router.post("/population/assess-coverage")
