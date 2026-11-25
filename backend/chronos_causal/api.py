@@ -133,7 +133,7 @@ def guarded(fn):
 @router.get("/status")
 def status():
     return {
-        "version": "0.2.0",
+        "version": "0.3.0",
         "status": "research preview",
         "category": "Physics",
         "central_question": "Can a measured infrared change be separated into astrophysical, instrumental and sampling effects?",
@@ -151,13 +151,20 @@ def status():
             "selection-corrected population-rate estimates",
             "archive provenance manifests",
             "claim-to-measurement evidence graphs",
-            "four-baseline detection comparison",
+            "legacy four-baseline comparison endpoint",
+            "common-input four-baseline package enforcement and matched operating points",
+            "encrypted blind truth stores and frozen field-level unblinding",
+            "generic pixel-level spectral forward experiments with parameter provenance",
+            "forward-model Jacobian identifiability and nuisance-degeneracy analysis",
+            "grouped residuals and conditional parametric-bootstrap challenges",
+            "predeclared measurement-level sky, detector and mixed interventions",
             "synthetic challenge fixtures",
         ],
         "not_claimed": [
             "calibrated posterior probabilities",
-            "pixel-level SPHEREx forward modelling",
+            "calibrated SPHEREx pixel-level detector modelling",
             "validated SPHEREx detector coefficients",
+            "full Bayesian posterior-predictive inference",
             "real-data performance improvement",
             "automated telescope scheduling",
         ],
