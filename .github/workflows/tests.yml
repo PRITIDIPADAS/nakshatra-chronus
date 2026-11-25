@@ -11,3 +11,5 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pip install pandas photutils reproject
       - run: python -m pytest tests research_discovery/tests -q
+      - run: node --check frontend/causal-lab.js
+      - run: node --check site/causal-lab.js
