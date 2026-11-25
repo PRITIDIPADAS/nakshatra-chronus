@@ -226,7 +226,22 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
         missing_cal = [name for name in ("CWAVE", "CBAND") if name not in cal_names]
         if missing_cal:
             report["checks"]["cwave_cband"] = {"status": "fail", "missing": missing_cal}
+            report["checks"]["wavelength_units"] = {
+                "status": "fail", "reason": "CWAVE or CBAND extension is missing"}
         else:
+            cwave_unit = str(calibration["CWAVE"].header.get("BUNIT", "")).strip().lower()
+            cband_unit = str(calibration["CBAND"].header.get("BUNIT", "")).strip().lower()
+            normalise_unit = lambda value: value.replace("μ", "u").replace("µ", "u").replace("micron", "um")
+            cwave_unit_norm, cband_unit_norm = normalise_unit(cwave_unit), normalise_unit(cband_unit)
+            units_ok = cwave_unit_norm == "um" and cband_unit_norm == "um"
+            report["checks"]["wavelength_units"] = {
+                "status": "pass" if units_ok else "fail",
+                "cwave_bunit": calibration["CWAVE"].header.get("BUNIT"),
+                "cband_bunit": calibration["CBAND"].header.get("BUNIT"),
+                "normalised_units": [cwave_unit_norm, cband_unit_norm],
+                "expected": ["um", "um"],
+                "basis": "SPHEREx archive documentation specifies microns for CWAVE and CBAND",
+            }
             image_shape = tuple(report["image_shape"])
             try:
                 with fits.open(science_path, memmap=True) as science:
