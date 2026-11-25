@@ -15,14 +15,28 @@ import numpy as np
 
 
 def detector_position_from_cutout(x_cutout: float, y_cutout: float, image_header: dict) -> tuple[float, float]:
-    """Convert Astropy 0-based cutout coordinates to parent detector coords."""
+    """Convert Astropy 0-based IMAGE pixels to native detector coordinates.
+
+    Use the complete alternate WCS A when present so axis flips and rotations
+    are respected. The CRPIX-only relation is retained solely for legacy
+    headers that contain no alternate WCS definition.
+    """
     n1, n2 = int(image_header.get("NAXIS1", -1)), int(image_header.get("NAXIS2", -1))
     if (n1, n2) == (2040, 2040):
         return float(x_cutout), float(y_cutout)
+    if image_header.get("CTYPE1A") and image_header.get("CTYPE2A"):
+        from research_discovery.spherex.coordinate_transform import image_to_detector
+        detector_id = image_header.get("DETECTOR", image_header.get("DETID"))
+        if detector_id is None:
+            raise ValueError("IMAGE header has no DETECTOR identity for alternate WCS A")
+        dx, dy = image_to_detector(
+            float(x_cutout), float(y_cutout), image_header,
+            science_detector=detector_id, requested_detector=detector_id)
+        return float(dx), float(dy)
     if "CRPIX1A" in image_header and "CRPIX2A" in image_header:
         return (1.0 + float(x_cutout) - float(image_header["CRPIX1A"]),
                 1.0 + float(y_cutout) - float(image_header["CRPIX2A"]))
-    raise ValueError("cutout has no CRPIX1A/CRPIX2A; refusing to guess its parent-detector origin")
+    raise ValueError("cutout has no alternate WCS A or CRPIX1A/CRPIX2A; refusing to guess its parent-detector coordinates")
 
 
 def select_epsf_row(table, parent_x: float, parent_y: float) -> tuple[int, dict]:
