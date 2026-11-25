@@ -179,3 +179,12 @@ Branch head `84300c5ed225dc5ba190e8dac8b32650d37eafeb` passed 338 tests (7 warni
 The latest code hardens SPLICES/SIAv2 candidate identity: duplicate source IDs with conflicting ICRS coordinates are omitted from source-to-product matching and make the source-coordinate inventory incomplete. This is an archive metadata association only; it does not create source photometry or usable epochs. Current live SIAv2 and exact-roster six-field workflows remain pending at the time of this note.
 
 No Session 19 population estimate is produced. Independent classifications, usable source-level spectral epochs, multidimensional selection/completeness, contamination modeling, external preregistration and independent review are still required.
+
+
+## Session 15 — pinned observation-feasibility attestation
+
+The legacy and structured observation-planning paths no longer treat a caller-supplied `status: verified` string as authenticated. A detached Ed25519 attestation must verify against an out-of-band deployment-pinned public key. The signed canonical JSON covers the feasibility status, true/false feasible value, source URI, checked time, exact UTC window, calculator, query ID, query parameters and evidence SHA-256. The request cannot supply its own trust anchor.
+
+Deployment trust is configured by `CHRONOS_FEASIBILITY_ATTESTATION_KEY_ID` and `CHRONOS_FEASIBILITY_ATTESTATION_PUBLIC_KEY_B64`. Without those values, the planner remains science-ranked/feasibility-unverified and does not return a feasible recommendation. A verified signature authenticates the record as signed by that key; it does not certify the service’s physical or operational accuracy.
+
+Tests cover unsigned caller claims, a valid pinned test-key signature, and record tampering after signing. The deployment still needs a real external signer, a production public key provisioned out of band, and an end-to-end signed availability query before any observing window is claimed feasible. See [the attestation trust model](OBSERVATION_FEASIBILITY_ATTESTATION.md).
