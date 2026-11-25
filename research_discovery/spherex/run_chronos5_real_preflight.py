@@ -333,7 +333,11 @@ def main() -> None:
             "release": RELEASE, "bandpass": BANDPASS,
         }
         try:
-            sql, table = tap_query(field, BANDPASS, release=RELEASE)
+            sql, tap_result = tap_query(field, BANDPASS, release=RELEASE)
+            # Astroquery/PyVO can expose TAPResults rather than an Astropy Table.
+            table = tap_result.to_table() if hasattr(tap_result, "to_table") else tap_result
+            if not hasattr(table, "write") or not hasattr(table, "colnames"):
+                raise TypeError("SPHEREx TAP response could not be normalized to an Astropy Table")
             qdir = raw / RELEASE / field.name
             qdir.mkdir(parents=True, exist_ok=True)
             table.write(qdir / "tap_results.csv", format="ascii.csv", overwrite=True)
