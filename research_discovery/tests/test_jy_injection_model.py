@@ -77,3 +77,44 @@ def test_real_image_jy_injection_path_uses_area_aware_filter_and_reports_contrac
     assert result["detection_template"]["uses_separate_surface_brightness_psf"] is False
     assert len(result["injections"]) == 1
     assert result["flux_summary"][0]["n_injected"] == 1
+
+
+def test_nonnegative_psf_helper_clips_only_subthreshold_interpolation_overshoot():
+    from research_discovery.spherex.psf_physicality import enforce_nonnegative_interpolation_psf
+
+    raw = np.array([
+        [0.0, 0.01, 0.0],
+        [0.02, 0.95, 0.02],
+        [0.0, 0.0, -8.0e-5],
+    ])
+    corrected, record = enforce_nonnegative_interpolation_psf(raw)
+
+    assert np.all(np.isfinite(corrected))
+    assert np.all(corrected >= 0.0)
+    assert corrected.sum() == pytest.approx(1.0, abs=1e-14)
+    assert record["status"] == "pass"
+    assert record["negative_pixel_count"] == 1
+    assert record["clipped_pixel_count"] == 1
+    assert record["correction_applied"] is True
+    assert record["negative_to_positive_integrated_flux_fraction"] < 1.0e-3
+
+
+def test_nonnegative_psf_helper_rejects_material_negative_lobe():
+    from research_discovery.spherex.psf_physicality import enforce_nonnegative_interpolation_psf
+
+    raw = np.array([
+        [0.0, 0.1, 0.0],
+        [0.1, 0.6, 0.1],
+        [0.0, -0.02, 0.12],
+    ])
+    with pytest.raises(ValueError, match="negative interpolation"):
+        enforce_nonnegative_interpolation_psf(raw)
+
+
+def test_nonnegative_psf_helper_rejects_nonfinite_stamp():
+    from research_discovery.spherex.psf_physicality import enforce_nonnegative_interpolation_psf
+
+    raw = _psf()
+    raw[0, 0] = np.nan
+    with pytest.raises(ValueError, match="non-finite"):
+        enforce_nonnegative_interpolation_psf(raw)
