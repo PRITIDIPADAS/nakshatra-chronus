@@ -14,6 +14,7 @@ import math
 from typing import Any, Mapping, Sequence
 
 from chronos_causal.wavelength_gate import validate_science_wavelength
+from .selection import fit_selection_function, predict_selection_probability
 
 
 def _positive_int(value: Any, label: str) -> int:
@@ -49,6 +50,10 @@ def assess_population_coverage(
     minimum_continuum_samples: int = 4,
     minimum_median_snr: float = 5.0,
     minimum_completeness: float = 0.5,
+    selection_trials: Sequence[Mapping[str, Any]] | None = None,
+    selection_bin_spec: Mapping[str, Any] | None = None,
+    minimum_trials_per_selection_cell: int = 20,
+    minimum_selection_probability: float = 0.05,
 ) -> dict[str, Any]:
     """Audit field, source, wavelength, cadence, injection and null-control coverage.
 
@@ -93,6 +98,21 @@ def assess_population_coverage(
     if not (0 < blue[0] < blue[1] < feature[0] < feature[1] < red[0] < red[1]):
         raise ValueError("continuum and feature intervals must be positive, ordered and non-overlapping")
 
+    selection_fit: dict[str, Any] | None = None
+    selection_error: str | None = None
+    if selection_trials and selection_bin_spec:
+        try:
+            selection_fit = fit_selection_function(
+                selection_trials, selection_bin_spec, field_records=fields,
+                minimum_trials_per_cell=minimum_trials_per_selection_cell,
+                minimum_independent_fields=minimum_independent_fields,
+                minimum_detection_probability=minimum_selection_probability,
+            )
+        except (ValueError, TypeError, KeyError, ImportError) as exc:
+            selection_error = str(exc)
+    else:
+        selection_error = "real-field multidimensional injection trials and predeclared bin edges are required"
+
     # Detect reused source identities before evaluating any one field. Reusing
     # one catalogue source in overlapping fields must not inflate the sample.
     source_field_memberships: dict[str, set[str]] = defaultdict(set)
@@ -124,6 +144,8 @@ def assess_population_coverage(
             reasons.append("independence_not_attested")
         if not str(field.get("null_control_id", "")).strip():
             reasons.append("null_control_not_identified")
+        if selection_fit is None or selection_fit.get("supported") is not True:
+            reasons.append("multidimensional_selection_function_missing_or_unsupported")
 
         area = _finite_positive(field.get("area_deg2"))
         if area is None:
@@ -179,6 +201,19 @@ def assess_population_coverage(
                 source_reasons.append("source_reused_across_fields")
             if str(source.get("sample_class", "")).lower() != target_class:
                 source_reasons.append("sample_class_mismatch")
+            selection_prediction: dict[str, Any] = {
+                "status": "selection_function_unavailable",
+                "selection_probability": None,
+                "selection_weight": None,
+            }
+            if selection_fit is not None and selection_fit.get("supported") is True:
+                covariates = source.get("selection_covariates")
+                if not isinstance(covariates, Mapping):
+                    source_reasons.append("selection_covariates_missing")
+                else:
+                    selection_prediction = predict_selection_probability(selection_fit, covariates)
+                    if selection_prediction.get("status") != "supported":
+                        source_reasons.append("source_outside_supported_selection_function")
             if not str(source.get("classification_reference", "")).strip():
                 source_reasons.append("independent_classification_reference_missing")
 
@@ -277,6 +312,7 @@ def assess_population_coverage(
                 "continuum_epochs": continuum_epochs,
                 "complete_feature_epochs": complete_feature_epochs,
                 "median_snr": median_snr,
+                "selection": selection_prediction,
                 "flux_units": sorted(flux_units),
                 "calibration_groups": sorted({row[3] for row in valid_rows}),
                 "eligible": not source_reasons,
@@ -289,6 +325,9 @@ def assess_population_coverage(
                     "source_id": source_id,
                     "epoch_count": epoch_count,
                     "complete_feature_epochs": complete_feature_epochs,
+                    "selection_probability": selection_prediction.get("selection_probability"),
+                    "selection_weight": selection_prediction.get("selection_weight"),
+                    "selection_cell_id": selection_prediction.get("cell_id"),
                     "calibration_groups": source_report["calibration_groups"],
                 })
 
@@ -315,14 +354,23 @@ def assess_population_coverage(
     eligible_fields = sum(row["eligible"] for row in field_reports)
     if eligible_fields < minimum_independent_fields:
         failure_counts["too_few_independent_fields"] = 1
-    passed = eligible_fields >= minimum_independent_fields and all(
-        row["eligible"] for row in field_reports
+    passed = (
+        selection_fit is not None and selection_fit.get("supported") is True
+        and eligible_fields >= minimum_independent_fields
+        and all(row["eligible"] for row in field_reports)
     )
     input_digest = hashlib.sha256(json.dumps(
         fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
     ).encode("utf-8")).hexdigest()
+    selection_trials_digest = hashlib.sha256(json.dumps(
+        list(selection_trials or []), sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, default=str,
+    ).encode("utf-8")).hexdigest()
     return {
         "input_fields_sha256": input_digest,
+        "input_selection_trials_sha256": selection_trials_digest,
+        "selection_function": selection_fit,
+        "selection_function_error": selection_error,
         "status": "coverage_passed_preregistration_required" if passed else "not_ready_or_infeasible",
         "eligible_for_predeclared_population_protocol": passed,
         "target_class": target_class,
@@ -336,6 +384,8 @@ def assess_population_coverage(
             "minimum_continuum_samples": minimum_continuum_samples,
             "minimum_median_snr": minimum_median_snr,
             "minimum_completeness": minimum_completeness,
+            "minimum_trials_per_selection_cell": int(minimum_trials_per_selection_cell),
+            "minimum_selection_probability": float(minimum_selection_probability),
         },
         "field_count": len(field_reports),
         "eligible_field_count": eligible_fields,
@@ -343,7 +393,7 @@ def assess_population_coverage(
         "fields": field_reports,
         "failure_counts": failure_counts,
         "next_step": (
-            "Freeze the inclusion, exclusion, null-control, exposure-scaling and analysis protocol before measuring outcomes."
+            "Freeze the inclusion, exclusion, null-control, exposure-scaling and multidimensional selection protocol before measuring outcomes."
             if passed else
             "Do not calculate a population result; improve or document infeasible archive coverage."
         ),
@@ -352,7 +402,8 @@ def assess_population_coverage(
             "CWAVE/CBAND provenance is required for every valid real measurement.",
             "Independent-field and source-identification attestations remain operator supplied.",
             "Feature and both continuum intervals must be measured within the same repeated epochs; aggregate sample counts alone are not enough.",
-            "The scalar completeness model is exploratory and does not replace a multidimensional selection function.",
+            "The joint-bin selection function uses Jeffreys beta-binomial intervals and refuses unsupported covariate cells; it does not extrapolate.",
+            "Selection-function validity still depends on the injection distribution representing the target population and on independent calibration review.",
             "A coverage pass is not evidence for a physical population trend.",
         ],
     }
