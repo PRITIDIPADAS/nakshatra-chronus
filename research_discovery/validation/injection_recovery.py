@@ -26,38 +26,44 @@ def normalize_psf(psf: np.ndarray) -> np.ndarray:
     return p / total
 
 
-def validate_electron_calibration_record(record, *, electrons_per_image_unit=None):
-    """Validate required signed-off provenance before enabling source Poisson noise."""
+def validate_electron_calibration_record(record):
+    """Validate the exposure and absolute-gain provenance record; returns a copy."""
     if not isinstance(record, dict):
         raise ValueError("source Poisson noise requires an electron calibration record")
-    required = ("verification_status", "electrons_per_image_unit", "science_file_sha256",
-                "science_observation_id", "science_source_uri", "detector", "image_unit", "calibration_uri",
-                "calibration_file_path", "calibration_sha256", "conversion_method",
+    required = ("verification_status", "science_file_sha256", "science_observation_id",
+                "science_source_uri", "detector", "image_unit", "exposure_time_s",
+                "calibration_product", "calibration_uri", "calibration_file_path",
+                "calibration_sha256", "calibration_bunit", "conversion_method",
                 "verified_by", "verified_utc")
     missing = [key for key in required if record.get(key) in (None, "")]
     if missing:
         raise ValueError("electron calibration record is missing: " + ", ".join(missing))
     if record["verification_status"] != "verified":
-        raise ValueError("electron conversion is not marked verified; deterministic injection remains available")
-    gain = float(record["electrons_per_image_unit"])
-    if not np.isfinite(gain) or gain <= 0:
-        raise ValueError("calibration record electrons_per_image_unit must be finite and positive")
-    if electrons_per_image_unit is not None and float(electrons_per_image_unit) != gain:
-        raise ValueError("CLI conversion value differs from the calibration record")
+        raise ValueError("electron calibration is not marked verified; deterministic injection remains available")
+    if record["calibration_product"] != "abs_gain_matrix":
+        raise ValueError("SPHEREx source photon noise requires the detector-specific abs_gain_matrix")
+    exposure_time = float(record["exposure_time_s"])
+    if not np.isfinite(exposure_time) or exposure_time <= 0:
+        raise ValueError("calibration record exposure_time_s must be finite and positive")
     import re
     for key in ("science_file_sha256", "calibration_sha256"):
         if not re.fullmatch(r"[0-9a-fA-F]{64}", str(record[key])):
             raise ValueError(f"{key} must be a 64-character SHA-256 hex digest")
+    if not str(record["science_source_uri"]).startswith("https://"):
+        raise ValueError("science_source_uri must be an HTTPS archive URI")
     if not str(record["calibration_uri"]).startswith("https://"):
         raise ValueError("calibration_uri must be an HTTPS source URI")
-    return gain
+    if not str(record["calibration_bunit"]).strip():
+        raise ValueError("absolute-gain calibration BUNIT must be recorded exactly")
+    return dict(record)
 
 
 def inject_source_patch(image: np.ndarray, variance: np.ndarray, flags: np.ndarray,
                         source_signal: np.ndarray, x: float, y: float, *,
-                        rng: np.random.Generator, electrons_per_image_unit: float | None = None,
+                        rng: np.random.Generator,
+                        electrons_per_image_unit: float | np.ndarray | None = None,
                         excluded_flag_bits: int = 0) -> dict:
-    """Inject a complete PSF patch; never crop, wrap, or write into excluded bad pixels."""
+    """Inject a full PSF patch; pixel map is e-/IMAGE-unit for each detector pixel."""
     image, variance, flags = np.asarray(image), np.asarray(variance), np.asarray(flags)
     signal = np.asarray(source_signal, dtype=float)
     if image.ndim != 2 or variance.shape != image.shape or flags.shape != image.shape:
@@ -79,16 +85,28 @@ def inject_source_patch(image: np.ndarray, variance: np.ndarray, flags: np.ndarr
     if electrons_per_image_unit is None:
         image[sl] += signal
         return {"mode": "deterministic", "variance_added_sum": 0.0}
-    gain = float(electrons_per_image_unit)
-    if not np.isfinite(gain) or gain <= 0:
-        raise ValueError("electrons_per_image_unit must be finite and positive")
-    expected_electrons = signal * gain
-    if not np.isfinite(expected_electrons).all():
-        raise ValueError("expected source electrons are non-finite")
-    image[sl] += rng.poisson(expected_electrons) / gain
-    variance[sl] += expected_electrons / (gain ** 2)
-    return {"mode": "source_poisson", "variance_added_sum": float(np.sum(expected_electrons / (gain ** 2)))}
-
+    conversion = np.asarray(electrons_per_image_unit, dtype=float)
+    if conversion.ndim == 0:
+        gain_patch = np.full(signal.shape, float(conversion), dtype=float)
+    elif conversion.shape == image.shape:
+        gain_patch = conversion[sl]
+    elif conversion.shape == signal.shape:
+        gain_patch = conversion
+    else:
+        raise ValueError("electron conversion must be scalar in a unit test or align with IMAGE/PSF patch")
+    active = signal > 0
+    if not active.any() or not np.isfinite(gain_patch[active]).all() or np.any(gain_patch[active] <= 0):
+        raise ValueError("absolute-gain conversion is invalid inside the PSF footprint")
+    expected_electrons = np.zeros(signal.shape, dtype=float)
+    expected_electrons[active] = signal[active] * gain_patch[active]
+    realization = np.zeros(signal.shape, dtype=float)
+    variance_added = np.zeros(signal.shape, dtype=float)
+    realization[active] = rng.poisson(expected_electrons[active]) / gain_patch[active]
+    variance_added[active] = expected_electrons[active] / (gain_patch[active] ** 2)
+    image[sl] += realization
+    variance[sl] += variance_added
+    return {"mode": "source_poisson",
+            "variance_added_sum": float(variance_added.sum())}
 
 
 def matched_filter_snr(image: np.ndarray, variance: np.ndarray, psf: np.ndarray) -> np.ndarray:
