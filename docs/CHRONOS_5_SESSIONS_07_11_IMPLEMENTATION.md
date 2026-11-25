@@ -27,7 +27,7 @@ The existing CHRONOS P/D/A implementation, measurement-level hypothesis engine a
 3. **Instrument forensics:** the same P/D/A candidate list after the existing transparent forensic diagnostics. Forensics is a triage/veto layer, not an independent source finder.
 4. **Sky–Detector Twin:** detections exported by the causal analysis for the identical field and exposure set.
 
-The adapter is in **backend/chronos_benchmark/adapters.py**. Call **pipeline.run(...)** once per field, then pass that one state to **build_four_baseline_records(...)**. Supply Twin detections from the causal analysis of that same field. The adapter returns the input signature with each method record. It preserves each detection's score semantics and evidence provenance.
+The adapter is in **backend/chronos_benchmark/adapters.py**. Use **field_mask_sha256(state)** and **reference_wcs_sha256(state["ref"])** to construct the verified common-input signature. Call **pipeline.run(...)** once per field, then pass that one state to **build_four_baseline_records(...)**. Supply Twin detections from the causal analysis of that same field. The adapter returns the input signature with each method record. It preserves each detection's score semantics and evidence provenance.
 
 Example Python integration:
 
@@ -44,8 +44,9 @@ signature = {
     "exposure_ids": ["archive-product-id-a", "archive-product-id-b"],
     "mask_sha256": "<SHA256 of the exact combined mask inputs>",
     "truth_catalogue_sha256": truth_catalogue_digest(truth_catalogue),
-    "coordinate_frame": "detector",
+    "coordinate_frame": "sky",
     "coordinate_unit": "pixel",
+    "pixel_wcs_sha256": "<SHA256 of the registered field WCS header>",
     "pipeline_input_sha256": "<SHA256 of the immutable prepared field inputs>",
 }
 thresholds = {
@@ -93,8 +94,9 @@ Save all fields together in one JSON package. The complete example schema is sho
         "exposure_ids": ["opaque-exposure-a", "opaque-exposure-b"],
         "mask_sha256": "<64 lowercase hex characters>",
         "truth_catalogue_sha256": "<digest from truth_catalogue_digest>",
-        "coordinate_frame": "detector",
+        "coordinate_frame": "sky",
         "coordinate_unit": "pixel",
+        "pixel_wcs_sha256": "<SHA256 of the registered field WCS header>",
         "pipeline_input_sha256": "<64 lowercase hex characters>"
       },
       "truth_catalogue": [
@@ -126,7 +128,7 @@ Required signature fields are field ID, dataset class, exact exposure ID list, m
 
 The truth catalogue includes a unique truth ID and finite x/y coordinates in the declared frame. A detection includes a unique detection ID, finite x/y and score, and non-empty provenance. Detection lists may be empty. Empty fields may have an empty truth catalogue.
 
-The matching radius is mandatory per field and expressed in the declared coordinate unit. Matching is one-to-one: one truth source cannot explain two detections. Every threshold row retains matched detections, unmatched detections, missed truth IDs, precision, completeness, Wilson intervals and astrometric residuals. Threshold curves and operating-point summaries are returned per method. Whole-field bootstrap intervals are calculated independently at each supplied threshold.
+The four outputs and truth catalogue are in the registered field WCS pixel frame produced by the single pipeline.run state, not the native detector grid. Use coordinate_frame="sky", coordinate_unit="pixel" and the SHA-256 returned by adapters.reference_wcs_sha256(state["ref"]). The adapter verifies the actual exposure IDs, combines each exposure's bad-pixel, out-of-footprint and invalid-image masks, computes adapters.field_mask_sha256(state), and rejects a signature whose exposure, mask or WCS checksum does not match the prepared field. The matching radius is mandatory per field and expressed in the declared coordinate unit. Matching is one-to-one: one truth source cannot explain two detections. Every threshold row retains matched detections, unmatched detections, missed truth IDs, precision, completeness, Wilson intervals and astrometric residuals. Threshold curves and operating-point summaries are returned per method. Whole-field bootstrap intervals are calculated independently at each supplied threshold.
 
 The matched target can request false candidates per field, completeness, or both. Each method is assigned the nearest observed threshold for each target. The report records the actual value and distance from target; it does not interpolate detections or imply exact equality. Use a dense, preregistered threshold grid if the operating point is important.
 
