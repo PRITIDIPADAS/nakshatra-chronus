@@ -127,6 +127,55 @@ def main():
     except Exception as exc:
         report["spherex_dr1_cal_columns_error"] = f"{type(exc).__name__}: {exc}"
 
+    # Resolve a real M101 DR1 science artifact to its CAOM plane, then join
+    # the exact calibration input planes through provenance_input.
+    science_filename = "level2_2025W19_2B_0346_1D2_spx_l2b-v27-2026-198.fits"
+    science_identity_query = (
+        "SELECT TOP 5 planeid, artifactid, uri, producttype, releasetype "
+        "FROM spherex.artifact "
+        f"WHERE LOWER(uri) LIKE '%{science_filename.lower()}%' "
+        "AND producttype = 'science' AND releasetype = 'data'"
+    )
+    try:
+        science_identity = table_rows(science_identity_query)
+        report["m101_science_identity"] = science_identity
+        plane_ids = [
+            str(row.get("planeid")) for row in science_identity.get("rows", [])
+            if row.get("planeid")
+        ]
+        report["m101_calibration_provenance"] = []
+        for plane_id in plane_ids:
+            safe_id = plane_id.replace("'", "''")
+            provenance_query = (
+                "SELECT pi.outputid, pi.inputid, "
+                "ip.provenance_name, ip.provenance_version, ip.provenance_runid, "
+                "ip.provenance_lastexecuted, "
+                "ia.artifactid AS input_artifactid, ia.uri AS input_uri, "
+                "ia.producttype AS input_producttype, ia.releasetype AS input_releasetype, "
+                "ia.contenttype AS input_contenttype, ia.contentlength AS input_contentlength, "
+                "ia.contentchecksum AS input_contentchecksum "
+                "FROM spherex.provenance_input pi "
+                "LEFT JOIN spherex.plane ip ON ip.planeid = pi.inputid "
+                "LEFT JOIN spherex.artifact ia ON ia.planeid = pi.inputid "
+                f"WHERE pi.outputid = '{safe_id}'"
+            )
+            try:
+                joined = table_rows(provenance_query)
+                joined["output_planeid"] = plane_id
+                report["m101_calibration_provenance"].append(joined)
+            except Exception as exc:
+                report["m101_calibration_provenance"].append({
+                    "output_planeid": plane_id,
+                    "query": provenance_query,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+    except Exception as exc:
+        report["m101_science_identity"] = {
+            "query": science_identity_query,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        report["m101_calibration_provenance"] = []
+
     # Inspect all artifact classes and the calibration URI families directly.
     # This detects whether calibrations are exposed by the standard artifact
     # table even when the separate collection label is not an ADQL table.
