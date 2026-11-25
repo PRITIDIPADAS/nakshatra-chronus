@@ -257,6 +257,10 @@ def test_pending_review_absolute_gain_enables_source_poisson_injection_only_with
     assert result["source_photon_noise"]["physically_modelled"] is True
     assert result["source_photon_noise"]["calibration_review_status"] == "pending"
     assert result["source_photon_noise"]["independent_human_reviewed"] is False
+    flux_record = result["flux_summary"][0]
+    assert flux_record["source_poisson_expected_electrons"] > 0
+    assert flux_record["source_poisson_variance_added_image_units2"] > 0
+    assert flux_record["source_poisson_realized_electrons"] >= 0
 
 
 def test_absolute_gain_bunit_normalization_accepts_space_around_slash():
