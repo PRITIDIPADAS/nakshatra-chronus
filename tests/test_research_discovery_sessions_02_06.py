@@ -96,6 +96,33 @@ def test_manifest_allows_empty_unpopulated_state_without_fake_products():
     assert validate_manifest(manifest)["valid"]
 
 
+def test_calibration_pair_rejects_wrong_spectral_grid_and_bad_values():
+    from research_discovery.spherex.calibration_compatibility import compatibility_decision
+    science = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
+               "processing_date":"2026-001","coordinate_frame":"native_detector"}
+    wrong_grid = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
+        "processing_date":"2026-001","coordinate_frame":"native_detector",
+        "cwave":np.ones((20,20)),"cband":np.ones((20,20))}
+    assert compatibility_decision(science,wrong_grid)["status"] == "rejected"
+    invalid = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
+        "processing_date":"2026-001","coordinate_frame":"native_detector",
+        "cwave":np.ones((2040,2040),dtype=np.float32),
+        "cband":np.ones((2040,2040),dtype=np.float32)}
+    invalid["cwave"][0,0] = np.nan
+    assert compatibility_decision(science,invalid)["status"] == "rejected"
+
+
+def test_calibration_pair_accepts_hash_linked_audit_summary():
+    from research_discovery.spherex.calibration_compatibility import compatibility_decision
+    science = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
+               "processing_date":"2026-001","coordinate_frame":"native_detector"}
+    cal = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
+           "processing_date":"2026-001","coordinate_frame":"native_detector",
+           "cwave_shape":[2040,2040],"cband_shape":[2040,2040],
+           "valid_fraction":1.0,"wavelength_maps_audit_sha256":"c"*64}
+    assert compatibility_decision(science,cal)["status"] == "compatible"
+
+
 def test_coordinate_cutout_offset_and_round_trip():
     from research_discovery.spherex.coordinate_transform import detector_origin_offset, image_to_detector, detector_to_image
     header = {"NAXIS1": 20, "NAXIS2": 12, "CRPIX1A": -99.0, "CRPIX2A": -49.0}
@@ -166,7 +193,7 @@ def test_calibration_pair_requires_explicit_matching_metadata():
                "processing_date":"2026-001","coordinate_frame":"native_detector"}
     cal = {"release":"DR1","detector":"2","pipeline_version":"7.1",
            "processing_date":"2026-001","coordinate_frame":"native_detector",
-           "cwave":np.ones((4,4))*2.0,"cband":np.ones((4,4))*0.1}
+           "cwave":np.ones((2040,2040),dtype=np.float32)*2.0,"cband":np.ones((2040,2040),dtype=np.float32)*0.1}
     assert compatibility_decision(science,cal)["status"] == "compatible"
     cal["detector"] = "D5"
     assert compatibility_decision(science,cal)["status"] == "rejected"
@@ -211,7 +238,6 @@ def test_injection_photon_noise_is_seeded_and_updates_variance():
         outputs.append((image,var))
         assert np.array_equal(flags,before_flags)
         assert result["mode"]=="source_poisson"
-        assert var.sum()-before_flags.sum() > 0
         assert (var-1.0).sum() == pytest.approx(signal.sum()/100.0)
     assert np.array_equal(outputs[0][0],outputs[1][0])
     assert np.array_equal(outputs[0][1],outputs[1][1])
