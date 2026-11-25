@@ -247,14 +247,18 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> t
         centre_path = root / name / "dr1_level2_exposures.csv"
         full_region_path = root / name / "dr1_level2_exposures_full_region.csv"
         exposures = read_csv(centre_path)
+        optional_errors = result.get("optional_query_errors") or {}
+        full_region_error = optional_errors.get("dr1_level2_exposures_full_region")
         full_region_rows = read_csv(full_region_path)
+        # Never consume a stale output file as current coverage after a failed
+        # optional query. The per-region error is authoritative for this run.
+        if full_region_error:
+            full_region_rows = []
         centre_point_exposures.extend({**row, "recon_region": name} for row in exposures)
         full_region_exposures.extend({**row, "recon_region": name} for row in full_region_rows)
 
         centre_band_summary, centre_plane_ids = _summarize_exposure_rows(exposures)
         full_band_summary, full_plane_ids = _summarize_exposure_rows(full_region_rows)
-        optional_errors = result.get("optional_query_errors") or {}
-        full_region_error = optional_errors.get("dr1_level2_exposures_full_region")
         region_rows.append({
             "region": name,
             "role": region.get("role"),
