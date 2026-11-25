@@ -120,6 +120,7 @@ def fit_selection_function(
     field_records: Sequence[Mapping[str, Any]],
     minimum_trials_per_cell: int = 20,
     minimum_independent_fields: int = 5,
+    minimum_fields_per_cell: int = 5,
     minimum_detection_probability: float = 0.05,
 ) -> dict[str, Any]:
     """Fit a Jeffreys beta-binomial detection probability in fixed joint bins.
@@ -135,6 +136,8 @@ def fit_selection_function(
         raise ValueError("minimum_trials_per_cell must be a positive integer")
     if isinstance(minimum_independent_fields, bool) or int(minimum_independent_fields) != minimum_independent_fields or minimum_independent_fields < 2:
         raise ValueError("minimum_independent_fields must be an integer of at least two")
+    if isinstance(minimum_fields_per_cell, bool) or int(minimum_fields_per_cell) != minimum_fields_per_cell or minimum_fields_per_cell < 2:
+        raise ValueError("minimum_fields_per_cell must be an integer of at least two")
     if not math.isfinite(float(minimum_detection_probability)) or not 0 < minimum_detection_probability < 1:
         raise ValueError("minimum_detection_probability must be in (0, 1)")
     spec = validate_bin_spec(bin_spec)
@@ -234,7 +237,12 @@ def fit_selection_function(
         k = int(counts["recovered"])
         alpha, beta = k + 0.5, n - k + 0.5
         mean = alpha / (alpha + beta)
-        supported = n >= int(minimum_trials_per_cell) and mean >= float(minimum_detection_probability)
+        independent_cell_fields = len(counts["field_ids"])
+        supported = (
+            n >= int(minimum_trials_per_cell)
+            and independent_cell_fields >= int(minimum_fields_per_cell)
+            and mean >= float(minimum_detection_probability)
+        )
         cell_rows.append({
             "cell_id": _cell_id(key),
             "bin_indices": list(key),
@@ -249,9 +257,11 @@ def fit_selection_function(
                 "upper_95": float(beta_distribution.ppf(0.975, alpha, beta)),
             },
             "field_ids": sorted(counts["field_ids"]),
+            "independent_field_count": independent_cell_fields,
             "supported": bool(supported),
             "unsupported_reason": None if supported else (
                 "too_few_trials_in_joint_cell" if n < int(minimum_trials_per_cell)
+                else "too_few_independent_fields_in_joint_cell" if independent_cell_fields < int(minimum_fields_per_cell)
                 else "posterior_mean_below_minimum_detection_probability"
             ),
         })
@@ -263,6 +273,7 @@ def fit_selection_function(
         "bin_spec": spec,
         "minimum_trials_per_cell": int(minimum_trials_per_cell),
         "minimum_independent_fields": int(minimum_independent_fields),
+        "minimum_fields_per_cell": int(minimum_fields_per_cell),
         "minimum_detection_probability": float(minimum_detection_probability),
         "independent_field_count": len(groups_covered),
         "trial_count": len(trial_ids),
