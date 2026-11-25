@@ -82,6 +82,8 @@ def test_spectrotemporal_covariance_is_subset_after_invalid_rows_are_masked():
     samples = _samples()
     samples.insert(1, _sample(99, 60000.4, 2.1, 1000.0) | {"valid": False})
     covariance = np.eye(5)
+    covariance[1, :] = np.nan
+    covariance[:, 1] = np.nan
     covariance[0, 2] = covariance[2, 0] = 0.1
     result = reconstruct(
         samples, [2.1], [60000.5],
@@ -514,3 +516,17 @@ def test_evidence_package_http_endpoint_rejects_server_local_paths():
     response = TestClient(app).post("/api/v5/evidence/package/export", json=payload)
     assert response.status_code == 422
     assert "source metadata only" in response.json()["detail"]
+
+
+def test_zero_measured_parallax_still_propagates_its_uncertainty_baseline():
+    pytest.importorskip("astropy")
+    from chronos_identity.associations import _propagate
+    source = {
+        "ra": 120.0, "dec": 30.0, "epoch_year": 2016.0,
+        "parallax_mas": 0.0, "parallax_error_mas": 12.0,
+    }
+    _, _, report = _propagate(source, 2016.25)
+    assert report["parallax_applied"] is True
+    assert report["parallax_baseline_au"] > 0
+    assert report["parallax_shift_east_mas"] == pytest.approx(0.0)
+    assert report["parallax_shift_north_mas"] == pytest.approx(0.0)
