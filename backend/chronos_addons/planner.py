@@ -107,18 +107,9 @@ def _feasibility_record(candidate: Mapping[str, Any]) -> dict[str, Any]:
             "reason": "The supplied feasibility record is not marked verified.",
         }
 
-    # A caller-provided status string is not an attestation. Only a detached
-    # signature under the deployment's out-of-band pinned Ed25519 key can
-    # promote the record to verified.
-    attestation_check = _verify_feasibility_attestation(supplied)
-    if attestation_check.get("valid") is not True:
-        return {
-            "status": "unverified",
-            "supplied_record": supplied,
-            "attestation_verification": attestation_check,
-            "reason": "External feasibility evidence is unsigned or its pinned-key signature did not verify.",
-        }
-
+    # Validate the claimed schema and requested interval before cryptographic
+    # promotion. Malformed or self-contradictory claims are errors; merely
+    # unsigned but well-formed claims are retained as unverified.
     source_uri = supplied.get("source_uri")
     if not isinstance(source_uri, str) or not source_uri.startswith("https://"):
         raise ValueError("verified feasibility requires an exact HTTPS source_uri")
@@ -136,6 +127,12 @@ def _feasibility_record(candidate: Mapping[str, Any]) -> dict[str, Any]:
     end = _utc_timestamp(window_end, "window_end_utc")
     if end <= start:
         raise ValueError("feasibility window end must be later than its start")
+    if feasible is True and candidate.get("time") is not None:
+        requested_time = _utc_timestamp(candidate.get("time"), "candidate time")
+        if not start <= requested_time <= end:
+            raise ValueError(
+                "candidate time falls outside the externally verified feasibility window"
+            )
     if not supplied.get("calculator") or not supplied.get("query_id"):
         raise ValueError("verified feasibility requires calculator and query_id")
     query_parameters = supplied.get("query_parameters")
@@ -144,6 +141,19 @@ def _feasibility_record(candidate: Mapping[str, Any]) -> dict[str, Any]:
     digest = str(supplied.get("evidence_sha256", "")).lower()
     if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
         raise ValueError("verified feasibility requires a valid evidence_sha256")
+
+    # A caller-provided status string is not an attestation. Only a detached
+    # signature under the deployment's out-of-band pinned Ed25519 key can
+    # promote the record to verified.
+    attestation_check = _verify_feasibility_attestation(supplied)
+    if attestation_check.get("valid") is not True:
+        return {
+            "status": "unverified",
+            "supplied_record": supplied,
+            "attestation_verification": attestation_check,
+            "reason": "External feasibility evidence is unsigned or its pinned-key signature did not verify.",
+        }
+
     normalized_window = {
         "start_utc": start.isoformat(),
         "end_utc": end.isoformat(),
