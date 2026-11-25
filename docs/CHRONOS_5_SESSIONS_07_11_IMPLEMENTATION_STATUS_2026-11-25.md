@@ -117,3 +117,9 @@ The live SPLICES/DR1/QR3 reconnaissance [#38 / run 45648715196](https://github.c
 | Validated scientific release | Not satisfied |
 
 A workflow validator can prove that the expected artifacts exist and that their hashes match; it cannot sign off on an instrument calibration, substitute for independent custody, or change any open scientific acceptance gate.
+
+## Latest branch verification — 25 November 2026
+
+Push workflow #967 / 45657439621 on commit f5fe73471c83d1e9639ebf204abbf139ae01da77 passed **334 tests with 7 warnings**, both JavaScript syntax checks and the M101 real-field retrieve/audit/hash-validation/artifact-upload job. The matching PR workflow #968 / 45657453959 also passed.
+
+Population-rate hardening after the earlier 316-test run is documented in the empirical status and capability ledger: audit-frozen completeness thresholds, digest-bound audit revalidation, area×time checks for null controls, signed pooled excess counts before a single non-negative boundary, and a required coverage audit in the generic population-rate API. This does not close the external blind benchmark, independent calibration review or YSO population acceptance gates.
