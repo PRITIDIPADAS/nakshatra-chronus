@@ -124,3 +124,41 @@ separately. An independent custodian-controlled blind benchmark, multi-field
 calibration evaluation, preregistered YSO population analysis, and external
 astronomical reproduction/review remain open. The validated scientific
 release gate remains closed.
+
+
+## Follow-on source Poisson calibration path — implemented, not yet measured
+
+The completeness numbers above belong to the earlier deterministic injection
+run. They must not be reinterpreted as having included source Poisson noise.
+
+A follow-on implementation now derives a detector-pixel conversion from the
+same science exposure's exact provenance-linked absolute-gain product. For
+an absolute-gain value
+\(G_{abs,i}\) in \((\mathrm{MJy/sr})/(e^-/s)\), exposure time \(t\), and
+Level-2 IMAGE surface brightness \(I_i\) in MJy/sr, the implementation uses
+
+\[
+C_i = t/G_{abs,i}
+\]
+
+in electrons per IMAGE unit. For an injected pixel signal \(s_i\), the
+expected source electrons are \(\lambda_i=s_i C_i\). The added source
+realization is a Poisson draw divided by \(C_i\), and the additional
+variance in IMAGE units is \(\lambda_i/C_i^2\). The code retains invalid
+or non-positive gain pixels as invalid and refuses to fill them.
+
+The conversion record is bound to the native science and gain SHA-256 hashes,
+the science OBSID, detector, exact FITS units, exposure time, archive URIs,
+IRSA archive MD5 and the live \`spherex.provenance_input\` plane relation.
+Because the derivation has not been signed off by an independent instrument
+calibration reviewer, its status is
+\`derived_pending_independent_review\`. The exploratory mode requires an
+explicit opt-in and records \`independent_human_reviewed: false\`; it is
+not allowed to masquerade as a verified calibration record.
+
+The runner and tests now record expected electrons, realized electrons and
+the per-flux-bin variance increment. A fresh real-data run is required before
+any Poisson-aware completeness values can be reported. Until that run
+completes and its artifact is inspected, the 60-source deterministic results
+above remain the only measured M101 injection/recovery results. Source
+Poisson-aware M101 and multi-field results are **pending**, not passed.
