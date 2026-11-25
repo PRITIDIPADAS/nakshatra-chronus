@@ -502,9 +502,12 @@ def ratio_rows(exps, rows):
 
 
 def forecast(e, sed):
-    """Expected signal to noise before observation, requiring a science wavelength assignment."""
-    if not getattr(e, "lam_ok", True):
-        raise ValueError("forecast requires a compatible science wavelength from CWAVE/CBAND; display wavelengths are not accepted")
+    """Legacy planning estimate at the displayed channel; not calibrated science photometry.
+
+    Scientific colour matching and CHRONOS 5 inference independently require a
+    verified CWAVE/CBAND wavelength. This planning-only forecast preserves the
+    original observatory's approximate display-channel estimate.
+    """
     m = model_mag(sed, e.lam)
     yy, xx = np.indices(e.img.shape)
     x, y = e.xy
