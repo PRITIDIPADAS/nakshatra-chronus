@@ -303,6 +303,50 @@ def test_injection_photon_noise_is_seeded_and_updates_variance():
     assert np.array_equal(outputs[0][1],outputs[1][1])
 
 
+def test_pixel_dependent_poisson_variance_uses_local_conversion():
+    from research_discovery.validation.injection_recovery import inject_source_patch
+    image=np.zeros((12,12));variance=np.ones_like(image);flags=np.zeros_like(image,dtype=np.uint16)
+    signal=np.array([[0.1,0.2,0.1],[0.2,0.8,0.2],[0.1,0.2,0.1]])
+    conversion=np.full((12,12),0.02)
+    conversion[4:7,4:7]=np.array([[0.01,0.02,0.03],[0.01,0.02,0.03],[0.01,0.02,0.03]])
+    result=inject_source_patch(image,variance,flags,signal,5,5,rng=np.random.default_rng(9),electrons_per_image_unit=conversion)
+    expected_variance=signal/conversion[4:7,4:7]
+    assert result["mode"]=="source_poisson"
+    assert np.allclose(variance[4:7,4:7]-1.0,expected_variance)
+
+
+def test_electron_conversion_reads_native_gain_map_and_exposure_time(tmp_path):
+    fits=pytest.importorskip('astropy.io.fits')
+    from research_discovery.spherex.electron_conversion import derive_electrons_per_image_unit,sha256_file
+    path=tmp_path/'abs_gain_D2.fits'
+    gain=np.full((2040,2040),4.0,dtype=np.float32)
+    gain[21,11]=np.nan
+    image=fits.ImageHDU(gain,name='IMAGE')
+    image.header['DETECTOR']='D2';image.header['BUNIT']='(MJy/sr)/(e-/s)'
+    fits.HDUList([fits.PrimaryHDU(),image]).writeto(path)
+    result=derive_electrons_per_image_unit(calibration_path=path,expected_sha256=sha256_file(path),
+        detector='D2',calibration_bunit='(MJy/sr)/(e-/s)',exposure_time_s=2.0,
+        origin_xy=(10,20),image_shape=(3,2))
+    assert result.shape==(3,2)
+    assert result[0,0]==pytest.approx(0.5)
+    assert np.isnan(result[1,1])
+
+
+def test_electron_conversion_rejects_tampered_absolute_gain_bytes(tmp_path):
+    fits=pytest.importorskip('astropy.io.fits')
+    from research_discovery.spherex.electron_conversion import derive_electrons_per_image_unit,sha256_file
+    path=tmp_path/'gain.fits'
+    h=fits.ImageHDU(np.ones((2040,2040),dtype=np.float32),name='IMAGE')
+    h.header['DETECTOR']='D2';h.header['BUNIT']='(MJy/sr)/(e-/s)'
+    fits.HDUList([fits.PrimaryHDU(),h]).writeto(path)
+    original=sha256_file(path)
+    with path.open('ab') as stream:stream.write(b'tampered')
+    with pytest.raises(ValueError,match='SHA-256'):
+        derive_electrons_per_image_unit(calibration_path=path,expected_sha256=original,detector='D2',
+            calibration_bunit='(MJy/sr)/(e-/s)',exposure_time_s=10,origin_xy=(0,0),image_shape=(2,2))
+
+
+
 def test_injection_deterministic_option_does_not_change_variance():
     from research_discovery.validation.injection_recovery import inject_source_patch
     image=np.zeros((20,20));var=np.ones_like(image);flags=np.zeros_like(image,dtype=np.uint16)
@@ -329,8 +373,8 @@ def test_injection_refuses_bad_pixel_footprint_and_edge_clipping():
 def test_injection_requires_exposure_bound_calibration_record():
     from research_discovery.validation.injection_recovery import validate_electron_calibration_record
     with pytest.raises(ValueError,match="requires an electron calibration record"):
-        validate_electron_calibration_record(None,electrons_per_image_unit=100.0)
-    bad={"verification_status":"candidate_only","electrons_per_image_unit":100}
+        validate_electron_calibration_record(None)
+    bad={"verification_status":"candidate_only"}
     with pytest.raises(ValueError):
         validate_electron_calibration_record(bad)
 
