@@ -93,13 +93,43 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
             not math.isfinite(float(field_area)) or float(field_area) <= 0
         ):
             raise ValueError(f"{field_id}: field_area_deg2 must be positive when supplied")
-        exposure_tokens = [
-            "exposure_" + hashlib.sha256((token + "|" + str(value)).encode()).hexdigest()[:20]
-            for value in signature.get("exposure_ids", [])
-        ]
-        public_signature = dict(signature)
+        supplied_public_ids = raw.get("public_exposure_ids")
+        supplied_public_signature = raw.get("public_input_signature")
+        if supplied_public_ids is not None or supplied_public_signature is not None:
+            if not isinstance(supplied_public_ids, list) or not isinstance(supplied_public_signature, Mapping):
+                raise ValueError(
+                    f"{field_id}: public_exposure_ids and public_input_signature must be supplied together"
+                )
+            if (
+                len(supplied_public_ids) != len(signature.get("exposure_ids", []))
+                or any(not isinstance(value, str) or not value.strip() for value in supplied_public_ids)
+                or len(set(supplied_public_ids)) != len(supplied_public_ids)
+                or any(value in signature.get("exposure_ids", []) for value in supplied_public_ids)
+            ):
+                raise ValueError(
+                    f"{field_id}: public_exposure_ids must be unique opaque values, one per exposure, and must not reveal original IDs"
+                )
+            public_signature = dict(supplied_public_signature)
+            _validate_signature(public_signature, truth)
+            for key in ("dataset_class", "truth_catalogue_sha256",
+                        "coordinate_frame", "coordinate_unit"):
+                if public_signature.get(key) != signature.get(key):
+                    raise ValueError(
+                        f"{field_id}: public_input_signature.{key} must match the private input signature"
+                    )
+            if list(public_signature.get("exposure_ids") or []) != supplied_public_ids:
+                raise ValueError(
+                    f"{field_id}: public_input_signature.exposure_ids must exactly match public_exposure_ids"
+                )
+            exposure_tokens = list(supplied_public_ids)
+        else:
+            exposure_tokens = [
+                "exposure_" + hashlib.sha256((token + "|" + str(value)).encode()).hexdigest()[:20]
+                for value in signature.get("exposure_ids", [])
+            ]
+            public_signature = dict(signature)
+            public_signature["exposure_ids"] = exposure_tokens
         public_signature["field_id"] = token
-        public_signature["exposure_ids"] = exposure_tokens
         public_fields.append({
             "blind_field_token": token,
             "split_role": role,
