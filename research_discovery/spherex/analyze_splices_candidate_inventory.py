@@ -286,24 +286,33 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
         exposures = read_csv(centre_path)
         optional_errors = result.get("optional_query_errors") or {}
         source_epoch_error = optional_errors.get("candidate_source_exposure_matches")
-        source_match_rows = read_csv(source_match_path)
-        source_summary_rows = read_csv(source_summary_path)
+        source_match_rows = []
+        source_summary_rows = []
+        if not source_epoch_error:
+            if source_match_path.is_file() and source_summary_path.is_file():
+                source_match_rows = read_csv(source_match_path)
+                source_summary_rows = read_csv(source_summary_path)
+            else:
+                # Optional query outputs are not silently interpreted as empty matches.
+                source_epoch_error = "optional source-to-exposure query output CSV missing"
 
         if use_siav2:
-            optional_sia_errors = result.get("optional_sia_errors") or {}
+            optional_sia_errors = dict(result.get("optional_sia_errors") or {})
             collections = (
                 "spherex_dr1", "spherex_dr1_deep",
                 "spherex_qr3", "spherex_qr3_deep",
             )
             collection_rows = {}
             for collection in collections:
+                csv_path = root / name / f"region_footprints_sia_{collection}.csv"
                 if optional_sia_errors.get(collection):
                     # A current error always wins over any stale file on disk.
                     collection_rows[collection] = []
+                elif not csv_path.is_file():
+                    optional_sia_errors[collection] = "SIAv2 query output CSV missing"
+                    collection_rows[collection] = []
                 else:
-                    collection_rows[collection] = read_csv(
-                        root / name / f"region_footprints_sia_{collection}.csv"
-                    )
+                    collection_rows[collection] = read_csv(csv_path)
             full_region_rows = []
             collection_counts = {}
             reported_counts = (
@@ -356,9 +365,13 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
         else:
             full_region_path = root / name / "dr1_level2_exposures_full_region.csv"
             full_region_error = optional_errors.get("dr1_level2_exposures_full_region")
-            full_region_rows = read_csv(full_region_path)
-            if full_region_error:
-                full_region_rows = []
+            full_region_rows = []
+            if not full_region_error:
+                if full_region_path.is_file():
+                    full_region_rows = read_csv(full_region_path)
+                else:
+                    # A missing optional query artifact is unavailable, not zero coverage.
+                    full_region_error = "optional full-region query output CSV missing"
             full_band_summary, full_plane_ids = _summarize_exposure_rows(full_region_rows)
             collection_counts = {}
             dr1_rows = len(full_region_rows) if not full_region_error else None
