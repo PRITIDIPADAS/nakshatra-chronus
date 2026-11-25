@@ -43,12 +43,86 @@ jobs:
 
       - name: Retrieve and audit M101 SPHEREx DR1 D2
         run: |
+          set -euo pipefail
           python -m research_discovery.spherex.run_real_field_audit \
             --field M101,210.80227,54.34895 \
             --bandpass SPHEREx-D2 \
             --release dr1 \
             --limit-per-family 5 \
             --out data/spherex_m101_audit 2>&1 | tee spherex-real-field.log
+
+      - name: Validate machine-readable audit and retained file hashes
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("data/spherex_m101_audit")
+          summary = json.loads((root / "real_field_audit_summary.json").read_text())
+
+          assert summary["release"].upper() == "DR1"
+          science = summary["science"]
+          assert science["detector"] == "D2"
+          assert science["image_shape"] == [2040, 2040]
+          assert science["pipeline_version"] == "7.0.5"
+
+          def verify_file(record, label):
+              path = Path(record["local_path"])
+              assert path.is_file(), f"{label}: missing file {path}"
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for block in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(block)
+              actual = digest.hexdigest()
+              assert actual == record["sha256"], (
+                  f"{label}: SHA-256 mismatch {actual} != {record['sha256']}"
+              )
+              assert path.stat().st_size == int(record["byte_count"]), (
+                  f"{label}: byte-count mismatch"
+              )
+
+          verify_file(science, "science MEF")
+          native = summary["native_mef_audit"]
+          assert native["status"] == "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS"
+          compatibility = native["calibration_compatibility"]
+          assert compatibility["status"] == "compatible"
+          assert all(item.get("status") == "pass"
+                     for item in compatibility["checks"].values())
+
+          products = summary["selected_products"]
+          for family in ("spectral_wcs", "solid_angle", "absolute_gain"):
+              assert family in products, f"missing selected calibration: {family}"
+              record = products[family]
+              verify_file(record, family)
+              assert record["detector"] == "D2"
+              assert record["release_from_uri"].lower() == "dr1"
+              assert record["archive_md5_status"] == "pass"
+
+          for family in ("spectral_wcs", "absolute_gain"):
+              link = products[family]["provenance_link"]
+              assert link["status"] == "verified_from_live_irsa_foreign_key_query"
+              assert link["artifact_md5_status"] == "pass"
+
+          provenance = summary["archive_provenance"]
+          assert provenance["input_relation_count"] >= 2
+          assert provenance["linked_calibration_artifact_count"] >= 2
+          assert summary["absolute_gain_validation"]["invalid_pixels_are_not_interpolated"] is True
+
+          injection = summary["calibrated_jy_injection_evaluation"]
+          assert injection["status"] == "completed"
+          assert len(injection["flux_summary"]) == 3
+          assert all(row["n_injected"] == 20 for row in injection["flux_summary"])
+          assert all(0 <= row["n_recovered"] <= row["n_injected"]
+                     for row in injection["flux_summary"])
+          poisson = injection["source_photon_noise"]
+          assert poisson["enabled"] is True
+          assert poisson["calibration_record"]["review_status"] == "pending"
+          assert poisson["calibration_record"]["independent_human_reviewed"] is False
+
+          print("M101 DR1 D2 science/calibration provenance, SHA-256, compatibility and 3x20 Jy pilot verified.")
+          print("Electron-conversion review remains pending; this check does not mark it human-reviewed.")
+          PY
 
       - name: Upload native science and calibration files with audit records
         if: always()
