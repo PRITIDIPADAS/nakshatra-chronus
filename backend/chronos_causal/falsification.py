@@ -13,6 +13,7 @@ from .posterior_predictive import (
     grouped_residual_checks,
     parametric_bootstrap_checks,
     transient_scan_bootstrap,
+    transient_candidate_family_bootstrap,
 )
 from .schema import normalize_observations
 
@@ -60,6 +61,7 @@ def _residual_records(rows, prediction, sigma, groups):
 def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
                             challenge_specs: Sequence[Mapping[str, Any]] | None = None,
                             challenge_plan_sha256: str | None = None,
+                            candidate_family: Sequence[Mapping[str, Any]] | None = None,
                             flux_covariance=None,
                             bootstrap_draws: int = 1000,
                             transient_draws: int = 500,
@@ -130,6 +132,39 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
         observed, null_prediction, sigma, times,
         covariance=flux_covariance, draws=transient_draws, seed=seed + 1,
     )
+    candidate_selection_correction = {
+        "status": "not_required_for_non_transient_leading_model",
+        "candidate_selection_adjusted": False,
+        "family_wise_false_alarm_probability": None,
+    }
+    candidate_family_complete = False
+    candidate_family_significant = False
+    if candidate_family is not None:
+        family_report = transient_candidate_family_bootstrap(
+            candidate_family, draws=transient_draws, seed=seed + 2
+        )
+        current_candidate_id = analysis.get("candidate_id")
+        included_ids = {str(item.get("candidate_id", "")) for item in candidate_family}
+        candidate_family_complete = (
+            current_candidate_id is not None and str(current_candidate_id) in included_ids
+        )
+        family_p = float(family_report["family_wise_false_alarm_probability"])
+        candidate_family_significant = family_p <= maximum_predictive_p_value
+        candidate_selection_correction = {
+            **family_report,
+            "current_candidate_in_supplied_family": candidate_family_complete,
+            "significance_alpha": maximum_predictive_p_value,
+            "family_wise_transient_claim_supported": (
+                candidate_family_complete and candidate_family_significant
+            ),
+        }
+    elif leading == "transient":
+        candidate_selection_correction = {
+            "status": "not_evaluated",
+            "candidate_selection_adjusted": False,
+            "family_wise_false_alarm_probability": None,
+            "reason": "Complete searched candidate family was not supplied; post-hoc candidate selection has not been adjusted.",
+        }
     plan = list(challenge_specs or [
         {"challenge_id": "sky_only", "intervention": "sky_variability", "amplitude": 1.0},
         {"challenge_id": "detector_only", "intervention": "detector_template", "amplitude": 1.0},
@@ -179,7 +214,11 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
             "original_observations_mutated": False,
         })
 
-    if analysis["verdict"] == "unknown" or not predictive_pass or not uncertainties_verified or not plan_hash_matches:
+    transient_family_pass = (
+        leading != "transient"
+        or candidate_family_complete and candidate_family_significant
+    )
+    if analysis["verdict"] == "unknown" or not predictive_pass or not uncertainties_verified or not plan_hash_matches or not transient_family_pass:
         verdict = "unknown"
         decision_reasons = list(analysis["abstention_reasons"])
         if not uncertainties_verified:
@@ -188,6 +227,13 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
             decision_reasons.append("predeclared predictive checks did not pass")
         if not plan_hash_matches:
             decision_reasons.append("challenge plan SHA-256 is missing or does not match the supplied plan")
+        if not transient_family_pass:
+            if candidate_family is None:
+                decision_reasons.append("transient candidate-family selection correction was not run")
+            elif not candidate_family_complete:
+                decision_reasons.append("supplied candidate family does not include this candidate")
+            else:
+                decision_reasons.append("transient candidate family does not pass the predeclared family-wise false-alarm threshold")
         result_status = "model_not_established"
     else:
         verdict = "provisionally_survives_declared_checks"
@@ -217,6 +263,7 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
             ),
         },
         "transient_search": transient,
+        "candidate_selection_correction": candidate_selection_correction,
         "counterfactual_challenges": challenges,
         "challenge_plan": {
             "sha256": plan_digest,
@@ -245,6 +292,8 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
             "The current model comparison is measurement-level and uses relative BIC weights, not calibrated posterior probabilities.",
             "The parametric bootstrap is conditional on supplied point predictions; it is not a posterior predictive check with parameter uncertainty.",
             "Flux fits use a supplied full covariance matrix when present and require its diagonal to match sigma squared; coordinate fits remain independent per axis.",
+            "The per-candidate transient scan corrects across searched intervals. A transient interpretation additionally requires a candidate-family maximum-statistic calibration across all supplied candidates.",
+            "Candidate-family correction does not account for upstream image detection, field selection or candidates omitted from the declared searched family.",
             "The transient scan calibration assumes the supplied null prediction and Gaussian noise model.",
             "Counterfactual intervention replays alter measurement rows; they do not rerender raw FITS pixels or establish causal truth.",
             "Instrument and sky-coordinate evidence requires a validated detector-to-sky transformation.",
