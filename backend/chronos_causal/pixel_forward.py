@@ -172,8 +172,13 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
     background_expected = background_rate * exposure_time_s * nuisance["background_scale"] * flat
     dark_expected = dark_rate * exposure_time_s * flat
     detector_fixed_expected = detector_fixed.copy()
-    expected = source_expected + background_expected + dark_expected + detector_fixed_expected
-    expected = np.clip(expected, 0.0, None)
+    # Only photo-generated source, background and dark-current electrons enter
+    # the Poisson draw. The fixed detector term is deterministic and must not
+    # be assigned photon shot noise.
+    photon_expected = np.clip(
+        source_expected + background_expected + dark_expected, 0.0, None
+    )
+    expected = photon_expected + detector_fixed_expected
 
     mask = np.zeros(shape, dtype=bool)
     if missing_pixel_mask is not None:
@@ -191,10 +196,10 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
             mask |= (flag_array.astype(np.uint64) & np.uint64(bad_flag_bits)) != 0
 
     rng = np.random.default_rng(int(seed))
-    poisson_realisation = rng.poisson(expected).astype(float)
+    poisson_realisation = rng.poisson(photon_expected).astype(float)
     read_realisation = rng.normal(0.0, read, size=shape)
-    measured = poisson_realisation + read_realisation
-    variance = expected + read ** 2
+    measured = poisson_realisation + detector_fixed_expected + read_realisation
+    variance = photon_expected + read ** 2
     residual = measured - expected
     source_by_wavelength[:, mask] = np.nan
     for array in (source_expected, background_expected, dark_expected,
@@ -250,7 +255,8 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
             "background_electrons": _json_array(background_expected),
             "dark_current_electrons": _json_array(dark_expected),
             "detector_fixed_electrons": _json_array(detector_fixed_expected),
-            "expected_total_electrons": _json_array(expected),
+            "photon_generated_expected_electrons": _json_array(photon_expected),
+            "expected_total_electrons_including_fixed_detector_term": _json_array(expected),
             "poisson_realisation_electrons": _json_array(poisson_realisation),
             "read_noise_realisation_electrons": _json_array(read_realisation),
             "measured_electrons": _json_array(measured),
