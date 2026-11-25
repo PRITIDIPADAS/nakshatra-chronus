@@ -1,0 +1,48 @@
+name: CHRONOS 5 DR1 real-data preflight
+
+on:
+  push:
+    branches: [chronos-5-causal-sky-twin]
+    paths:
+      - "research_discovery/spherex/run_chronos5_real_preflight.py"
+      - ".github/workflows/chronos5_real_data_preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chronos5-real-data-preflight
+  cancel-in-progress: false
+
+jobs:
+  dr1-real-field-evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Check out the exact code revision
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install archive and analysis dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r research_discovery/requirements-research.txt
+      - name: Verify runner syntax
+        run: python -m py_compile research_discovery/spherex/run_chronos5_real_preflight.py
+      - name: Retrieve and evaluate predeclared real SPHEREx DR1 fields
+        run: |
+          python research_discovery/spherex/run_chronos5_real_preflight.py \
+            --out data/chronos5_real_preflight
+      - name: Upload checksummed provenance and evaluation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chronos5-dr1-real-data-preflight
+          path: |
+            data/chronos5_real_preflight/reports/
+          if-no-files-found: warn
+          retention-days: 7
