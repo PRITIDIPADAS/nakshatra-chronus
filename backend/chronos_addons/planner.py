@@ -285,12 +285,11 @@ def plan_candidate_observations(candidates: Sequence[Mapping[str, Any]], *,
         feasibility = raw.get("feasibility")
         if feasibility is None:
             feasibility = raw.get("feasibility_evidence") or {}
+        # A service response marked "available" is data, not a trusted
+        # feasibility attestation. Do not silently upgrade it to "verified".
+        # It can be retained in the report, but only an explicitly verified,
+        # bounded record can make a candidate eligible for recommendation.
         normalized_feasibility = dict(feasibility) if isinstance(feasibility, Mapping) else None
-        if normalized_feasibility and normalized_feasibility.get("status") == "available":
-            normalized_feasibility = {**normalized_feasibility, "status": "verified",
-                "feasible": True,
-                "source_uri": normalized_feasibility.get("source_uri", normalized_feasibility.get("source_url")),
-                "checked_utc": normalized_feasibility.get("checked_utc", normalized_feasibility.get("retrieved_at"))}
         normalized.append({
             "candidate_id": cid, "time": raw.get("time"),
             "wavelength_um": option.get("wavelength_um", raw.get("wavelength_um")),
