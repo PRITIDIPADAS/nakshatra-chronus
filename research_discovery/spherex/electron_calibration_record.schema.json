@@ -69,7 +69,10 @@
       ]
     },
     "image_unit": {
-      "const": "MJy/sr"
+      "enum": [
+        "MJy/sr",
+        "MJy / sr"
+      ]
     },
     "calibration_uri": {
       "type": "string",
