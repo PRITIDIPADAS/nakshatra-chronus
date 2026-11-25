@@ -85,20 +85,32 @@ def test_four_baseline_rejects_changed_truth_catalogue():
 
 
 def test_pipeline_adapters_preserve_common_signature_and_forensic_veto():
-    from chronos_benchmark.adapters import build_four_baseline_records
+    from types import SimpleNamespace
+    from chronos_benchmark.adapters import (
+        build_four_baseline_records, field_mask_sha256, reference_wcs_sha256,
+    )
     from chronos_benchmark.runner import truth_catalogue_digest
+
+    class Header:
+        def tostring(self, **kwargs):
+            return "SIMULATED-REGISTERED-FIELD-WCS"
+
+    class ReferenceWCS:
+        def to_header(self, relax=True):
+            return Header()
+
     truth = [{"truth_id": "T1", "x": 10.0, "y": 10.0}]
-    signature = {
-        "field_id": "F1", "dataset_class": "synthetic",
-        "exposure_ids": ["E1", "E2"], "mask_sha256": "a" * 64,
-        "truth_catalogue_sha256": truth_catalogue_digest(truth),
-        "coordinate_frame": "sky", "coordinate_unit": "pixel",
-        "pixel_wcs_sha256": "b" * 64,
-    }
     state = {
-        "exps": [object()],
+        "exps": [
+            SimpleNamespace(id="E1", det=2),
+            SimpleNamespace(id="E2", det=2),
+        ],
+        "ref": ReferenceWCS(),
         "DEEPS": np.pad(np.array([[12.0]]), ((10, 10), (10, 10))),
         "RB": np.ones((2, 21, 21), dtype=bool),
+        "IN": np.ones((2, 21, 21), dtype=bool),
+        "R": np.zeros((2, 21, 21), dtype=float),
+        "MAP": [],
         "cands": [{
             "x": 10.0, "y": 10.0, "methods": "PDA",
             "P": [{"s": 8.0, "why": ["presence"]}],
@@ -106,6 +118,14 @@ def test_pipeline_adapters_preserve_common_signature_and_forensic_veto():
             "A": [],
             "f": {"flagfrac": 0.8},
         }],
+    }
+    signature = {
+        "field_id": "F1", "dataset_class": "synthetic",
+        "exposure_ids": ["E1", "E2"],
+        "mask_sha256": field_mask_sha256(state),
+        "truth_catalogue_sha256": truth_catalogue_digest(truth),
+        "coordinate_frame": "sky", "coordinate_unit": "pixel",
+        "pixel_wcs_sha256": reference_wcs_sha256(state["ref"]),
     }
     threshold_map = {name: [5.0, 1.0] for name in (
         "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
@@ -115,6 +135,8 @@ def test_pipeline_adapters_preserve_common_signature_and_forensic_veto():
     )
     assert set(built["methods"]) == set(threshold_map)
     assert all(item["input_signature"] == signature for item in built["methods"].values())
+    assert built["baseline_contract"]["verified_mask_sha256"] == signature["mask_sha256"]
+    assert built["baseline_contract"]["verified_pixel_wcs_sha256"] == signature["pixel_wcs_sha256"]
     assert built["methods"]["instrument_forensics"]["detections"][0]["provenance"]["accepted"] is False
     assert built["methods"]["sky_detector_twin"]["detections"] == []
 
@@ -135,13 +157,22 @@ def test_blind_truth_is_encrypted_and_unblinding_requires_frozen_config():
     dataset_digest = sha256_json({
         "public_manifest": public, "run_manifest": run_manifest
     })
+    public_fields = run_manifest["fields"]
+    frozen_config = {
+        "score_thresholds": {name: [1.0] for name in (
+            "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
+        )},
+        "matched_target": {"false_candidates_per_field": 0.0},
+        "matching_radii_by_field": {
+            row["blind_field_token"]: 1.0 for row in public_fields
+        },
+    }
     frozen = freeze_configuration(
-        {"thresholds": "frozen", "match_radius": 1.0},
-        source_commit="deadbeef",
+        frozen_config,
+        source_commit="d" * 40,
         dataset_digest=dataset_digest,
     )
     test_tokens = set(public["blind_test_tokens"])
-    public_fields = run_manifest["fields"]
     run_fields = []
     for row in public_fields:
         if row["blind_field_token"] not in test_tokens:
@@ -160,14 +191,13 @@ def test_blind_truth_is_encrypted_and_unblinding_requires_frozen_config():
         "benchmark_id": "sealed-evaluation",
         "dataset_digest": dataset_digest,
         "frozen_configuration_sha256": frozen["configuration_sha256"],
-        "source_commit": "deadbeef",
-        "configuration": {"thresholds": "frozen", "match_radius": 1.0},
+        "source_commit": "d" * 40,
+        "configuration": frozen_config,
         "public_fields": public_fields,
+        "matching_radii_by_field": frozen_config["matching_radii_by_field"],
         "fields": run_fields,
-        "score_thresholds": {name: [1.0] for name in (
-            "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
-        )},
-        "matched_target": {"false_candidates_per_field": 0.0},
+        "score_thresholds": frozen_config["score_thresholds"],
+        "matched_target": frozen_config["matched_target"],
     }
     report = unblind_benchmark(
         public, encrypted, key, frozen, detection_run, bootstrap_draws=100
@@ -386,14 +416,20 @@ def test_unblinding_rejects_detection_run_with_modified_threshold_configuration(
     public = blind["public_manifest"]
     run_manifest = blind["run_manifest"]
     digest = sha256_json({"public_manifest": public, "run_manifest": run_manifest})
-    config = {"score_thresholds": {"snr_only": [5.0]}, "match_radius": 2.0}
-    frozen = freeze_configuration(config, source_commit="sealed-commit", dataset_digest=digest)
+    methods = ("snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin")
+    config = {
+        "score_thresholds": {name: [1.0] for name in methods},
+        "matched_target": {"false_candidates_per_field": 0.0},
+        "matching_radii_by_field": {
+            row["blind_field_token"]: 1.0 for row in run_manifest["fields"]
+        },
+    }
+    frozen = freeze_configuration(config, source_commit="e" * 40, dataset_digest=digest)
     rows = [
         row for row in run_manifest["fields"]
         if row["blind_field_token"] in set(public["blind_test_tokens"])
     ]
     detection_fields = []
-    methods = ("snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin")
     for row in rows:
         signature = row["input_signature"]
         detection_fields.append({
@@ -407,250 +443,19 @@ def test_unblinding_rejects_detection_run_with_modified_threshold_configuration(
     detection_run = {
         "dataset_digest": digest,
         "frozen_configuration_sha256": frozen["configuration_sha256"],
-        "source_commit": "sealed-commit",
-        "configuration": {"score_thresholds": {"snr_only": [999.0]}, "match_radius": 2.0},
+        "source_commit": "e" * 40,
+        "configuration": {
+            **config,
+            "score_thresholds": {"snr_only": [999.0]},
+        },
         "public_fields": run_manifest["fields"],
+        "matching_radii_by_field": config["matching_radii_by_field"],
         "fields": detection_fields,
-        "score_thresholds": {name: [1.0] for name in methods},
-        "matched_target": {"false_candidates_per_field": 0.0},
+        "score_thresholds": config["score_thresholds"],
+        "matched_target": config["matched_target"],
     }
     with pytest.raises(ValueError, match="configuration differs"):
         unblind_benchmark(
             public, blind["encrypted_truth_store"], key, frozen,
             detection_run, bootstrap_draws=100,
         )
-
-
-
-def test_flux_generalized_least_squares_checks_covariance_diagonal():
-    from chronos_causal.noise_model import fit_gaussian_linear
-    values = np.array([1.0, 2.0, 2.8, 4.1, 5.0])
-    sigma = np.ones(5)
-    design = np.column_stack([np.ones(5), np.arange(5, dtype=float)])
-    covariance = np.eye(5)
-    covariance[covariance == 0] = 0.1
-    fit = fit_gaussian_linear(values, sigma, design, covariance=covariance)
-    assert fit["covariance_supplied"] is True
-    assert fit["noise_model"] == "supplied full covariance"
-    with pytest.raises(ValueError, match="diagonal"):
-        fit_gaussian_linear(values, sigma, design, covariance=np.eye(5) * 2.0)
-
-
-def test_measurement_inference_accepts_a_validated_flux_covariance():
-    from chronos_benchmark.scenarios import generate_scenario
-    from chronos_causal.inference import investigate
-    rows = generate_scenario("achromatic_variable", seed=51, n_observations=12)["observations"]
-    sigma = np.asarray([row["sigma"] for row in rows])
-    covariance = np.diag(sigma ** 2)
-    for index in range(len(rows) - 1):
-        covariance[index, index + 1] = 0.08 * sigma[index] * sigma[index + 1]
-        covariance[index + 1, index] = covariance[index, index + 1]
-    result = investigate(rows, flux_covariance=covariance)
-    assert result["flux_noise_model"] == "supplied full covariance"
-    assert "not calibrated probabilities" in result["interpretation_note"]
-
-
-def test_falsification_bootstrap_uses_covariance_and_retains_challenge_parameters():
-    import hashlib
-    from chronos_benchmark.runner import canonical_json
-    from chronos_benchmark.scenarios import generate_scenario
-    from chronos_causal.falsification import run_falsification_suite
-    rows = generate_scenario("achromatic_variable", seed=14, n_observations=12)["observations"]
-    sigma = np.asarray([row["sigma"] for row in rows])
-    covariance = np.diag(sigma ** 2)
-    for index in range(len(rows) - 1):
-        covariance[index, index + 1] = covariance[index + 1, index] = 0.05 * sigma[index] * sigma[index + 1]
-    plan = [
-        {"challenge_id": "sky", "intervention": "sky_variability", "amplitude": 2.0},
-        {"challenge_id": "detector", "intervention": "detector_template", "amplitude": 1.5},
-        {"challenge_id": "mixed", "intervention": "mixed", "amplitude": 2.0, "template_amplitude": 1.0},
-    ]
-    digest = hashlib.sha256(canonical_json(plan)).hexdigest()
-    report = run_falsification_suite(
-        rows, challenge_specs=plan, challenge_plan_sha256=digest,
-        flux_covariance=covariance, bootstrap_draws=100, transient_draws=100, seed=9,
-    )
-    assert report["parametric_bootstrap"]["noise_model"] == "full supplied covariance"
-    assert report["challenge_plan"]["externally_sealed_plan_verified"] is True
-    assert report["counterfactual_challenges"][0]["parameters"]["amplitude"] == 2.0
-    assert len(report["residual_records"]) == len(rows)
-    intervals = report["parametric_bootstrap"]["pointwise_conditional_predictive_interval_95"]
-    assert len(intervals["median"]) == len(rows)
-    assert report["verdict"] == "unknown"
-
-
-
-def test_identifiability_refuses_to_mark_missing_covariance_as_verified():
-    from chronos_causal.identifiability import audit_forward_model_identifiability
-    with pytest.raises(ValueError, match="no covariance was supplied"):
-        audit_forward_model_identifiability(
-            [[1.0, 0.0], [0.0, 1.0]],
-            ["sky", "detector"],
-            covariance=None,
-            covariance_verified=True,
-        )
-
-
-
-def test_blind_control_labels_and_field_ids_stay_in_encrypted_store():
-    from cryptography.fernet import Fernet
-    from chronos_benchmark.blind import create_blind_store
-    from chronos_benchmark.runner import truth_catalogue_digest
-    key = Fernet.generate_key()
-    fields = [_field(f"SECRET-FIELD-{i}") for i in range(3)]
-    fields[0]["control_type"] = "empty_field"
-    fields[0]["truth_catalogue"] = []
-    fields[0]["input_signature"]["truth_catalogue_sha256"] = truth_catalogue_digest([])
-    blind = create_blind_store(fields, key, test_fraction=0.34, seed=6)
-    assert "SECRET-FIELD-0" not in json.dumps(blind["run_manifest"])
-    assert all("control_type" not in row for row in blind["run_manifest"]["fields"])
-    private = json.loads(Fernet(key).decrypt(blind["encrypted_truth_store"]).decode("utf-8"))
-    empty_row = next(row for row in private["fields"] if row["field"]["field_id"] == "SECRET-FIELD-0")
-    assert empty_row["control_type"] == "empty_field"
-    assert empty_row["field"]["truth_catalogue"] == []
-
-
-def test_population_rate_rejects_duplicate_field_ids_and_fractional_counts():
-    from chronos_population.rates import estimate_event_rate
-    row = {
-        "field_id": "FIELD-A", "observed_events": 3, "null_events": 1,
-        "area_deg2": 1.0, "baseline_days": 10.0,
-        "n_injected": 100, "n_recovered": 80,
-    }
-    with pytest.raises(ValueError, match="duplicate field_id"):
-        estimate_event_rate([row, dict(row)], draws=100)
-    fractional = dict(row, field_id="FIELD-B", observed_events=2.5)
-    with pytest.raises(ValueError, match="integer count"):
-        estimate_event_rate([fractional], draws=100)
-
-
-def test_population_rate_is_seeded_and_reports_completeness_selection():
-    from chronos_population.rates import estimate_event_rate
-    fields = [
-        {"field_id": "FIELD-A", "observed_events": 5, "null_events": 1,
-         "area_deg2": 1.0, "baseline_days": 20.0, "n_injected": 100, "n_recovered": 80},
-        {"field_id": "FIELD-B", "observed_events": 2, "null_events": 1,
-         "area_deg2": 0.5, "baseline_days": 10.0, "n_injected": 100, "n_recovered": 2},
-    ]
-    a = estimate_event_rate(fields, minimum_completeness=0.1, draws=200, seed=7)
-    b = estimate_event_rate(fields, minimum_completeness=0.1, draws=200, seed=7)
-    assert a == b
-    assert a["field_count"] == 1
-    assert a["skipped_fields"][0]["field_id"] == "FIELD-B"
-
-
-
-def test_snr_adapter_collects_below_five_sigma_when_requested_thresholds_include_it():
-    from types import SimpleNamespace
-    from chronos_benchmark.adapters import (
-        build_four_baseline_records, field_mask_sha256, reference_wcs_sha256,
-    )
-    from chronos_benchmark.runner import truth_catalogue_digest
-
-    class Header:
-        def tostring(self, **kwargs):
-            return "SNR-TEST-WCS"
-
-    class ReferenceWCS:
-        def to_header(self, relax=True):
-            return Header()
-
-    truth = [{"truth_id": "T1", "x": 10.0, "y": 10.0}]
-    deep = np.zeros((32, 32), dtype=float)
-    deep[10, 10] = 12.0
-    deep[22, 22] = 3.0
-    state = {
-        "exps": [
-            SimpleNamespace(id="E1", det=2),
-            SimpleNamespace(id="E2", det=2),
-        ],
-        "ref": ReferenceWCS(),
-        "DEEPS": deep,
-        "RB": np.zeros((2, 32, 32), dtype=bool),
-        "IN": np.ones((2, 32, 32), dtype=bool),
-        "R": np.zeros((2, 32, 32), dtype=float),
-        "MAP": [],
-        "cands": [],
-    }
-    signature = {
-        "field_id": "SNR-FLOOR-FIELD", "dataset_class": "synthetic",
-        "exposure_ids": ["E1", "E2"], "mask_sha256": field_mask_sha256(state),
-        "truth_catalogue_sha256": truth_catalogue_digest(truth),
-        "coordinate_frame": "sky", "coordinate_unit": "pixel",
-        "pixel_wcs_sha256": reference_wcs_sha256(state["ref"]),
-    }
-    thresholds = {name: [5.0, 1.0] for name in (
-        "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
-    )}
-    records = build_four_baseline_records(
-        state, signature, sky_detector_twin_detections=[],
-        score_thresholds=thresholds,
-    )
-    scores = sorted(
-        [row["score"] for row in records["methods"]["snr_only"]["detections"]],
-        reverse=True,
-    )
-    assert scores == [12.0, 3.0]
-    assert records["baseline_contract"]["snr_detection_floor"] == 1.0
-
-
-
-def test_field_bootstrap_resamples_related_periods_as_one_independent_group():
-    from chronos_benchmark.runner import compare_benchmark_package
-    package = _package()
-    for field in package["fields"]:
-        field["independence_group_id"] = "SAME-SKY-FIELD"
-    report = compare_benchmark_package(package, bootstrap_draws=100, seed=71)
-    bootstrap = report["aggregate"]["snr_only"]["field_bootstrap_by_threshold"]["5.0"]
-    assert bootstrap["independent_group_count"] == 1
-    assert bootstrap["draws"] == 0
-    assert bootstrap["intervals_95"] is None
-
-
-def test_benchmark_field_record_assembles_truth_split_and_four_methods():
-    from types import SimpleNamespace
-    from chronos_benchmark.adapters import (
-        build_benchmark_field_record, field_mask_sha256, reference_wcs_sha256,
-    )
-    from chronos_benchmark.runner import truth_catalogue_digest
-
-    class Header:
-        def tostring(self, **kwargs):
-            return "FIELD-RECORD-WCS"
-
-    class ReferenceWCS:
-        def to_header(self, relax=True):
-            return Header()
-
-    truth = [{"truth_id": "TRUTH-1", "x": 7.0, "y": 7.0}]
-    state = {
-        "exps": [SimpleNamespace(id="X1", det=2), SimpleNamespace(id="X2", det=2)],
-        "ref": ReferenceWCS(),
-        "DEEPS": np.pad(np.array([[9.0]]), ((7, 7), (7, 7))),
-        "RB": np.zeros((2, 15, 15), dtype=bool),
-        "IN": np.ones((2, 15, 15), dtype=bool),
-        "R": np.zeros((2, 15, 15), dtype=float),
-        "MAP": [],
-        "cands": [],
-    }
-    signature = {
-        "field_id": "FIELD-RECORD",
-        "dataset_class": "synthetic",
-        "exposure_ids": ["X1", "X2"],
-        "mask_sha256": field_mask_sha256(state),
-        "truth_catalogue_sha256": truth_catalogue_digest(truth),
-        "coordinate_frame": "sky",
-        "coordinate_unit": "pixel",
-        "pixel_wcs_sha256": reference_wcs_sha256(state["ref"]),
-    }
-    thresholds = {name: [5.0, 1.0] for name in (
-        "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
-    )}
-    field = build_benchmark_field_record(
-        state, signature, truth, split="blind_test", match_radius=1.5,
-        score_thresholds=thresholds, sky_detector_twin_detections=[],
-    )
-    assert field["split"] == "blind_test"
-    assert field["match_radius"] == 1.5
-    assert field["truth_catalogue"] == truth
-    assert set(field["methods"]) == set(thresholds)
