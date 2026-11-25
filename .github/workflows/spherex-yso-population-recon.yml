@@ -1,0 +1,48 @@
+name: SPHEREx SPLICES YSO population reconnaissance
+
+on:
+  push:
+    branches: [chronos-5-causal-sky-twin]
+    paths:
+      - "research_discovery/spherex/yso_population_recon.py"
+      - ".github/workflows/spherex-yso-population-recon.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spherex-yso-population-recon
+  cancel-in-progress: false
+
+jobs:
+  catalogue-and-field-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out the pinned project branch
+        uses: actions/checkout@v4
+        with:
+          ref: chronos-5-causal-sky-twin
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install IRSA query dependencies
+        run: python -m pip install -r research_discovery/requirements-research.txt
+      - name: Compile the reconnaissance runner
+        run: python -m py_compile research_discovery/spherex/yso_population_recon.py
+      - name: Query predeclared SPLICES fields and DR1 Level-2 coverage
+        run: |
+          set -o pipefail
+          python -m research_discovery.spherex.yso_population_recon 2>&1 | tee yso-population-recon.log
+      - name: Upload catalogue snapshots, queries and field coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spherex-yso-population-recon
+          path: |
+            data/yso_population_recon/
+            yso-population-recon.log
+          if-no-files-found: warn
+          retention-days: 30
