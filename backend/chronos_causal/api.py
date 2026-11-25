@@ -13,10 +13,12 @@ class InvestigationRequest(BaseModel):
     observations: list[dict[str, Any]]
     min_relative_support: float = 0.65
     min_delta_bic: float = 6.0
+    flux_covariance: list[list[float]] | None = None
 
 class CounterfactualRequest(BaseModel):
     observations: list[dict[str, Any]]
     intervention: str
+    flux_covariance: list[list[float]] | None = None
     amplitude: float = 1.0
     template_amplitude: float = 0.0
     motion_x_per_day: float = 0.0
@@ -176,6 +178,7 @@ def causal_investigate(request: InvestigationRequest):
         request.observations,
         min_relative_support=request.min_relative_support,
         min_delta_bic=request.min_delta_bic,
+        flux_covariance=request.flux_covariance,
     ))
 
 @router.post("/causal/counterfactual")
@@ -189,7 +192,9 @@ def causal_counterfactual(request: CounterfactualRequest):
             event_start_mjd=request.event_start_mjd, event_end_mjd=request.event_end_mjd,
             seed=request.seed,
         )
-        altered["analysis"] = investigate(altered["observations"])
+        altered["analysis"] = investigate(
+            altered["observations"], flux_covariance=request.flux_covariance
+        )
         return altered
     return guarded(run)
 
@@ -365,6 +370,7 @@ class SpectralExposureRequest(BaseModel):
 class FalsificationRequest(BaseModel):
     observations: list[dict[str, Any]]
     challenge_specs: list[dict[str, Any]] | None = None
+    flux_covariance: list[list[float]] | None = None
     challenge_plan_sha256: str | None = None
     bootstrap_draws: int = 1000
     transient_draws: int = 500
@@ -430,6 +436,7 @@ def causal_falsify(request: FalsificationRequest):
         request.observations,
         challenge_specs=request.challenge_specs,
         challenge_plan_sha256=request.challenge_plan_sha256,
+        flux_covariance=request.flux_covariance,
         bootstrap_draws=request.bootstrap_draws,
         transient_draws=request.transient_draws,
         seed=request.seed,
