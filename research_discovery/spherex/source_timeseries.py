@@ -15,6 +15,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import numpy as np
+
 from chronos_causal.wavelength_gate import validate_science_wavelength
 
 SCHEMA = "chronos-spherex-source-timeseries/1.0"
@@ -207,8 +209,13 @@ def assemble_source_timeseries(
             raise ValueError(f"measurement {measurement_id} wavelength, bandwidth and sigma must be positive")
         if measurement.get("fit_status") != "success":
             raise ValueError(f"measurement {measurement_id} was not produced by a successful extraction fit")
-        if isinstance(measurement.get("n_pixels"), bool) or int(measurement.get("n_pixels", 0)) < 1:
-            raise ValueError(f"measurement {measurement_id} must record a positive n_pixels")
+        raw_n_pixels = measurement.get("n_pixels")
+        try:
+            n_pixels = int(raw_n_pixels)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError(f"measurement {measurement_id} must record a positive integer n_pixels") from None
+        if isinstance(raw_n_pixels, bool) or n_pixels < 1 or n_pixels != raw_n_pixels:
+            raise ValueError(f"measurement {measurement_id} must record a positive integer n_pixels")
         if str(measurement.get("flux_unit", "")).strip() != "Jy":
             raise ValueError(f"measurement {measurement_id} integrated flux unit must be Jy")
         if measurement.get("valid") is not True:
@@ -258,7 +265,7 @@ def assemble_source_timeseries(
             "extraction_method": dict(extractor),
             "quality_flags": list(measurement.get("quality_flags") or []),
             "fit_status": "success",
-            "n_pixels": int(measurement["n_pixels"]),
+            "n_pixels": n_pixels,
         }
         validate_science_wavelength(row, index=index)
         rows_by_source[source_id].append(row)
