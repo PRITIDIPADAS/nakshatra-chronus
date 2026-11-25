@@ -531,3 +531,156 @@ def test_zero_measured_parallax_still_propagates_its_uncertainty_baseline():
     assert report["parallax_baseline_au"] > 0
     assert report["parallax_shift_east_mas"] == pytest.approx(0.0)
     assert report["parallax_shift_north_mas"] == pytest.approx(0.0)
+
+
+def _population_real_field(field_id="FIELD-1", source_id="YSO-1", *,
+                           omit_feature_epochs=(), duplicate_source=False):
+    from copy import deepcopy
+
+    rows = []
+    band_wavelengths = {
+        "blue": [2.82, 2.88],
+        "feature": [3.06, 3.10, 3.14],
+        "red": [3.32, 3.38],
+    }
+    for epoch_index, mjd in enumerate((60000.0, 60010.0, 60020.0)):
+        for band, wavelengths in band_wavelengths.items():
+            if band == "feature" and epoch_index in omit_feature_epochs:
+                continue
+            for wavelength_index, wavelength in enumerate(wavelengths):
+                rows.append({
+                    "source_id": source_id,
+                    "observation_id": f"{field_id}-E{epoch_index}",
+                    "mjd": mjd,
+                    "wavelength_um": wavelength,
+                    "flux": 10.0,
+                    "sigma": 1.0,
+                    "flux_unit": "Jy",
+                    "calibration_group": "DR1-D2-TEST-CAL",
+                    "wavelength_unit": "um",
+                    "wavelength_validated": True,
+                    "wavelength_source": "CWAVE/CBAND",
+                    "wavelength_provenance": {
+                        "decision": "compatible",
+                        "compatibility_group": "DR1-D2-TEST-CAL",
+                        "science_sha256": "a" * 64,
+                        "calibration_sha256": "b" * 64,
+                        "native_mef_audit_sha256": "c" * 64,
+                        "solid_angle_sha256": "d" * 64,
+                        "science_uri": "https://example.org/science.fits",
+                        "calibration_uri": "https://example.org/wavelength.fits",
+                        "solid_angle_uri": "https://example.org/solid-angle.fits",
+                        "pixel_valid": True,
+                    },
+                    "valid": True,
+                })
+    source = {
+        "source_id": source_id,
+        "sample_class": "young_stellar_object",
+        "classification_reference": "https://example.org/independent-classification",
+        "observations": rows,
+    }
+    return {
+        "field_id": field_id,
+        "dataset_class": "real",
+        "independent_field": True,
+        "null_control_id": f"NULL-{field_id}",
+        "null_control_to_science_exposure_ratio": 0.25,
+        "area_deg2": 0.5,
+        "baseline_days": 20.0,
+        "n_injected": 100,
+        "n_recovered": 90,
+        "observed_events": 12,
+        "null_events": 8,
+        "sources": [source],
+    }
+
+
+def test_population_coverage_requires_feature_and_both_continua_in_same_epochs():
+    from chronos_population.coverage import assess_population_coverage
+
+    field = _population_real_field(omit_feature_epochs=(1, 2))
+    result = assess_population_coverage(
+        [field],
+        minimum_independent_fields=1,
+        feature_interval_um=[3.05, 3.15],
+        blue_continuum_um=[2.8, 2.95],
+        red_continuum_um=[3.3, 3.4],
+    )
+    source = result["fields"][0]["sources"][0]
+    assert source["feature_samples"] == 3
+    assert source["feature_epochs"] == 1
+    assert source["complete_feature_epochs"] == 1
+    assert result["eligible_for_predeclared_population_protocol"] is False
+    assert "feature_and_both_continua_not_jointly_sampled_per_epoch" in source["reasons"]
+
+
+def test_population_coverage_passes_only_with_repeated_same_epoch_spectral_coverage():
+    from chronos_population.coverage import assess_population_coverage
+
+    result = assess_population_coverage(
+        [_population_real_field()],
+        minimum_independent_fields=1,
+        feature_interval_um=[3.05, 3.15],
+        blue_continuum_um=[2.8, 2.95],
+        red_continuum_um=[3.3, 3.4],
+    )
+    assert result["eligible_for_predeclared_population_protocol"] is True
+    assert result["fields"][0]["sources"][0]["complete_feature_epochs"] == 3
+
+
+def test_population_coverage_rejects_same_source_counted_in_multiple_fields():
+    from copy import deepcopy
+    from chronos_population.coverage import assess_population_coverage
+
+    first = _population_real_field("FIELD-A", "REPEATED-SOURCE")
+    second = _population_real_field("FIELD-B", "REPEATED-SOURCE")
+    result = assess_population_coverage(
+        [first, second],
+        minimum_independent_fields=2,
+        feature_interval_um=[3.05, 3.15],
+        blue_continuum_um=[2.8, 2.95],
+        red_continuum_um=[3.3, 3.4],
+    )
+    for field in result["fields"]:
+        assert "source_reused_across_fields" in field["sources"][0]["reasons"]
+        assert field["eligible"] is False
+    assert result["eligible_for_predeclared_population_protocol"] is False
+
+
+def test_population_event_rate_scales_null_control_to_science_exposure():
+    from chronos_population.rates import estimate_event_rate
+
+    field = _population_real_field()
+    result = estimate_event_rate([field], draws=1000, seed=19)
+    assert result["field_count"] == 1
+    included = result["included_fields"][0]
+    assert included["null_control_to_science_exposure_ratio"] == pytest.approx(0.25)
+    assert included["null_events_expected_in_science_exposure"] == pytest.approx(2.0)
+    assert result["event_rate_per_sqdeg_day"]["median"] >= 0
+    assert result == estimate_event_rate([field], draws=1000, seed=19)
+
+
+def test_population_event_rate_skips_synthetic_and_unattested_fields():
+    from copy import deepcopy
+    from chronos_population.rates import estimate_event_rate
+
+    valid = _population_real_field("REAL")
+    synthetic = _population_real_field("SYNTH")
+    synthetic["dataset_class"] = "synthetic"
+    unattested = _population_real_field("UNATTESTED")
+    unattested["independent_field"] = False
+    result = estimate_event_rate([valid, synthetic, unattested], draws=1000, seed=23)
+    assert result["field_count"] == 1
+    assert {row["reason"] for row in result["skipped_fields"]} == {
+        "field_not_labelled_real", "independence_not_attested"
+    }
+
+
+def test_population_event_rate_does_not_subtract_unscaled_null_counts():
+    from chronos_population.rates import estimate_event_rate
+
+    field = _population_real_field()
+    field.pop("null_control_to_science_exposure_ratio")
+    with pytest.raises(ValueError, match="no real, independent fields"):
+        estimate_event_rate([field], draws=1000, seed=29)
