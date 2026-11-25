@@ -56,18 +56,18 @@ def _feasibility_record(candidate: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("verified feasibility requires a boolean feasible field")
     window_start = supplied.get("window_start_utc")
     window_end = supplied.get("window_end_utc")
-    if (window_start is None) != (window_end is None):
-        raise ValueError("feasibility window_start_utc and window_end_utc must be supplied together")
-    normalized_window = None
-    if window_start is not None:
-        start = _utc_timestamp(window_start, "window_start_utc")
-        end = _utc_timestamp(window_end, "window_end_utc")
-        if end <= start:
-            raise ValueError("feasibility window end must be later than its start")
-        normalized_window = {
-            "start_utc": start.isoformat(),
-            "end_utc": end.isoformat(),
-        }
+    if window_start is None or window_end is None:
+        raise ValueError(
+            "verified feasibility requires both window_start_utc and window_end_utc"
+        )
+    start = _utc_timestamp(window_start, "window_start_utc")
+    end = _utc_timestamp(window_end, "window_end_utc")
+    if end <= start:
+        raise ValueError("feasibility window end must be later than its start")
+    normalized_window = {
+        "start_utc": start.isoformat(),
+        "end_utc": end.isoformat(),
+    }
     return {
         "status": "verified",
         "feasible": feasible,
@@ -156,6 +156,15 @@ def plan_observations(
     ranked, rejected = [], []
     for index, candidate in enumerate(candidates):
         feasibility = _feasibility_record(candidate)
+        if feasibility.get("status") == "verified" and feasibility.get("feasible") is True:
+            requested_time = _utc_timestamp(candidate.get("time"), "candidate time")
+            window = feasibility.get("window") or {}
+            window_start = _utc_timestamp(window.get("start_utc"), "verified window start")
+            window_end = _utc_timestamp(window.get("end_utc"), "verified window end")
+            if not window_start <= requested_time <= window_end:
+                raise ValueError(
+                    "candidate time falls outside the externally verified feasibility window"
+                )
         visible = candidate.get("visible", True)
         feasible_flag = candidate.get("feasible", True)
         if not isinstance(visible, bool) or not isinstance(feasible_flag, bool):
@@ -241,7 +250,7 @@ def plan_observations(
         "prior_sensitivity": sensitivity,
         "method": "expected reduction in Shannon entropy under Gaussian predictive distributions",
         "limitations": [
-            "Visibility and archive availability are not calculated here; they must come from the recorded external feasibility source.",
+            "The planner validates that the requested candidate time lies within the supplied external feasibility window; it does not authenticate the external service or its data.",
             "An unverified candidate can be information-ranked but is not asserted to be observable or available.",
             "Inputs must be physical forecasts, not guessed values.",
             "Prior sensitivity is evaluated only for the alternative prior sets supplied by the caller.",
