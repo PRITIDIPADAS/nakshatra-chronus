@@ -145,3 +145,18 @@ def test_spectral_epoch_allows_masked_invalid_wavelength_pixels():
         "wavelength_provenance": _real_provenance(),
     }
     validate_spectral_epoch(epoch, index=0)
+
+
+def test_legacy_pipeline_does_not_match_display_only_wavelengths():
+    from types import SimpleNamespace
+    from pipeline import color_distance
+    a = SimpleNamespace(lam=2.1, bw=0.02, lam_ok=False)
+    b = SimpleNamespace(lam=2.11, bw=0.02, lam_ok=True)
+    assert color_distance(a, b) == float("inf")
+
+
+def test_exposure_forecast_rejects_display_only_wavelengths():
+    from types import SimpleNamespace
+    from core import forecast
+    with pytest.raises(ValueError, match="CWAVE/CBAND"):
+        forecast(SimpleNamespace(lam=2.1, lam_ok=False), [12.0, 0.0])
