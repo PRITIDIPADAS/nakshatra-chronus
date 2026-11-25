@@ -201,6 +201,9 @@ def verify_frozen_configuration(record: Mapping[str, Any]) -> dict[str, Any]:
 def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store: bytes,
                       key: bytes, frozen_configuration: Mapping[str, Any],
                       detection_run: Mapping[str, Any], *,
+                      custodian_attestation: Mapping[str, Any] | None = None,
+                      custodian_public_key: bytes | None = None,
+                      expected_custodian_public_key_sha256: str | None = None,
                       bootstrap_draws: int = 2000, seed: int = 20261125) -> dict[str, Any]:
     """Verify a frozen run, reveal held-out truth and evaluate the common-input package."""
     if public_manifest.get("schema") != BLIND_SCHEMA:
@@ -250,6 +253,17 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         raise ValueError("frozen matching radii do not match the public field manifest")
     if canonical_json(detection_run.get("matching_radii_by_field")) != canonical_json(frozen_radii):
         raise ValueError("detection run matching radii differ from the frozen configuration")
+
+    from .custodian_attestation import verify_custodian_attestation
+    custodian_attestation_report = verify_custodian_attestation(
+        custodian_attestation,
+        custodian_public_key,
+        expected_public_key_sha256=expected_custodian_public_key_sha256,
+        public_manifest=public_manifest,
+        run_manifest=canonical_run_manifest,
+        encrypted_truth_store=encrypted_truth_store,
+        frozen_configuration=frozen_configuration,
+    )
 
     try:
         private = json.loads(_fernet(key).decrypt(encrypted_truth_store).decode("utf-8"))
@@ -325,6 +339,8 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         "blind_evaluation": {
             "preregistration_sha256": frozen_config.get("preregistration_sha256"),
             "configuration_freeze_verified": bool(frozen_check["valid"]),
+            "custodian_attestation_verified": bool(custodian_attestation_report.get("valid")),
+            "custodian_attestation": custodian_attestation_report,
             "truth_released_after_run_freeze": True,
             "unblinding_record": unblinding_record,
             "source_commit": frozen_configuration["source_commit"],
@@ -333,7 +349,7 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
     }
     report = compare_benchmark_package(
         package, bootstrap_draws=bootstrap_draws, seed=seed,
-        verified_blind_protocol=True,
+        verified_blind_protocol=bool(custodian_attestation_report.get("valid")),
     )
     report["blind_protocol"] = {
         "unblinded_utc": _utc_now(),
@@ -344,6 +360,7 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         "dataset_digest": frozen_configuration["dataset_digest"],
         "blind_field_count": len(packages),
         "truth_released_after_run_freeze": True,
+        "custodian_attestation": custodian_attestation_report,
         "evaluation_scope": "held-out fields only",
     }
     return report
