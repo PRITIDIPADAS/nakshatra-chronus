@@ -36,6 +36,8 @@ class SpectroTemporalRequest(BaseModel):
     time_bandwidth_days: float
     min_neighbors: int = 2
     calibration_group: str | None = None
+    measurement_covariance: list[list[float]] | None = None
+    shared_calibration_fractional_sigma: float = 0.0
 
 class FeatureEvolutionRequest(BaseModel):
     epochs: list[dict[str, Any]]
@@ -237,6 +239,8 @@ def spectrotemporal_reconstruct(request: SpectroTemporalRequest):
         time_bandwidth_days=request.time_bandwidth_days,
         min_neighbors=request.min_neighbors,
         calibration_group=request.calibration_group,
+        measurement_covariance=request.measurement_covariance,
+        shared_calibration_fractional_sigma=request.shared_calibration_fractional_sigma,
     ))
 
 @router.post("/spectrotemporal/feature-evolution")
