@@ -121,10 +121,24 @@ def test_real_mef_injection_records_when_source_shot_noise_is_enabled():
         image, variance, flags, psf, flux_levels=[40.0], n_per_level=1,
         snr_threshold=1000, source_exclusion_radius=0, seed=12,
     )
+    record = {
+        "verification_status": "verified",
+        "electrons_per_image_unit": 250.0,
+        "science_file_sha256": "a" * 64,
+        "science_observation_id": "SYNTHETIC-FIXTURE",
+        "detector": "D2",
+        "image_unit": "MJy/sr",
+        "calibration_uri": "https://example.invalid/calibration.fits",
+        "calibration_file_path": "synthetic-fixture-calibration.fits",
+        "calibration_sha256": "b" * 64,
+        "conversion_method": "unit-test fixture only",
+        "verified_by": "unit-test",
+        "verified_utc": "2026-01-01T00:00:00Z",
+    }
     physical = run_injection_recovery(
         image, variance, flags, psf, flux_levels=[40.0], n_per_level=1,
         snr_threshold=1000, source_exclusion_radius=0, seed=12,
-        electrons_per_image_unit=250.0,
+        electrons_per_image_unit=250.0, electron_calibration_record=record,
     )
     assert deterministic["source_photon_noise"]["enabled"] is False
     assert physical["source_photon_noise"]["enabled"] is True
