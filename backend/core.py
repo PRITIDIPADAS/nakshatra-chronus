@@ -502,7 +502,9 @@ def ratio_rows(exps, rows):
 
 
 def forecast(e, sed):
-    """Expected signal to noise of the target in one exposure from an AB magnitude model. Made before any measurement."""
+    """Expected signal to noise before observation, requiring a science wavelength assignment."""
+    if not getattr(e, "lam_ok", True):
+        raise ValueError("forecast requires a compatible science wavelength from CWAVE/CBAND; display wavelengths are not accepted")
     m = model_mag(sed, e.lam)
     yy, xx = np.indices(e.img.shape)
     x, y = e.xy
