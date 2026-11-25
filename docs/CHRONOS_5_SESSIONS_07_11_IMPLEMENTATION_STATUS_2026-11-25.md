@@ -123,3 +123,12 @@ A workflow validator can prove that the expected artifacts exist and that their 
 Push workflow #967 / 45657439621 on commit f5fe73471c83d1e9639ebf204abbf139ae01da77 passed **334 tests with 7 warnings**, both JavaScript syntax checks and the M101 real-field retrieve/audit/hash-validation/artifact-upload job. The matching PR workflow #968 / 45657453959 also passed.
 
 Population-rate hardening after the earlier 316-test run is documented in the empirical status and capability ledger: audit-frozen completeness thresholds, digest-bound audit revalidation, area×time checks for null controls, signed pooled excess counts before a single non-negative boundary, and a required coverage audit in the generic population-rate API. This does not close the external blind benchmark, independent calibration review or YSO population acceptance gates.
+
+
+## Current-head verification — 25 November 2026
+
+Latest branch head `84300c5ed225dc5ba190e8dac8b32650d37eafeb` passed [push workflow 45663142338](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663142338): **338 tests passed, 7 warnings**, both JavaScript syntax checks, M101 native calibration/provenance audit, strict hash validator and artifact upload. Companion PR run [45663158946](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663158946) passed **338 tests, 12 warnings**.
+
+The latest M101 artifact is 15046223269, 91,213,911 bytes, SHA-256 `5e7aeeeb79ff4f9b2ae8d97e9b56a0c3e47ee01c234dffd84c97ed29541747b0`. The artifact contains the native science MEF and calibration files and the full evidence reports. The absolute-gain-derived electron conversion remains pending independent calibration review.
+
+The latest code adds fail-closed source-coordinate identity validation to the SIAv2 matcher; duplicate source IDs with conflicting sky positions and invalid ICRS coordinates are no longer silently accepted. The six-region exact-roster rerun [45663010413](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663010413) and refreshed SIAv2 source/product reconnaissance [45663142077](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663142077) are still in progress. The completed prior exploratory six-region result remains run [45639895735](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45639895735); Lupus III's 0/20 in all three flux bins remains an unresolved adverse result.

@@ -170,3 +170,12 @@ The SIAv2 matcher now emits exact source/product pair records as well as compact
 The population inventory analyzer now uses `archive_product_id` rather than assuming legacy `planeid` for schema 1.1 cross-region source/product overlap. Schema 1.0 continues to use its historical plane-ID interpretation. Missing per-source product manifests now set the region and aggregate product-match result to unavailable rather than zero. Regression tests cover missing manifests and a repeated source/product identity across fields.
 
 The matcher’s `complete_below_declared_caps` status is counted as a completed archive-metadata query by the analyzer, but it is not a claim of temporal completeness or usable cadence. The exact current branch has pending CI; no new pass is claimed here.
+
+
+## Current-head code verification — 25 November 2026
+
+Branch head `84300c5ed225dc5ba190e8dac8b32650d37eafeb` passed 338 tests (7 warnings) and both JavaScript syntax checks in push workflow [45663142338](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663142338); the PR companion [45663158946](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663158946) passed 338 tests with 12 warnings. These tests include coverage/rate API digest binding, repeated same-epoch feature/continuum sampling, calibration group consistency, control area×time scaling, signed pooled excess tests, and the source-identity coordinate ambiguity gate.
+
+The latest code hardens SPLICES/SIAv2 candidate identity: duplicate source IDs with conflicting ICRS coordinates are omitted from source-to-product matching and make the source-coordinate inventory incomplete. This is an archive metadata association only; it does not create source photometry or usable epochs. Current live SIAv2 and exact-roster six-field workflows remain pending at the time of this note.
+
+No Session 19 population estimate is produced. Independent classifications, usable source-level spectral epochs, multidimensional selection/completeness, contamination modeling, external preregistration and independent review are still required.

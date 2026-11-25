@@ -98,3 +98,16 @@ The following cannot be truthfully completed by repository code or by the develo
 The current implementation writes an exact `candidate_source_product_matches.csv` manifest per region and an all-region aggregate. Schema-1.1 source/product overlap is keyed by source ID plus archive product ID, not by a Level-2 plane ID inferred from SIAv2 metadata. Missing pair manifests fail closed as unavailable. This is still positional archive-product metadata: it does not establish source flux, spectral quality, independent temporal epochs or YSO identity.
 
 Latest branch head at this edit: `fc64357658bc042fc27623b743ae7c7e08226116`. Full test/M101 and refreshed six-region YSO workflows were pending, so this is a code-state update only.
+
+
+## Current-head verification — 25 November 2026
+
+Current branch head at the time of this refresh: `84300c5ed225dc5ba190e8dac8b32650d37eafeb`.
+
+- [Push workflow 45663142338](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663142338) completed successfully. The Python suite passed **338 tests with 7 warnings**; both JavaScript syntax checks passed. Its M101 DR1 D2 archive retrieval, native FITS/calibration compatibility audit, strict machine-readable evidence validator and artifact upload all passed.
+- Companion [PR workflow 45663158946](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663158946) passed **338 tests with 12 warnings** and both JavaScript syntax checks.
+- Current M101 artifact 15046223269 is 91,213,911 bytes; the locally downloaded ZIP SHA-256 exactly matched GitHub's digest: `5e7aeeeb79ff4f9b2ae8d97e9b56a0c3e47ee01c234dffd84c97ed29541747b0`. It contains the native science MEF, spectral-WCS, absolute-gain and solid-angle FITS products, audit records, archive manifest and calibrated-Jy injection report.
+- The exact source-coordinate ambiguity fix is included in the 338-test run: invalid ICRS coordinates and duplicate source IDs with conflicting sky positions block source/product matching rather than silently selecting the first coordinate.
+- Fresh SPLICES/DR1/QR3 source-to-product manifest workflow [45663142077](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663142077) is still in progress. The exact-roster six-field rerun [45663010413](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663010413) is also still in progress. They must not be described as completed until their reports/artifacts are available.
+
+The previous six-region exploratory run [45639895735](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45639895735) remains complete and strict-gate verified. The current rerun adds exact roster acceptance. Both are non-blind one-exposure-per-region injection/recovery studies, not a four-method benchmark.

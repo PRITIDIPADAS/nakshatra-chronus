@@ -118,3 +118,16 @@ These are software/statistical-contract improvements only. No source-photometry 
 The six-region pipeline no longer relies on the rejected direct SPLICES/artifact/plane TAP join. It uses local spherical gnomonic point-in-polygon matching against SIAv2 `s_region` metadata, and now preserves the exact source-to-product pairs in per-region and aggregate CSV manifests. The inventory analyzer consumes the pair manifest and computes cross-region overlap using archive product IDs. Missing pair files are marked unavailable, not zero. This is a provenance/coverage improvement only; it is not source photometry, a verified time series, a new YSO discovery, or a population result.
 
 The latest committed code head when this note was updated is `fc64357658bc042fc27623b743ae7c7e08226116`. The combined tests/M101 and refreshed six-region YSO workflows were pending; no passing status is claimed for that revision.
+
+
+## Current-head evidence refresh — 25 November 2026
+
+The latest fully completed combined push/M101 workflow is [45663142338](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663142338), on branch head `84300c5ed225dc5ba190e8dac8b32650d37eafeb`. The test job passed **338 tests with 7 warnings**; both JavaScript syntax checks passed. The real M101 job completed native retrieval, compatibility/provenance audit, strict evidence validation and artifact upload. Artifact 15046223269 is 91,213,911 bytes with SHA-256 `5e7aeeeb79ff4f9b2ae8d97e9b56a0c3e47ee01c234dffd84c97ed29541747b0`. The companion PR run [45663158946](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663158946) passed **338 tests with 12 warnings**.
+
+The current tests include fail-closed checks for catalogue source IDs with conflicting coordinates and invalid ICRS bounds. The SIAv2 matcher excludes ambiguous source identities rather than arbitrarily using the first TAP row; a coordinate-inventory conflict makes the matching result a lower bound/incomplete.
+
+A fresh SIAv2 source-to-product archive reconnaissance is running at [45663142077](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663142077). The six-region exact-roster calibrated-Jy rerun is running at [45663010413](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663010413). Neither run has a completed result/artifact at the time of this update; the previously completed six-field result [45639895735](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45639895735) remains the latest completed multi-field evidence.
+
+The current M101 artifact retains the 2040×2040 native DR1 D2 science MEF, exact spectral-WCS and absolute-gain provenance, supplemental solid-angle map, native audit and 3×20 Jy source-Poisson injection evidence. The gain-to-electron convention remains `derived_pending_independent_review`; automated CI is not calibration sign-off.
+
+Open empirical gates remain: independent instrument calibration review; external preregistration and independent custody; four-method benchmark on common real held-out fields; validated source spectra/epochs and a selection/contamination-aware YSO analysis; independent astronomical reproduction; validated scientific release.
