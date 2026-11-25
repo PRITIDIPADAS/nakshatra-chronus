@@ -128,7 +128,8 @@ def inspect_region(region: dict) -> dict:
         "SELECT p.energy_bandpassname, COUNT(*) AS n_exposures, "
         "MIN(p.time_bounds_lower) AS first_time, MAX(p.time_bounds_upper) AS last_time "
         "FROM spherex.artifact a JOIN spherex.plane p ON p.planeid = a.planeid "
-        f"WHERE {region_predicate(region, 'p.ra', 'p.dec')} "
+        "WHERE 1 = CONTAINS("
+        f"POINT('ICRS', {region['ra_deg']:.8f}, {region['dec_deg']:.8f}), p.poly) "
         "AND LOWER(a.uri) LIKE '%/dr1/level2/%' "
         "AND p.energy_bandpassname IN ("
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
