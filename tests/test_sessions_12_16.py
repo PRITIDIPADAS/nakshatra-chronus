@@ -107,3 +107,70 @@ def test_spectrotemporal_reconstruction_keeps_unsupported_cells_missing():
     assert result["valid"] == [[False, True, False]]
     assert np.isnan(result["flux"][0][0])
     assert np.isnan(result["flux"][0][2])
+
+
+def test_equivalent_width_reports_lsf_sampling_and_possible_blending():
+    from chronos_addons.molecular import measure_equivalent_width
+    from chronos_addons.spectral import Spectrum
+
+    wave = np.linspace(1.0, 2.0, 101)
+    flux = 1.0 - 0.2 * np.exp(-0.5 * ((wave - 1.5) / 0.04) ** 2)
+    spectrum = Spectrum(wave, flux, sigma=np.full(wave.size, 0.01))
+    result = measure_equivalent_width(
+        spectrum,
+        [1.4, 1.6],
+        [[1.2, 1.3], [1.7, 1.8]],
+        resolution={
+            "resolving_power": 50.0,
+            "source_uri": "https://irsa.ipac.caltech.edu/spherex/dr1/cal/lsf/D2.fits",
+            "sha256": "a" * 64,
+        },
+        potential_blend_intervals_um=[[1.59, 1.64]],
+    )
+    resolution = result["resolution_diagnostics"]
+    assert resolution["status"] == "provided"
+    assert resolution["lsf_fwhm_um"] == pytest.approx(0.03)
+    assert resolution["samples_per_fwhm"] == pytest.approx(3.0)
+    assert resolution["sampling_status"] == "sampled_at_two_or_more_pixels_per_fwhm"
+    assert resolution["source_reference_recorded"] is True
+    assert result["resolution_diagnostics"]["blend_diagnostics"]["status"] == "possible_blend"
+
+
+def test_equivalent_width_does_not_call_unverified_resolution_calibrated():
+    from chronos_addons.molecular import measure_equivalent_width
+    from chronos_addons.spectral import Spectrum
+
+    wave = np.linspace(1.0, 2.0, 101)
+    spectrum = Spectrum(wave, np.ones(wave.size), sigma=np.full(wave.size, 0.01))
+    with pytest.raises(ValueError, match="disagree"):
+        measure_equivalent_width(
+            spectrum, [1.4, 1.6], [[1.2, 1.3], [1.7, 1.8]],
+            resolution={"resolving_power": 100.0, "lsf_fwhm_um": 0.1},
+        )
+
+
+def test_feature_evolution_preserves_resolution_and_blend_reports():
+    from chronos_spectrotemporal.feature_evolution import measure_feature_evolution
+
+    wave = np.linspace(1.0, 2.0, 101)
+    flux = (1.0 - 0.2 * np.exp(-0.5 * ((wave - 1.5) / 0.04) ** 2)).tolist()
+    epoch = {
+        "epoch_id": "E1",
+        "mjd": 60000.0,
+        "wavelength_um": wave.tolist(),
+        "flux": flux,
+        "sigma": [0.01] * wave.size,
+        "valid": [True] * wave.size,
+        "calibration_group": "SYNTHETIC-FEATURE",
+        "wavelength_source": "synthetic_fixture",
+        "wavelength_unit": "um",
+        "wavelength_validated": True,
+        "synthetic_fixture": True,
+        "resolution": {"lsf_fwhm_um": 0.03},
+    }
+    result = measure_feature_evolution(
+        [epoch], [1.4, 1.6], [[1.2, 1.3], [1.7, 1.8]],
+        potential_blend_intervals_um=[[1.59, 1.64]],
+    )
+    assert result["epochs"][0]["resolution_diagnostics"]["status"] == "provided"
+    assert result["epochs"][0]["blend_diagnostics"]["status"] == "possible_blend"
