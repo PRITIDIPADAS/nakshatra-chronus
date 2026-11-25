@@ -50,10 +50,12 @@ jobs:
       - name: Retrieve native science MEF and exact provenance-linked calibration inputs
         run: |
           set -euo pipefail
-          CHRONOS_GIT_COMMIT="$GITHUB_SHA" python -m research_discovery.spherex.run_provenance_calibration_audit \
-            --field-label M101 \
+          CHRONOS_GIT_COMMIT="$GITHUB_SHA" python -m research_discovery.spherex.run_real_field_audit \
+            --field "M101,210.80227,54.34895" \
             --science-uri "ibe/data/spherex/dr1/level2/2025W19_2B/l2b-v27-2026-198/2/level2_2025W19_2B_0346_1D2_spx_l2b-v27-2026-198.fits" \
-            --max-total-bytes 450000000 \
+            --bandpass SPHEREx-D2 \
+            --release dr1 \
+            --limit-per-family 5 \
             --out data/spherex_m101_audit 2>&1 | tee spherex-real-field.log
 
       - name: Upload science MEF, exact calibration inputs and provenance records
