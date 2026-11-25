@@ -125,15 +125,25 @@ def assess_population_coverage(
         if not str(field.get("null_control_id", "")).strip():
             reasons.append("null_control_not_identified")
 
-        null_ratio = _finite_positive(field.get("null_control_to_science_exposure_ratio"))
-        if null_ratio is None:
-            reasons.append("null_control_exposure_ratio_missing_or_invalid")
         area = _finite_positive(field.get("area_deg2"))
         if area is None:
             reasons.append("survey_area_missing_or_invalid")
         baseline_days = _finite_positive(field.get("baseline_days"))
         if baseline_days is None:
             reasons.append("survey_baseline_missing_or_invalid")
+        null_area = _finite_positive(field.get("null_control_area_deg2"))
+        if null_area is None:
+            reasons.append("null_control_area_missing_or_invalid")
+        null_days = _finite_positive(field.get("null_control_baseline_days"))
+        if null_days is None:
+            reasons.append("null_control_baseline_missing_or_invalid")
+        null_ratio = _finite_positive(field.get("null_control_to_science_exposure_ratio"))
+        if null_ratio is None:
+            reasons.append("null_control_exposure_ratio_missing_or_invalid")
+        if all(value is not None for value in (area, baseline_days, null_area, null_days, null_ratio)):
+            derived_ratio = (area * baseline_days) / (null_area * null_days)
+            if not math.isclose(null_ratio, derived_ratio, rel_tol=1e-6, abs_tol=1e-12):
+                reasons.append("null_control_exposure_ratio_inconsistent_with_area_time")
 
         injected = field.get("n_injected", 0)
         recovered = field.get("n_recovered", 0)
@@ -216,6 +226,9 @@ def assess_population_coverage(
 
             if len(flux_units) > 1:
                 source_reasons.append("inconsistent_flux_units")
+            calibration_groups = sorted({row[3] for row in valid_rows})
+            if len(calibration_groups) > 1 and source.get("calibration_bridge_verified") is not True:
+                source_reasons.append("multiple_calibration_groups_without_verified_bridge")
 
             epoch_count = len(epoch_samples)
             feature_samples = sum(len(value["feature"]) for value in epoch_samples.values())
@@ -294,6 +307,8 @@ def assess_population_coverage(
             "null_control_to_science_exposure_ratio": null_ratio,
             "area_deg2": area,
             "baseline_days": baseline_days,
+            "null_control_area_deg2": null_area,
+            "null_control_baseline_days": null_days,
             "sources": source_reports,
         })
 
