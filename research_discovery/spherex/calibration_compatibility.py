@@ -1,0 +1,50 @@
+"""Conservative release, detector, pipeline and calibration pairing decisions."""
+from __future__ import annotations
+import re
+from pathlib import Path
+from typing import Any, Mapping
+import numpy as np
+
+def _detector(value):
+    if value is None:return None
+    s=str(value).strip().upper()
+    if s.startswith("DETECTOR"):s=s.replace("DETECTOR","")
+    if s.startswith("D"):s=s[1:]
+    return "D"+s if s in {"1","2","3","4","5","6"} else None
+
+def level2_filename_metadata(path):
+    name=Path(path).name
+    m=re.match(r"level2_(?P<obs>.+?)D(?P<det>[1-6])_spx_l2b-v(?P<version>[0-9.]+)-(?P<date>\d{4}-\d{3})\.fits$",name,re.I)
+    return m.groupdict() if m else {}
+
+def compatibility_decision(science:Mapping[str,Any],calibration:Mapping[str,Any],*,required_frame="native_detector"):
+    """Only returns compatible when every required fact is explicitly present and equal.
+
+    The caller must extract these values from actual FITS headers, archive path and HISTORY.
+    Missing provenance remains review_required; it is never guessed from nearby filenames.
+    """
+    checks={}
+    pairs=(("release","release"),("detector","detector"),("pipeline_version","pipeline_version"),
+           ("processing_date","processing_date"),("coordinate_frame","coordinate_frame"))
+    for key,calkey in pairs:
+        a=science.get(key); b=calibration.get(calkey)
+        if key=="detector": a,b=_detector(a),_detector(b)
+        if not a or not b: checks[key]={"status":"unknown","science":a,"calibration":b}
+        else: checks[key]={"status":"pass" if str(a).lower()==str(b).lower() else "fail","science":a,"calibration":b}
+    frame=checks["coordinate_frame"]
+    if frame["status"]=="pass" and str(frame["science"]).lower()!=required_frame.lower():
+        frame["status"]="fail"
+    cwave=np.asarray(calibration.get("cwave")) if calibration.get("cwave") is not None else None
+    cband=np.asarray(calibration.get("cband")) if calibration.get("cband") is not None else None
+    if cwave is None or cband is None: checks["wavelength_maps"]={"status":"unknown"}
+    else:
+        ok=cwave.shape==cband.shape and cwave.ndim==2 and np.isfinite(cwave).any() and np.isfinite(cband).any()
+        ok=bool(ok and np.any(np.isfinite(cwave)&(cwave>0)) and np.any(np.isfinite(cband)&(cband>0)))
+        checks["wavelength_maps"]={"status":"pass" if ok else "fail","cwave_shape":list(cwave.shape),"cband_shape":list(cband.shape)}
+    states=[x["status"] for x in checks.values()]
+    status="rejected" if "fail" in states else "compatible" if all(x=="pass" for x in states) else "review_required"
+    return {"status":status,"checks":checks,
+      "compatibility_group":(f"{science.get('release')}:{_detector(science.get('detector'))}:{science.get('pipeline_version')}:{science.get('processing_date')}"
+         if status=="compatible" else None),
+      "wavelength_source":"separate spectral-WCS calibration CWAVE/CBAND only",
+      "warning":"A candidate directory listing, filename similarity or WCS-WAVE display table is not proof of compatibility."}
