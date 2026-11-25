@@ -456,7 +456,9 @@ def build_blind_detection_run(
             "blind_field_token": token,
             "input_signature": signature,
             "match_radius": radii[token],
+            "score_thresholds": dict(thresholds),
             "methods": {name: dict(methods[name]) for name in REQUIRED_METHODS},
+            "baseline_contract": dict(baseline),
         }
 
     if set(records_by_token) != blind_tokens:
@@ -548,6 +550,31 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         raise ValueError("frozen matching radii do not match the public field manifest")
     if canonical_json(detection_run.get("matching_radii_by_field")) != canonical_json(frozen_radii):
         raise ValueError("detection run matching radii differ from the frozen configuration")
+
+    # Rebuild the complete handoff from the issued public manifest and frozen
+    # configuration before checking the custodian signature or decrypting any
+    # truth. This rechecks nested privacy leaks, exact field coverage, all four
+    # method signatures, method provenance, baseline state, masks, WCS, field
+    # score thresholds, and opaque tokens at the point of unblinding.
+    validated_handoff = build_blind_detection_run(
+        public_manifest,
+        canonical_run_manifest,
+        frozen_configuration,
+        detection_run.get("fields") or [],
+        benchmark_id=str(detection_run.get("benchmark_id", "")),
+    )
+    for key in (
+        "fields", "blind_run_contract", "source_commit",
+        "score_thresholds", "matched_target",
+        "false_candidate_noninferiority_margin",
+        "multiple_comparison_correction", "matching_radii_by_field",
+        "configuration", "dataset_digest",
+        "frozen_configuration_sha256",
+    ):
+        if canonical_json(detection_run.get(key)) != canonical_json(validated_handoff.get(key)):
+            raise ValueError(
+                f"detection run {key} does not match the independently rebuilt truth-free handoff"
+            )
 
     from .custodian_attestation import verify_custodian_attestation
     custodian_attestation_report = verify_custodian_attestation(
