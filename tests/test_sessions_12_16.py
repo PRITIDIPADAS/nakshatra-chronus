@@ -743,3 +743,28 @@ def test_population_coverage_rejects_unbridged_calibration_group_changes():
     source = result["fields"][0]["sources"][0]
     assert result["eligible_for_predeclared_population_protocol"] is False
     assert "multiple_calibration_groups_without_verified_bridge" in source["reasons"]
+
+
+def test_population_event_rate_pools_counts_over_total_area_time_exposure():
+    from chronos_population.rates import estimate_event_rate
+
+    one_field = _population_real_field("FIELD-A", "SOURCE-A")
+    second_field = _population_real_field("FIELD-B", "SOURCE-B")
+    single_audit = _population_coverage_audit([one_field])
+    combined_audit = _population_coverage_audit([one_field, second_field])
+
+    single = estimate_event_rate(
+        [one_field], coverage_audit=single_audit, draws=10000, seed=71
+    )
+    combined = estimate_event_rate(
+        [one_field, second_field], coverage_audit=combined_audit, draws=10000, seed=71
+    )
+
+    assert single["total_science_exposure_sqdeg_days"] == pytest.approx(10.0)
+    assert combined["total_science_exposure_sqdeg_days"] == pytest.approx(20.0)
+    assert [row["science_exposure_sqdeg_days"] for row in combined["included_fields"]] == [10.0, 10.0]
+    # Adding an equally representative independent field doubles exposure and
+    # expected excess counts; it must not double the pooled rate.
+    assert combined["event_rate_per_sqdeg_day"]["median"] == pytest.approx(
+        single["event_rate_per_sqdeg_day"]["median"], rel=0.15
+    )
