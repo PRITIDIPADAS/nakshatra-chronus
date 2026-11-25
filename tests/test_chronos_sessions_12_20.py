@@ -58,7 +58,34 @@ def test_session13_feature_measurement_reports_depth_continuum_and_resolution():
     assert any("no molecule is identified" in x for x in result["limitations"])
 
 
-def test_session15_planner_needs_structured_external_feasibility_record():
+def _signed_feasibility_record(monkeypatch, record):
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from chronos_addons.planner import canonical_feasibility_attestation_payload
+
+    private_key = Ed25519PrivateKey.generate()
+    public_key = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    key_id = "test-feasibility-key-v1"
+    monkeypatch.setenv(
+        "CHRONOS_FEASIBILITY_ATTESTATION_PUBLIC_KEY_B64",
+        base64.b64encode(public_key).decode("ascii"),
+    )
+    monkeypatch.setenv("CHRONOS_FEASIBILITY_ATTESTATION_KEY_ID", key_id)
+    record["attestation"] = {
+        "algorithm": "Ed25519",
+        "key_id": key_id,
+        "signature_b64": base64.b64encode(
+            private_key.sign(canonical_feasibility_attestation_payload(record))
+        ).decode("ascii"),
+    }
+    return record
+
+
+def test_session15_planner_needs_structured_external_feasibility_record(monkeypatch):
     from chronos_addons.planner import plan_candidate_observations
     pred={"sky":{"mean":1.,"sigma":.1},"detector":{"mean":3.,"sigma":.1}}
     provenance={k:{"fit_id":"FIT-"+k,"input_observation_ids":["OBS-1"]} for k in pred}
@@ -70,8 +97,16 @@ def test_session15_planner_needs_structured_external_feasibility_record():
         "window_start_utc":"2026-11-25T13:00:00Z","window_end_utc":"2026-11-25T15:00:00Z",
         "calculator":"test","query_id":"Q1","evidence_sha256":"d"*64,
         "query_parameters":{"target":"test","band":"IR"}}}
+    # A schema-complete record without a detached signature is not trusted.
+    unsigned_result = plan_candidate_observations([verified])
+    assert unsigned_result["recommended"] is None
+    assert unsigned_result["status"] == "science_ranked_but_feasibility_unverified"
+
+    signed = _signed_feasibility_record(monkeypatch, verified["feasibility"])
+    verified = {**verified, "feasibility": signed}
     result=plan_candidate_observations([verified])
     assert result["recommended"]["candidate_observation_id"]=="C1"
+    assert result["recommended"]["feasibility"]["attestation_verification"]["valid"] is True
 
 
 def test_session19_synthetic_fields_fail_real_population_coverage_gate():
@@ -135,4 +170,68 @@ def test_session15_available_external_record_is_not_promoted_to_verified():
     result = plan_candidate_observations([candidate])
     assert result["recommended"] is None
     assert result["status"] == "science_ranked_but_feasibility_unverified"
+    assert result["blocked_or_unverified"][0]["feasibility"]["status"] == "unverified"
+
+
+def test_session15_legacy_planner_cannot_promote_caller_supplied_verified_status():
+    from chronos_addons.planner import plan_observations
+
+    record = {
+        "status": "verified",
+        "feasible": True,
+        "source_uri": "https://visibility.example/query/unsigned",
+        "checked_utc": "2026-11-25T12:00:00Z",
+        "window_start_utc": "2026-11-25T13:00:00Z",
+        "window_end_utc": "2026-11-25T15:00:00Z",
+        "calculator": "service",
+        "query_id": "Q-UNSIGNED",
+        "query_parameters": {"target": "T1"},
+        "evidence_sha256": "a" * 64,
+    }
+    candidate = {
+        "time": "2026-11-25T14:00:00Z",
+        "predictions": {
+            "sky": {"mean": 1.0, "sigma": 0.1},
+            "detector": {"mean": 3.0, "sigma": 0.1},
+        },
+        "feasibility": record,
+    }
+    result = plan_observations([candidate])
+    assert result["recommendation_status"] == "forecast_ranked_feasibility_unverified"
+    assert result["recommended"]["feasibility"]["status"] == "unverified"
+    assert result["recommended"]["feasibility"]["attestation_verification"]["valid"] is False
+
+
+def test_session15_pinned_feasibility_signature_rejects_tampering(monkeypatch):
+    from chronos_addons.planner import plan_candidate_observations
+
+    predictions = {"sky": {"mean": 1.0, "sigma": 0.1},
+                   "detector": {"mean": 3.0, "sigma": 0.1}}
+    forecast_provenance = {
+        name: {"fit_id": f"FIT-{name}", "input_observation_ids": ["OBS-1"]}
+        for name in predictions
+    }
+    feasibility = {
+        "status": "verified",
+        "feasible": True,
+        "source_uri": "https://visibility.example/query/signed",
+        "checked_utc": "2026-11-25T12:00:00Z",
+        "window_start_utc": "2026-11-25T13:00:00Z",
+        "window_end_utc": "2026-11-25T15:00:00Z",
+        "calculator": "service",
+        "query_id": "Q-SIGNED",
+        "query_parameters": {"target": "T1"},
+        "evidence_sha256": "b" * 64,
+    }
+    signed = _signed_feasibility_record(monkeypatch, feasibility)
+    signed["feasible"] = False
+    candidate = {
+        "candidate_observation_id": "TAMPERED",
+        "time": "2026-11-25T14:00:00Z",
+        "predictions": predictions,
+        "forecast_provenance": forecast_provenance,
+        "feasibility": signed,
+    }
+    result = plan_candidate_observations([candidate])
+    assert result["recommended"] is None
     assert result["blocked_or_unverified"][0]["feasibility"]["status"] == "unverified"
