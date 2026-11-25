@@ -282,3 +282,14 @@ def test_blind_builder_retains_field_thresholds_and_baseline_contract():
         for row in result["fields"]
     )
     assert all(row["baseline_contract"]["same_pipeline_state"] is True for row in result["fields"])
+
+
+def test_detection_run_rejects_private_field_id_outside_public_signature():
+    _, blind, frozen, records = _fixture()
+    leaked = deepcopy(records)
+    leaked[0]["field_id"] = "ORIGINAL-PRIVATE-FIELD"
+    with pytest.raises(ValueError, match="nested private fields"):
+        build_blind_detection_run(
+            blind["public_manifest"], blind["run_manifest"], frozen, leaked,
+            benchmark_id="top-level-field-id-leak",
+        )
