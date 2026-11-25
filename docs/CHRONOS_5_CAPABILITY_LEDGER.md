@@ -111,3 +111,20 @@ Current branch head at the time of this refresh: `84300c5ed225dc5ba190e8dac8b326
 - Fresh SPLICES/DR1/QR3 source-to-product manifest workflow [45663142077](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663142077) is still in progress. The exact-roster six-field rerun [45663010413](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663010413) is also still in progress. They must not be described as completed until their reports/artifacts are available.
 
 The previous six-region exploratory run [45639895735](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45639895735) remains complete and strict-gate verified. The current rerun adds exact roster acceptance. Both are non-blind one-exposure-per-region injection/recovery studies, not a four-method benchmark.
+
+
+## Superseding current-head evidence — 25 November 2026
+
+Current branch head: `3fdfd81ddd6e5d3dc2a7a58929a58eec2c2a41f3`.
+
+- Push workflow [45670644445](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670644445): **342 tests passed, 12 warnings**, both JavaScript syntax checks passed, and M101 archive retrieval, native MEF/calibration audit, strict evidence validator and artifact upload passed.
+- Companion PR workflow [45670657450](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670657450): **342 tests passed, 2 warnings**, both JavaScript syntax checks.
+- M101 artifact 15050046463: 91,220,621 bytes; ZIP SHA-256 `032094d4a817960dc1780502166c9f380bb11f02251af1a7dd5acc923a55f6da`.
+- SIAv2 reconnaissance workflow [45670644451](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670644451) completed successfully at the same head. Artifact 15049153600: 70,934,662 bytes; ZIP SHA-256 `1c517cc377bb0f4ae12191c9daf8cb7221dbf09053285cbc25dc98cfce488f4c`. Recon report SHA-256 `ee8909f6481a0467e2ecb250fc737d834975e16f139f8d0744bcb96d1723314f`; source/product inventory audit SHA-256 `2642ae27354ec72953f6438c1e8649112769ee807574567e8eb6eb33026da2ca`.
+- Recon findings: 2,421 candidate rows and 2,421 unique source IDs; 6,214 SIAv2 spectral-image products (4,432 DR1 + 1,782 QR3); 32 cube metadata rows within six predeclared cones; 924,443 source/product pairs across the five star-forming-region cones. All six regional pair manifests passed exact inventory/provenance-integrity checks: zero duplicate pairs, unknown product IDs, pair metadata errors, per-source count mismatches or product-ID-set digest mismatches. Every pair is metadata-only with no extracted flux. The high-latitude comparison cone had zero candidate-source pairs, not a matched physical control sample.
+- Per-region pair counts: Taurus/Auriga 84,669; Perseus/NGC 1333 68,086; Orion A 519,120; Rho Ophiuchi 186,980; Lupus III 65,588; high-latitude comparison 0.
+- The source/product manifest is a spherical SIAv2 `s_region` positional association only. It does not establish calibrated source flux, spectrum quality, valid epoch cadence, variability or YSO identity.
+- M101's new local-response diagnostic is described in [the peak-selection diagnostic note](SPHEREX_LOCAL_SNR_PEAK_SELECTION_DIAGNOSTICS_2026-11-25.md). It reports local maximum SNR samples, not detector-selected local maxima; it does not change production recovery.
+- The earlier exact-roster six-field run [45663010413](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663010413) completed with six requested/returned/completed fields, zero incomplete, exact manifest/roles and unique native observations/hashes. A newer per-injection SNR diagnostic rerun [45670018299](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670018299) was still in progress at the time of this update; no outcome is claimed for that rerun.
+
+No blind four-method result, independently approved gain-to-electron calibration, selection-corrected YSO population finding, independent astronomical reproduction or validated scientific release is established.

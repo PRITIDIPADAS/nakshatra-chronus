@@ -131,3 +131,18 @@ A fresh SIAv2 source-to-product archive reconnaissance is running at [4566314207
 The current M101 artifact retains the 2040×2040 native DR1 D2 science MEF, exact spectral-WCS and absolute-gain provenance, supplemental solid-angle map, native audit and 3×20 Jy source-Poisson injection evidence. The gain-to-electron convention remains `derived_pending_independent_review`; automated CI is not calibration sign-off.
 
 Open empirical gates remain: independent instrument calibration review; external preregistration and independent custody; four-method benchmark on common real held-out fields; validated source spectra/epochs and a selection/contamination-aware YSO analysis; independent astronomical reproduction; validated scientific release.
+
+
+## Superseding 3fdf current-head and SIAv2 integrity evidence — 25 November 2026
+
+The latest full push suite is [45670644445](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670644445) on `3fdfd81ddd6e5d3dc2a7a58929a58eec2c2a41f3`: **342 passed, 12 warnings**; both JS syntax checks passed. The real M101 retrieve/native audit/strict evidence validator/artifact upload all passed. The matching PR workflow [45670657450](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670657450) passed **342 tests with 2 warnings**.
+
+The current M101 artifact is 15050046463 (91,220,621 bytes; SHA-256 `032094d4a817960dc1780502166c9f380bb11f02251af1a7dd5acc923a55f6da`). It contains the native MEF, calibration files, evidence reports and local matched-filter SNR diagnostics. The new diagnostics do not modify detection or recovery outcomes.
+
+The updated M101 diagnostic reports 19/20, 20/20 and 20/20 injections with a local matched-filter **maximum sample** at or above 5σ within 2.5 px, while the accepted peak matcher recovered 5/20, 14/20 and 17/20. This maximum sample is not guaranteed to satisfy the production 11 × 11 local-maximum predicate. For unrecovered injections with a selected peak, the nearest selected-peak distances were outside the 2.5 px match radius. This is a detection-stage diagnostic, not a demonstrated root cause; see [the dedicated note](SPHEREX_LOCAL_SNR_PEAK_SELECTION_DIAGNOSTICS_2026-11-25.md).
+
+The fresh SIAv2 source-to-product reconnaissance [45670644451](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670644451) completed successfully at the same head. Artifact 15049153600 (70,934,662 bytes; SHA-256 `1c517cc377bb0f4ae12191c9daf8cb7221dbf09053285cbc25dc98cfce488f4c`) reports 2,421 candidate sources, 6,214 SIAv2 products, 32 cube metadata rows, and 924,443 source/product pairs. Exact per-region pair manifests, source summary counts, ID-set SHA-256 digests and SIAv2 product metadata agree with zero integrity errors. Pair rows are metadata-only, not extracted flux or epochs.
+
+The strict exact-roster six-field run [45663010413](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663010413) remains a completed exploratory result. The more recent diagnostic rerun [45670018299](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670018299), which runs the new per-injection SNR audit on all six fields, was still in progress at the time of this note. Do not describe its per-field diagnostics as complete until its artifact is uploaded and inspected.
+
+Independent gain calibration review, externally preregistered four-method blind evaluation, source-level selection/contamination-aware YSO population study, independent astronomical reproduction and validated release remain open.
