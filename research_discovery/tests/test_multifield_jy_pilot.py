@@ -118,3 +118,14 @@ def test_query_report_is_hashed_and_failures_remain_visible():
     )
     assert report["field_count_incomplete"] == 1
     assert len(report["report_sha256"]) == 64
+
+
+def test_field_summary_preserves_exact_native_image_bunit():
+    summary = _summary()
+    summary["science"].pop("image_unit")
+    summary["science"]["image_bunit"] = "MJy / sr"
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log"
+    )
+    assert record["science"]["image_unit"] == "MJy / sr"
+    assert record["eligible_for_multi_field_pilot_summary"] is True
