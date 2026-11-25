@@ -62,7 +62,7 @@ def _calibrated_gain(exposure, record):
         raise ValueError(f"{exposure.id}: calibration record missing " + ", ".join(missing))
     if record["verification_status"] != "verified":
         raise ValueError(f"{exposure.id}: calibration conversion is not verified")
-    if str(record["science_observation_id"]) != str(exposure.id):
+    if str(record["science_observation_id"]) != str(getattr(exposure, "source_observation_id", "") or str(exposure.id).split("_D")[0]):
         raise ValueError(f"{exposure.id}: observation identity mismatch")
     if str(record["science_file_sha256"]).lower() != str(exposure.source_sha256).lower():
         raise ValueError(f"{exposure.id}: science cutout checksum mismatch")
