@@ -55,7 +55,11 @@ The completed live IRSA TAP workflow queried five predeclared star-forming regio
 
 “Published YSO labels” are rows with \`yso_pub\`; the harmonised \`class_1\` counts were the same in these returned regions. “ML YSO labels” refer to \`stype_ml\` and are not independent confirmations. ML-only counts refer to catalogue rows labelled YSO by \`stype_ml\` but not by the published/harmonised columns. The full row-level snapshots, SQL queries, query hashes and class concordance records are retained in the Actions artifact.
 
-The high-latitude control had 15 catalogue rows, no published/harmonised/ML YSO labels, and 288 Level-2 exposure-footprint rows. These are footprint rows, not extracted source spectra or independent astrophysical samples.
+Within the 2,421-row candidate union, all source IDs are unique and the `YSO_PUB` and `CLASS_1` YSO flags have identical membership: 1,256 rows have both published/harmonised labels but no ML YSO label, 931 are ML-only, and 234 have all three labels. This overlap is a property of the returned catalogue fields, not independent confirmation.
+
+The 1,540 Level-2 rows are exposures whose native polygons contain each predeclared region-centre coordinate. They do **not** count every exposure intersecting the full region circles, do not establish source-level visits, and are not necessarily unique across the six region-centre queries. They are footprint-query rows, not extracted source spectra or independent astrophysical samples.
+
+The high-latitude control had 15 catalogue rows, no published/harmonised/ML YSO labels, and 288 centre-coordinate exposure rows. It is not a matched control sample with identical extinction, completeness or observing history.
 
 Primary Actions record: [SPLICES/DR1 reconnaissance run 45624672955](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45624672955).
 
