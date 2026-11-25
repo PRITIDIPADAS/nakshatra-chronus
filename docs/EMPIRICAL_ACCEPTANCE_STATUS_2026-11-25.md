@@ -149,7 +149,7 @@ protocol, and external astronomical reproduction/review.
 |---|---|
 | M101 D2 DR1 calibration compatibility | **Passed for one exposure** |
 | Calibrated real-data injection/recovery | **Completed one-exposure Jy pilot with gain-derived source Poisson; conversion pending independent review** |
-| Multi-field calibration-compatible evaluation | Workflow implemented; live six-region Jy run pending verification |
+| Multi-field calibration-compatible evaluation | **Completed exploratory six-region evaluation; 6/6 field summaries pass post-hoc strict revalidation; gain conversion pending independent review** |
 | Four-baseline blind benchmark on actual held-out SPHEREx fields | Not satisfied |
 | Population-level YSO discovery | Not satisfied |
 | Independent astronomical reproduction / review | Not satisfied |
@@ -172,7 +172,7 @@ The 1,540 Level-2 footprint rows summed across regions are not deduplicated uniq
 
 A detector-pixel electron conversion is now derived as exposure time divided by the exact provenance-linked absolute-gain matrix. The conversion validator checks the native calibration SHA-256, archive MD5 result, detector and unit identity, live `spherex.provenance_input` relation, both plane IDs, exact native URIs, and query digest. A provenance-derived record remains `derived_pending_independent_review`; source Poisson modelling is enabled only by an explicit exploratory opt-in. The absolute-gain matrix validates the existing Level-2 calibration and supplies the electron conversion; it is not applied again to Level-2 science pixels. Invalid gain pixels remain masked.
 
-The new six-region workflow requires each field to pass native calibration compatibility, exact provenance, a completed Jy recovery and source Poisson modelling with an explicitly pending review status. Its aggregate gate is deliberately marked exploratory and cannot satisfy the blind four-baseline, YSO population or validated-release gates. Its real-data run is pending in the current branch; no multi-field result is claimed until the artifact is inspected.
+The six-region D2 DR1 workflow completed on run [45624461435](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45624461435). Its raw report artifact (15029628060; SHA-256 `250f3bfdbd3fe81b1d87aa00cd54389377f7c147639c408604cde672d2c31cfb`) contains six distinct native science observations and six distinct science-file hashes. The six archived field summaries were then revalidated against the stricter current field-gate implementation: all six pass all 20 field checks plus the additional identity/Poisson-integrity checks. The post-hoc strict report SHA-256 is `a94c010a3d4cfd6d678d93fe32e598218a77d53f13acf61c57d010059ebae299`; see [the full six-region report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md). This supports a completed **exploratory** multi-field result, not a blind benchmark or performance-acceptance claim. Lupus III recovered 0/20 in all three flux bins and is a field-level anomaly requiring investigation. All six gain-derived conversion records remain `derived_pending_independent_review`.
 
 
 ## Updated M101 source-Poisson evidence — 25 November 2026
@@ -184,3 +184,12 @@ The source-Poisson pilot recovered 5/20, 14/20 and 17/20 sources at 54.198, 108.
 ## SPLICES / DR1 regional reconnaissance
 
 The live catalogue/footprint query is complete for five predeclared star-forming regions and one high-latitude control. Run [45619403576](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45619403576) returned 16,663 catalogue rows and 2,421 regional candidate-union rows below query caps. Literature-reference, harmonised-class and ML labels remain separate. This is a target-catalogue reconnaissance only; it does not satisfy the YSO population-discovery gate. Details and report/artifact checksums are in [the SPLICES/DR1 report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
+
+
+## Six-region calibrated-Jy evidence — 25 November 2026
+
+The six-region pilot is completed as an exploratory evaluation. The post-hoc strict revalidation confirms six completed fields, zero incomplete fields, distinct science observation IDs and distinct native science hashes. Each field passed the native compatibility audit, exact WCS/gain provenance, archive MD5, invalid gain masking, source-Poisson and per-bin variance checks. The gain-derived electron conversion remains pending independent instrument/calibration review.
+
+The recovered fractions differ substantially by field. In particular, Lupus III had 0/20 recoveries in each of its three bins (105.579, 211.158 and 422.317 µJy), including the bin at twice its local nominal 5-sigma reference. This must remain visible and investigated; it is not averaged away. Full field-level values, Wilson intervals, hashes and strict checks are in [the six-region report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md).
+
+The pilot remains non-blind and single-exposure-per-region. It is not a four-method comparison, all-sky completeness curve, YSO population result or validated scientific release.

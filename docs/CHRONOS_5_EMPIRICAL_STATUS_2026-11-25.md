@@ -67,9 +67,15 @@ The results expose catalogue-label disagreement, especially ML-only candidates. 
 
 ## 4. Six-region calibrated Jy pilot
 
-**Status: in progress at the time of this report; no complete multi-field summary is claimed here.**
+**Status: completed as an exploratory six-field evaluation; strict field-gate revalidation passed 6/6; independent calibration review remains pending.**
 
-The branch has a six-region D2 DR1 workflow with a high-latitude control. It only counts a field if the exact science-to-spectral-WCS and science-to-absolute-gain provenance links, compatible native audit, supplemental solid-angle map, successful Jy injection/recovery and unique observation/file identity checks all pass. The workflow's setup and field-gate tests completed, but the sequential real-data step had not yet produced a final aggregate report at the time this note was authored. Do not read the running Actions status as a completed multi-field result.
+Workflow [45624461435](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45624461435) completed the six predeclared regions. Raw artifact 15029628060 has SHA-256 `250f3bfdbd3fe81b1d87aa00cd54389377f7c147639c408604cde672d2c31cfb`. The six raw field summaries were revalidated against the stricter `run_multifield_jy_pilot.py` field-gate checks (blob SHA `f346d00c7ce2b500a406e68c6ea2a20093dac3a9`). The post-hoc report SHA-256 is `a94c010a3d4cfd6d678d93fe32e598218a77d53f13acf61c57d010059ebae299`.
+
+All six fields have distinct DR1 D2 observation IDs and distinct science-file SHA-256 values. Every field passed all 20 strict checks, including native compatibility, direct WCS/gain provenance, archive MD5, invalid gain masking, completed Jy injection, three measured source-Poisson bins and an explicit pending-review state. The gain conversion valid fraction is 0.9999579489; 175 invalid gain pixels remain masked.
+
+The results are not uniformly strong: Lupus III recovered 0/20 at all three bins, including 2× its local 5-sigma reference. That field is retained and flagged for follow-up; a green data-integrity gate does not mean the completeness result is good. The field-specific flux levels are not pooled into a universal sensitivity curve. Full results and limitations are in [the six-region report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md).
+
+This remains exploratory: the run was not blind, does not compare all four CHRONOS methods on common held-out inputs, and does not establish survey-wide performance or a scientific discovery. Independent human calibration review is still required.
 
 ## 5. Acceptance gates
 
@@ -84,7 +90,7 @@ The branch has a six-region D2 DR1 workflow with a high-latitude control. It onl
 
 ## 6. What must happen next
 
-1. Complete and audit the six-region D2 pilot report, retaining all failed/ineligible fields rather than excluding them silently.
+1. Investigate the Lupus III zero-recovery result and obtain independent instrument/calibration review of the pending gain-to-electron conversion, retaining all six fields.
 2. Have an independent astronomer/instrument scientist review the Level-2 variance/solid-angle/ePSF conventions and the pending absolute-gain electron conversion.
 3. Appoint an independent custodian outside the analysis team. That custodian must hold the blind key and encrypted real truth data, register the protocol before unblinding, freeze the exact code/data digests and sign the custody record.
 4. Run SNR-only, CHRONOS P/D/A, instrument forensics and Sky–Detector Twin on identical held-out real fields with a preregistered operating point. Preserve per-field results, null controls, ablations and uncertainty intervals.

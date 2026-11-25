@@ -83,3 +83,23 @@ The candidate table includes source identifiers, coordinates, published/harmonis
 **Not established:** an unbiased YSO census, physical classification of every candidate, independent verification of machine-learning classifications, completeness or contamination rates, a regional YSO formation rate, all exposures intersecting each full region cone, unique exposure counts after cross-region overlap removal, source-level temporal coverage, or any new astronomical discovery.
 
 Before a population estimate, the project still needs a frozen source inclusion rule, independent validation of candidate classes, a selection function, source-level epoch coverage, completeness and contamination estimates, null/control modelling, overlap deduplication, and a preregistered statistical analysis. Any later discovery claim needs independent astronomical reproduction and review.
+
+
+## Updated live reconnaissance and candidate-inventory audit — 25 November 2026
+
+The latest audited rerun is [GitHub Actions run 45636514684](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45636514684), code revision `a7d6647fb772987d3e3761445efa9e9be993653a`. Artifact ID `15033905878` has SHA-256 `32f080fe543063381eca4453f1df691312be8fcb9`. The catalogue, bounded candidate, region-centre Level-2 exposure and candidate-inventory audit steps completed successfully.
+
+The candidate union contains 2,421 rows; all 2,421 have non-empty source IDs and there are zero repeated source-ID groups within this export. The candidate label overlap is:
+- 1,490 rows with a non-null `YSO_PUB` field and 1,490 with `CLASS_1` containing YSO; those two flags had identical membership in this candidate export.
+- 1,165 rows with `STYPE_ML` containing YSO.
+- 1,256 rows with published/harmonised labels but no ML YSO label.
+- 931 ML-only YSO-labelled rows.
+- 234 rows with all three fields indicating YSO.
+
+These are catalogue-field overlaps, not independently confirmed astrophysical classifications. The 931 ML-only rows are review candidates, not newly discovered YSOs.
+
+The six regional query returns sum to 16,663 catalogue rows, 2,421 candidate-union rows and 1,540 centre-point Level-2 footprint rows. The 1,540 figure is a sum of regional centre-point queries, not a globally deduplicated unique-exposure count. The exposure query tests whether the single predeclared region-centre point is inside the exposure polygon; it is not a full-region intersection or source-visit count.
+
+**Source-level epoch coverage remains unavailable.** The optional candidate-source-to-exposure query still fails at the IRSA TAP metadata resolver (`unknown datasource / table: spherex / spherex.artifact`) after an explicit-join attempt. The optional full-region circle/polygon query is also rejected as an invalid/unsupported ADQL query. These outputs are null/unmeasured, not zero. Do not infer individual source exposure matches, visit counts or usable cadence from the centre-point footprint rows.
+
+This follow-up remains descriptive reconnaissance only. It does not establish a contamination-corrected YSO census, source-level time-domain completeness, a regional formation rate or a discovery.
