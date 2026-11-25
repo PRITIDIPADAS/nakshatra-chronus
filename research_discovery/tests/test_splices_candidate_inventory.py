@@ -595,9 +595,10 @@ def test_schema_1_1_cross_region_source_product_overlap_uses_exact_archive_produ
         product_id = "ivo://irsa.example/shared-product"
         inventory_path = tmp_path / region / "region_footprints_sia_spherex_dr1.csv"
         inventory = read_csv(inventory_path)
+        shared_access_url = f"https://irsa.example/{region}/shared-product.fits"
         inventory.append({
             "obs_id": "shared-obs",
-            "access_url": f"https://irsa.example/{region}/shared-product.fits",
+            "access_url": shared_access_url,
             "obs_publisher_did": product_id,
             "_chronos_collection": "spherex_dr1",
             "_chronos_release": "dr1",
@@ -613,7 +614,7 @@ def test_schema_1_1_cross_region_source_product_overlap_uses_exact_archive_produ
             "source_id": "source-a",
             "archive_product_id": product_id,
             "obs_id": "shared-obs",
-            "access_url": f"https://irsa.example/{region}/shared-product.fits",
+            "access_url": shared_access_url,
             "collection": "spherex_dr1",
             "data_release": "dr1",
             "energy_bandpassname": "SPHEREx-D2",
@@ -622,18 +623,38 @@ def test_schema_1_1_cross_region_source_product_overlap_uses_exact_archive_produ
             "extracted_flux_available": False,
             "region": region,
         }
-        _write_csv(tmp_path / region / "candidate_source_product_matches.csv", [pair])
+        pair_path = tmp_path / region / "candidate_source_product_matches.csv"
+        pairs = read_csv(pair_path)
+        pairs.append(pair)
+        _write_csv(pair_path, pairs)
+
         summaries = read_csv(tmp_path / region / "candidate_source_epoch_summary.csv")
         source_a = next(row for row in summaries if row["source_id"] == "source-a")
-        source_a["matched_archive_product_count"] = "1"
-        source_a["archive_product_id_set_sha256"] = hashlib.sha256(product_id.encode()).hexdigest()
+        source_a_product_ids = sorted(
+            row["archive_product_id"] for row in pairs if row["source_id"] == "source-a"
+        )
+        source_a["matched_archive_product_count"] = str(len(source_a_product_ids))
+        source_a["archive_product_id_set_sha256"] = hashlib.sha256(
+            "\n".join(source_a_product_ids).encode()
+        ).hexdigest()
         source_a["has_archive_footprint_match"] = "True"
         _write_csv(tmp_path / region / "candidate_source_epoch_summary.csv", summaries)
-        _write_csv(tmp_path / region / "candidate_source_exposure_matches.csv", [source_a])
+
+        matched_summaries = read_csv(
+            tmp_path / region / "candidate_source_exposure_matches.csv"
+        )
+        matched_summaries = [
+            row for row in matched_summaries if row["source_id"] != "source-a"
+        ]
+        matched_summaries.append(source_a)
+        _write_csv(
+            tmp_path / region / "candidate_source_exposure_matches.csv",
+            matched_summaries,
+        )
     result = analyze(tmp_path)
     overlap = result["cross_region_candidate_source_exposure_overlap"]
-    assert overlap["source_archive_product_match_rows"] == 2
-    assert overlap["unique_source_archive_product_pairs_observed"] == 1
+    assert overlap["source_archive_product_match_rows"] == 4
+    assert overlap["unique_source_archive_product_pairs_observed"] == 3
     assert overlap["source_product_pairs_in_multiple_region_queries"] == 1
     assert overlap["source_archive_product_region_memberships"]["source-a|ivo://irsa.example/shared-product"] == [
         "Perseus_NGC1333", "Taurus_Auriga"
