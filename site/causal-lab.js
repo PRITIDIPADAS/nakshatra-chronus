@@ -172,14 +172,53 @@ async function featureEvolution(){
  }catch(e){error("feature-evolution-result",e);}
 }
 async function identity(){
- try{needAPI();const x=await call("/identity/associate",{candidate:parse("identity-candidate","Candidate"),catalogue_rows:parse("identity-catalogue","Catalogue"),search_radius_arcsec:10,background_density_per_arcsec2:.001,prior_match_probability:.9});
- $("identity-result").innerHTML='<div class="counter-row"><span>Status</span><b>'+esc(x.status)+'</b></div><div class="counter-row"><span>No counterpart</span><b>'+fmt(x.no_counterpart_probability)+'</b></div>'+x.matches.map(m=>'<div class="counter-row"><span>'+esc(m.source_id)+'<small style="display:block;color:#728d93">'+fmt(m.separation_arcsec,2)+' arcsec</small></span><b>'+(100*m.association_probability).toFixed(1)+'%</b></div>').join("")+'<p class="panel-note">'+esc(x.limitations.join(" "))+'</p>';}
- catch(e){error("identity-result",e);}
+ try{
+  needAPI();
+  const x=await call("/identity/associate",{candidate:parse("identity-candidate","Candidate"),catalogue_rows:parse("identity-catalogue","Catalogue"),search_radius_arcsec:10,background_density_per_arcsec2:.001,prior_match_probability:.9});
+  const cards=x.matches.map(m=>{
+   const motion=m.proper_motion_and_parallax||{},survey=m.survey_metadata||{};
+   const astrometry=(motion.proper_motion_interval_years==null?"":fmt(motion.proper_motion_interval_years,2)+" yr baseline · ")+
+    (motion.parallax_applied?"parallax applied":"parallax not applied");
+   const uncertainty="σ position "+fmt(m.combined_sigma_arcsec,3)+" arcsec · parallax σ "+fmt(m.parallax_sigma_arcsec,4)+" arcsec";
+   const surveyLine=[survey.survey,survey.bandpass,survey.angular_resolution_arcsec==null?null:fmt(survey.angular_resolution_arcsec,2)+" arcsec resolution"].filter(Boolean).join(" · ");
+   return '<article class="identity-match"><div class="counter-row"><span>'+esc(m.source_id)+'<small>'+fmt(m.separation_arcsec,2)+' arcsec separation</small></span><b>'+(100*m.association_probability).toFixed(1)+'%</b></div>'+
+    '<p>'+esc(astrometry)+'</p><p>'+esc(uncertainty)+'</p>'+(surveyLine?'<small>'+esc(surveyLine)+'</small>':"")+'</article>';
+  }).join("");
+  $("identity-result").innerHTML=
+   '<div class="counter-row"><span>Association status</span><b>'+esc(x.status)+'</b></div>'+
+   '<div class="counter-row"><span>No counterpart probability</span><b>'+fmt(x.no_counterpart_probability,4)+'</b></div>'+
+   (cards||'<div class="empty-state">No catalogue source met the supplied search and likelihood criteria.</div>')+
+   '<p class="panel-note">'+esc(x.assumptions.parallax_method||"Proper motion propagation only.")+'</p>'+
+   '<p class="panel-note">'+esc(x.limitations.join(" "))+'</p>';
+ }catch(e){error("identity-result",e);}
 }
 async function planner(){
- try{needAPI();const x=await call("/observations/plan",{candidates:parse("plan-json","Observation forecasts"),measurement_sigma:Number($("plan-noise").value)});
- $("plan-result").innerHTML=x.ranked.map((m,i)=>'<div class="counter-row"><span>'+(i+1)+'. '+esc(m.time||"Unnamed")+'</span><b>'+fmt(m.information_gain,3)+' bits</b></div>').join("")+'<p class="panel-note">'+esc(x.limitations.join(" "))+'</p>';}
- catch(e){error("plan-result",e);}
+ try{
+  needAPI();
+  const priorText=$("plan-alternative-priors").value.trim();
+  const alternatives=priorText?parse("plan-alternative-priors","Alternative prior sets"):{};
+  const x=await call("/observations/plan",{
+   candidates:parse("plan-json","Observation forecasts"),
+   measurement_sigma:Number($("plan-noise").value),
+   alternative_priors:alternatives
+  });
+  const rows=x.ranked.map((m,i)=>{
+   const feasibility=m.feasibility||{},verified=feasibility.status==="verified"&&feasibility.feasible===true;
+   const source=verified?'<small>Verified by <a href="'+esc(feasibility.source_uri)+'" target="_blank" rel="noopener">external source</a> · checked '+esc(feasibility.checked_utc)+'</small>':'<small>Feasibility unverified · forecast ranking only</small>';
+   const window=verified&&feasibility.window?'<small>Window '+esc(feasibility.window.start_utc)+' to '+esc(feasibility.window.end_utc)+'</small>':"";
+   const measurement=m.measurement||{};
+   const detail=[measurement.wavelength_um==null?null:fmt(measurement.wavelength_um,4)+" µm",measurement.detector_id,measurement.measurement_type].filter(Boolean).join(" · ");
+   return '<article class="planner-candidate"><div class="counter-row"><span>'+(i+1)+'. '+esc(m.time||"Unnamed")+'</span><b>'+fmt(m.information_gain,3)+' bits</b></div>'+
+    (detail?'<small>'+esc(detail)+'</small>':"")+'<small class="planner-feasibility">'+(verified?"FEASIBILITY VERIFIED":"FEASIBILITY NOT VERIFIED")+'</small>'+source+window+'</article>';
+  }).join("");
+  const sensitivity=Object.entries(x.prior_sensitivity||{}).map(([label,result])=>
+   '<div class="counter-row"><span>'+esc(label)+'<small>Top-ranked: '+esc(result.top_ranked_time||"n/a")+'</small></span><b>'+result.ranked_candidates.length+' candidates</b></div>'
+  ).join("");
+  $("plan-result").innerHTML='<div class="counter-row"><span>Recommendation status</span><b>'+esc(x.recommendation_status)+'</b></div>'+
+   '<div class="planner-ranked-list">'+rows+'</div>'+
+   (sensitivity?'<div class="planner-sensitivity"><b>Prior sensitivity</b>'+sensitivity+'</div>':"")+
+   '<p class="panel-note">'+esc(x.limitations.join(" "))+'</p>';
+ }catch(e){error("plan-result",e);}
 }
 async function detector(){
  try{needAPI();const psf=[[.003,.015,.025,.015,.003],[.015,.075,.11,.075,.015],[.025,.11,.24,.11,.025],[.015,.075,.11,.075,.015],[.003,.015,.025,.015,.003]];
