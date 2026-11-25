@@ -14,6 +14,7 @@ def build_matrix(payload):
    decision=compatibility_decision(exp.get("metadata",{}),cal.get("metadata",{}))
    rows.append({"science_id":exp.get("id"),"science_uri":exp.get("uri"),
      "calibration_id":cal.get("id"),"calibration_uri":cal.get("uri"),
+     "solid_angle_uri":(cal.get("metadata",{}).get("solid_angle_map") or {}).get("uri"),
      "decision":decision["status"],"compatibility_group":decision["compatibility_group"],
      "checks":decision["checks"]})
  return {"schema_version":"1.0","pair_count":len(rows),
