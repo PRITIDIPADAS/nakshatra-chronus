@@ -1,0 +1,54 @@
+name: SPHEREx M101 real science and calibration audit
+
+on:
+  push:
+    branches:
+      - chronos-5-causal-sky-twin
+    paths:
+      - research_discovery/spherex/retrieve_m101_dr1_calibrations.py
+      - research_discovery/spherex/native_mef_audit.py
+      - research_discovery/spherex/electron_conversion.py
+      - .github/workflows/spherex-m101-calibration-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m101-dr1-d2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Check out the requested branch
+        uses: actions/checkout@v4
+        with:
+          ref: chronos-5-causal-sky-twin
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install FITS and archive dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r research_discovery/requirements-research.txt
+
+      - name: Compile the audit package
+        run: python -m compileall -q research_discovery/spherex
+
+      - name: Download original science MEF and all three D2 DR1 calibrations
+        run: |
+          set -o pipefail
+          python -m research_discovery.spherex.retrieve_m101_dr1_calibrations 2>&1 | tee spherex-m101-calibration-audit.log
+
+      - name: Upload science, calibration files, hashes and audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spherex-m101-dr1-d2-science-calibrations
+          path: |
+            data/spherex_m101_dr1_d2_verified/
+            spherex-m101-calibration-audit.log
+          if-no-files-found: warn
+          retention-days: 30
