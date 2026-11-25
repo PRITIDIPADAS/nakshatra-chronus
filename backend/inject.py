@@ -117,7 +117,7 @@ def plant(exps, sources, pad=10, *, electron_calibration_records=None,
                 continue
             ra, dec = sky.pos_of(source, e.mjd)
             x, y = (float(v[0]) for v in core.to_pix(e.wcs, ra, dec))
-            if not (-3 < x < w + 3 and not (-3 < y < h + 3)):
+            if not (-3 < x < w + 3 and -3 < y < h + 3):
                 continue
             kernel = np.asarray(core.kern(e.psf, xx, yy, x, y), dtype=float)
             if not np.isfinite(kernel).all() or np.any(kernel < 0):
