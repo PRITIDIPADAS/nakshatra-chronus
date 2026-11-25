@@ -81,7 +81,8 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                            flux_unit: str = "image_sum",
                            psf_reference_xy: tuple[float,float] | None = None,
                            psf_region_radius: float | None = None,
-                           background: np.ndarray | None = None) -> dict:
+                           background: np.ndarray | None = None,
+                           electrons_per_image_unit: float | None = None) -> dict:
     image=np.asarray(image,float); variance=np.asarray(variance,float); flags=np.asarray(flags)
     if image.ndim!=2 or variance.shape!=image.shape or flags.shape!=image.shape: raise ValueError("IMAGE/VARIANCE/FLAGS must have equal 2D shapes")
     if not flux_levels or any((not np.isfinite(x)) or x<=0 for x in flux_levels): raise ValueError("injected flux levels must be finite and >0")
@@ -95,6 +96,10 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
     else:
         work_image=image.copy()
     if flux_unit not in {"image_sum", "Jy"}: raise ValueError("flux_unit must be 'image_sum' or 'Jy'")
+    if electrons_per_image_unit is not None:
+        electrons_per_image_unit = float(electrons_per_image_unit)
+        if not np.isfinite(electrons_per_image_unit) or electrons_per_image_unit <= 0:
+            raise ValueError("electrons_per_image_unit must be finite and positive when source photon noise is enabled")
     omega = None
     if flux_unit == "Jy":
         if solid_angle_sr_map is None: raise ValueError("Jy injections require a detector-aligned solid-angle map in steradians")
@@ -141,18 +146,30 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
         xy=_choose_positions(valid,n_per_level,margin,rng,min_injection_separation,
             phase=phase,reference_xy=psf_reference_xy,region_radius=psf_region_radius)
         injected_img=work_image.copy()
+        injected_variance=variance.copy()
         for x,y in xy:
             x0=int(np.floor(x))-px;y0=int(np.floor(y))-py
             region=injected_img[y0:y0+p.shape[0],x0:x0+p.shape[1]]
+            var_region=injected_variance[y0:y0+p.shape[0],x0:x0+p.shape[1]]
             if flux_unit == "Jy":
                 # IMAGE is MJy/sr. Convert integrated source flux density F[Jy]
                 # to pixel surface brightness through each pixel solid angle.
                 omega_patch = omega[y0:y0+p.shape[0], x0:x0+p.shape[1]]
-                region += (level * 1e-6 / omega_patch) * p
+                source_signal = (level * 1e-6 / omega_patch) * p
             else:
                 # This is deliberately an image-sum injection unit, not Jy.
-                region += level*p
-        injected_snr = matched_filter_snr(injected_img,variance,p)
+                source_signal = level*p
+            if electrons_per_image_unit is None:
+                region += source_signal
+            else:
+                # Convert the expected source signal to electrons, draw its
+                # Poisson realization, then convert back to image units. The
+                # added variance is lambda / gain^2 = signal / gain.
+                expected_electrons = np.clip(source_signal * electrons_per_image_unit, 0.0, None)
+                source_realization = rng.poisson(expected_electrons) / electrons_per_image_unit
+                region += source_realization
+                var_region += expected_electrons / (electrons_per_image_unit ** 2)
+        injected_snr = matched_filter_snr(injected_img,injected_variance,p)
         injected_snr[~detection_valid] = np.nan
         peaks=detect_peaks(injected_snr,threshold=snr_threshold)
         distances=_distance(peaks,xy)
@@ -195,6 +212,11 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
       "threshold_snr":float(snr_threshold),"match_radius_px":float(match_radius),
       "excluded_flag_bits":int(excluded_flag_bits),"flux_unit":flux_unit,
       "background_model_subtracted":bool(background is not None),
+      "source_photon_noise": {
+          "enabled": electrons_per_image_unit is not None,
+          "electrons_per_image_unit": electrons_per_image_unit,
+          "variance_update": "Added source Poisson variance in image units" if electrons_per_image_unit is not None else "Not modelled; do not interpret this injection run as a full photon-noise experiment",
+      },
       "background_interpretation":"Caller-supplied aligned background model subtracted before matched filtering" if background is not None else "No background model subtracted; users should supply the matching ZODI/background or precomputed residual map for scientifically appropriate detection",
       "flux_interpretation":"Jy integrated source flux converted through a detector-aligned steradian pixel-area map" if flux_unit == "Jy" else "sum of per-pixel IMAGE units; not an integrated Jy flux",
       "source_exclusion_radius_px":int(source_exclusion_radius),
@@ -215,6 +237,8 @@ def main():
     p.add_argument("--flag-bits",type=int,default=0,
                    help="Additional raw flag bits to exclude, ORed with --flag-policy")
     p.add_argument("--seed",type=int,default=20261114)
+    p.add_argument("--electrons-per-image-unit",type=float,
+                   help="Verified exposure-specific electrons per IMAGE unit per pixel; enables source Poisson realizations and the corresponding variance update")
     p.add_argument("--source-exclusion-radius",type=int,default=7,
                    help="Exclude positions near pre-existing >threshold peaks (pixels)")
     p.add_argument("--flux-unit",choices=("image_sum","Jy"),default="image_sum",
@@ -275,7 +299,8 @@ def main():
     r=run_injection_recovery(image,variance,flags,psf,flux_levels=a.flux,n_per_level=a.n,
         snr_threshold=a.threshold,excluded_flag_bits=excluded_bits,seed=a.seed,
         source_exclusion_radius=a.source_exclusion_radius,solid_angle_sr_map=omega,flux_unit=a.flux_unit,
-        psf_reference_xy=psf_reference_xy,psf_region_radius=a.psf_region_radius,background=background)
+        psf_reference_xy=psf_reference_xy,psf_region_radius=a.psf_region_radius,background=background,
+        electrons_per_image_unit=a.electrons_per_image_unit)
     a.out.mkdir(parents=True,exist_ok=True)
     r["flag_policy"] = {"name": a.flag_policy, "excluded_flag_names": list(policy_names),
                         "excluded_flag_bits_additional": int(a.flag_bits),

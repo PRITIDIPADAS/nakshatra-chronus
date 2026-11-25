@@ -12,6 +12,16 @@ NASA Space Apps Challenge · Planet X and SPHEREx
 
 ![The difference microscope](docs/figures/microscope.png)
 
+## CHRONOS 5 research workspace
+
+**Physics research question:** Can a measured infrared change be separated into astrophysical evolution, detector behaviour, calibration effects and wavelength-time sampling?
+
+[Open the Causal Sky Twin workspace](causal-lab.html) · [Read the 20-session research workflow](docs/CHRONOS_5_20_SESSION_WORKFLOW.md)
+
+The new research preview adds measurement-level sky/detector model competition, an identifiability screen, counterfactual experiments, spectral-temporal reconstruction, epoch-aware counterpart association, detector experiments, four-baseline metric comparison and claim-to-measurement provenance. The new endpoints are mounted under /api/v5.
+
+This is a research preview. Relative BIC weights are not calibrated posterior probabilities. Generic detector experiments are not calibrated SPHEREx simulations. Synthetic challenge cases are not evidence of real-sky performance. The real-data calibration, blind-field benchmark and independent reproduction gates remain mandatory.
+
 ## CHRONOS 4D: ten laboratories (new)
 
 **[Open the ten laboratories](https://pritidipadas.github.io/nakshatra-chronus/lab.html)** · [research laboratories](https://pritidipadas.github.io/nakshatra-chronus/chronos-lab.html) · details in [docs/CHRONOS_4D.md](docs/CHRONOS_4D.md)

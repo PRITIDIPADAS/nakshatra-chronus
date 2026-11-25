@@ -10,6 +10,7 @@ the background noise.
 """
 import copy
 import math
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -46,8 +47,15 @@ def plan_sources(rng, center, size, avoid, n, n_epochs, mags=(14.0, 18.5)):
     return out
 
 
-def plant(exps, sources, pad=10):
-    """Copies of the exposures with the sources added, in the units of each file."""
+def plant(exps, sources, pad=10, *, electrons_per_image_unit=None, seed=1):
+    """Plant sources in copied exposures.
+
+    electrons_per_image_unit is a scalar or exposure-ID mapping. It must be
+    derived from the matching exposure time, detector response and image
+    calibration. When provided, source Poisson realizations are drawn in
+    electron units and the corresponding image variance is updated.
+    """
+    rng = np.random.default_rng(seed)
     ep = P.epochs_of(exps)
     out = []
     for i, e in enumerate(exps):
@@ -66,7 +74,21 @@ def plant(exps, sources, pad=10):
             tot = float(k.sum())
             if tot <= 0:
                 continue
-            e.img = e.img + fl / core.UJY * (k / tot)[pad:pad + h, pad:pad + w]
+            source_signal = fl / core.UJY * (k / tot)[pad:pad + h, pad:pad + w]
+            gain = (electrons_per_image_unit.get(str(e.id))
+                    if isinstance(electrons_per_image_unit, Mapping)
+                    else electrons_per_image_unit)
+            if gain is None:
+                e.img = e.img + source_signal
+                e.notes.append("Injection source photon noise not modelled: no verified electrons-per-image-unit calibration supplied.")
+            else:
+                gain = float(gain)
+                if not math.isfinite(gain) or gain <= 0:
+                    raise ValueError(f"{e.id}: electrons_per_image_unit must be finite and positive")
+                expected_electrons = np.clip(source_signal * gain, 0.0, None)
+                e.img = e.img + rng.poisson(expected_electrons) / gain
+                e.var = e.var + expected_electrons / (gain * gain)
+                e.notes.append("Injection source photon noise and its image-variance contribution were simulated using the supplied exposure calibration.")
         out.append(e)
     return out
 
@@ -78,7 +100,8 @@ def verdict(c):
     return "unknown" if p["unknown"] else p["verdict"]
 
 
-def trials(exps, cat, center, size, n_trials=4, per=6, seed=1, mags=(14.0, 18.5)):
+def trials(exps, cat, center, size, n_trials=4, per=6, seed=1, mags=(14.0, 18.5),
+           electrons_per_image_unit=None):
     """Plant, run and score. Returns the scores and the labelled rows for training."""
     base = P.run(core.prepare(copy.deepcopy(exps)), cat, center=center, size=size)
     bx, by = [c["x"] for c in base["cands"]], [c["y"] for c in base["cands"]]
@@ -97,7 +120,10 @@ def trials(exps, cat, center, size, n_trials=4, per=6, seed=1, mags=(14.0, 18.5)
     for t in range(n_trials):
         rng = np.random.default_rng(seed + 7919 * t)
         src = plan_sources(rng, center, size, avoid, per, n_ep, mags)
-        S = P.run(core.prepare(plant(exps, src)), cat, center=center, size=size)
+        S = P.run(core.prepare(plant(
+            exps, src, electrons_per_image_unit=electrons_per_image_unit,
+            seed=seed + 7919 * t
+        )), cat, center=center, size=size)
         truth = sky.truth_list(dict(sources=src, artefacts=[], center=center))
         _, found, missed = P.match_truth(S, truth)
         for c in S["cands"]:
