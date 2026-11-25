@@ -9,7 +9,7 @@ import numpy as np
 from scipy.ndimage import map_coordinates
 
 from chronos_addons.forensics import diagnose_candidate
-from .runner import REQUIRED_METHODS, truth_catalogue_digest
+from .runner import REQUIRED_METHODS, truth_catalogue_digest, sha256_json
 
 
 
@@ -231,6 +231,7 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
             },
         ))
 
+    expected_signature_digest = sha256_json(signature)
     twin_detections = []
     for index, row in enumerate(sky_detector_twin_detections or []):
         if not isinstance(row, Mapping):
@@ -238,6 +239,12 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
         provenance = row.get("provenance")
         if not isinstance(provenance, Mapping) or not provenance:
             raise ValueError("each Sky–Detector Twin detection requires provenance")
+        if provenance.get("input_signature_sha256") != expected_signature_digest:
+            raise ValueError(
+                "Sky–Detector Twin detection input_signature_sha256 does not match the common field signature"
+            )
+        if not str(provenance.get("model_version", "")).strip():
+            raise ValueError("each Sky–Detector Twin detection needs an explicit model_version")
         twin_detections.append(_detection(
             row.get("detection_id", f"twin-{index:06d}"),
             row["x"], row["y"], row["score"],
