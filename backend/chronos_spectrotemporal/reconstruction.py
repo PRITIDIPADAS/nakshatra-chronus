@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 import math
 import numpy as np
+from chronos_causal.wavelength_gate import validate_science_wavelength
 
 def _validate_samples(samples: Sequence[Mapping[str, Any]], calibration_group: str | None):
     if not samples:
@@ -37,6 +38,7 @@ def _validate_samples(samples: Sequence[Mapping[str, Any]], calibration_group: s
                 raise ValueError(f"sample {i}: {key} must be finite")
         if r["wavelength_um"] <= 0 or r["sigma"] <= 0:
             raise ValueError(f"sample {i}: wavelength and sigma must be positive")
+        validate_science_wavelength(r, index=i)
         r["source_index"] = int(r.get("source_index", i))
         rows.append(r)
     if not rows:
