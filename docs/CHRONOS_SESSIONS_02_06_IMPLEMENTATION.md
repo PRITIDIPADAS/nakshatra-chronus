@@ -63,7 +63,7 @@ The landmark file itself is hashed. At least three rows and a traceable HTTPS so
 
 ## Session 06: source photon noise
 
-The research_discovery/validation/injection_recovery.py path normalizes the supplied PSF, preserves its supplied subpixel phase, requires the full patch to remain inside the image, refuses excluded flagged pixels, draws Poisson counts in electron units, converts the realization back to IMAGE units, and increments VARIANCE by the corresponding source shot-noise term. The deterministic path remains available when no verified conversion exists.
+The research_discovery/validation/injection_recovery.py path normalizes the supplied PSF, preserves its supplied subpixel phase, requires the full patch to remain inside the image, refuses excluded flagged pixels, draws Poisson counts in electron units, converts the realization back to IMAGE units, and increments VARIANCE by the corresponding source shot-noise term. It uses the detector-specific 2040×2040 abs_gain_matrix, sliced to the exact science footprint without interpolation. For each pixel, C = exposure_time_s / G_abs, where G_abs is in (MJy/sr)/(e-/s); expected source electrons are S × C, the realized source signal is Poisson(S × C) / C, and the added variance is S / C. The deterministic path remains available when no verified conversion exists.
 
 A numeric gain by itself is rejected. The signed-off electron-calibration-record must identify the exact science-file SHA-256, OBSID, detector, IMAGE unit, exact calibration URI and local calibration-file path/hash, plus the derivation method and sign-off metadata. The CLI checks the science identity and re-hashes the local calibration bytes before allowing source Poisson noise.
 
@@ -71,7 +71,9 @@ Required record fields:
 
     {
       "verification_status": "verified",
-      "electrons_per_image_unit": 0.0,
+      "calibration_product": "abs_gain_matrix",
+      "calibration_bunit": "<exact BUNIT read from the absolute-gain FITS header>",
+      "exposure_time_s": 0.0,
       "science_file_sha256": "<64 lowercase hex characters>",
       "science_observation_id": "<exact original OBSID from the science MEF>",
       "science_source_uri": "<exact native HTTPS archive URI>",
@@ -85,9 +87,9 @@ Required record fields:
       "verified_utc": "<ISO-8601 UTC timestamp>"
     }
 
-The example values above are placeholders, not SPHEREx instrument constants. A real conversion must be derived from the correct exposure and calibration product. Do not fill the record with guessed values. The science_file_sha256 identifies the exact bytes injected: the native MEF for the research-discovery CLI, or the exact cutout bytes retained by the browser-backed connector. Both records retain the original native archive URI. The CLI requires --science-uri <exact native HTTPS archive URI> alongside --electron-calibration-record <record.json>.
+The example values above are placeholders, not SPHEREx instrument constants. A real conversion must be derived from the correct exposure and calibration product. Do not fill the record with guessed values. Do not store a scalar gain in this record: the runtime derives the pixel-dependent conversion map directly from abs_gain_matrix and exposure_time_s. The science_file_sha256 identifies the exact bytes injected: the native MEF for the research-discovery CLI, or the exact cutout bytes retained by the browser-backed connector. Both records retain the original native archive URI. The CLI requires --science-uri <exact native HTTPS archive URI> alongside --electron-calibration-record <record.json> and --exposure-time-s <exact SIA2 exposure time in seconds>.
 
-The legacy backend/inject.py path now carries the loaded cutout's original archive URI, original OBSID, exact cutout-byte SHA-256, detector and IMAGE unit. A record must match the exposure identity, detector, unit, cutout hash and native source URI; its local calibration bytes are re-hashed. A scalar gain is rejected. Exposures with no such record stay deterministic, with a note attached to the exposure.
+The legacy backend/inject.py path now carries the loaded cutout's original archive URI, original OBSID, exact cutout-byte SHA-256, detector and IMAGE unit. A record must match the exposure identity, detector, unit, cutout hash and native source URI; its local calibration bytes are re-hashed. A scalar gain is rejected. The GUI path derives its own cutout-shaped conversion map from abs_gain_matrix, the exact exposure time and the validated cutout origin. Exposures with no such record stay deterministic, with a note attached to the exposure.
 
 ## Current evidence status
 
