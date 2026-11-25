@@ -76,7 +76,7 @@ def _verified_audit_fixture(tmp_path):
     science_meta = {
         "release": "DR1", "detector": "D2", "pipeline_version": "7.1",
         "processing_date": "2026-001", "coordinate_frame": "native_detector",
-        "native_uri": uris["science"], "sha256": files["science"]["sha256"]}
+        "native_uri": uris["science"], "sha256": files["science"]["sha256"],\n        "local_path": str(files["science"]["path"])}
     calibration_meta = {
         "release": "DR1", "detector": "D2", "pipeline_version": "7.1",
         "processing_date": "2026-001", "coordinate_frame": "native_detector",
