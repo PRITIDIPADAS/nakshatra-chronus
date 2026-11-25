@@ -255,7 +255,7 @@ def test_detection_run_requires_real_preregistration_and_noninferiority_policy()
 def test_unblind_revalidates_nested_private_fields_before_custodian_or_truth_access():
     from chronos_benchmark.blind import unblind_benchmark
 
-    _, blind, frozen, records = _fixture()
+    key, blind, frozen, records = _fixture()
     detection_run = build_blind_detection_run(
         blind["public_manifest"], blind["run_manifest"], frozen, records,
         benchmark_id="nested-leak-after-build",
@@ -266,7 +266,7 @@ def test_unblind_revalidates_nested_private_fields_before_custodian_or_truth_acc
     with pytest.raises(ValueError, match="nested private fields"):
         unblind_benchmark(
             blind["public_manifest"], blind["encrypted_truth_store"],
-            b"not-used-because-handoff-validation-precedes-decryption",
+            key,
             frozen, detection_run,
         )
 
