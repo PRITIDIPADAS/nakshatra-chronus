@@ -47,7 +47,9 @@ def _write_csv(path, rows, *, fieldnames=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     # Empty query results still need a header row so they are distinguishable
     # from a missing query artifact.
-    columns = list(rows[0]) if rows else list(fieldnames or [
+    columns = list(dict.fromkeys(
+        key for row in rows for key in row
+    )) if rows else list(fieldnames or [
         "obs_id", "access_url", "_chronos_collection", "_chronos_release",
         "_chronos_dataset_class", "_chronos_region",
     ])
