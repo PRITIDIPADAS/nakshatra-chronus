@@ -1,6 +1,6 @@
 # CHRONOS Sessions 02–06: archive, calibration, coordinates and injection
 
-This implementation adds the software contracts for Sessions 02–06. It does **not** claim that a real SPHEREx exposure was retrieved or independently audited in this development environment. A real-data acceptance gate remains open until an actual Level-2 MEF and its exact calibration files are retrieved and their checksums are recorded.
+This document originally described software contracts before native SPHEREx files were retrieved. That initial statement is superseded by the M101 DR1 D2 run-#904 artifact and the committed four-product manifest at data/spherex_archive_manifest.M101_DR1_D2.json. The current real-data evidence is limited to one exposure and is not independent instrument sign-off.
 
 ## Session 02: versioned archive manifest
 
@@ -101,11 +101,13 @@ The legacy backend/inject.py path now carries the loaded cutout's original archi
 
 | Gate | Software | Real-data evidence |
 |---|---|---|
-| S02 manifest and retrieval | Implemented | M101 DR1 D2 native science and calibration archive identities, URIs, byte counts and SHA-256 hashes are retained in the live audit artifact; broader field manifests remain to be populated |
+| S02 manifest and retrieval | Implemented | A committed four-product M101 DR1 D2 manifest records archive IDs, native URIs, byte counts, SHA-256 and available archive MD5s; FITS bytes remain in the checksummed Actions artifact; broader field manifests remain open |
 | S03 native-MEF audit | Implemented | M101 native 2040 × 2040 MEF, IMAGE/VARIANCE/FLAGS/ZODI alignment and structure audit passed |
 | S04 calibration compatibility | Implemented | M101 spectral-WCS and absolute-gain direct provenance links passed; compatibility reported `compatible` for this one exposure |
 | S05 coordinate transform | Implemented | Unit-tested coordinate math; no independent real detector-landmark residual report |
 | S06 photon-noise injection | Implemented with strict provenance gate | M101 and six-region D2 exploratory Jy pilots completed with gain-derived source-Poisson; independent gain-to-electron calibration review remains pending |
+
+The committed manifest is a metadata snapshot: it points to the retained artifact and does not duplicate the four large FITS binaries in Git. The solid-angle map is explicitly supplemental; the archive foreign-key query links only the spectral-WCS and absolute-gain files to the science plane. The gain-derived electron conversion remains pending independent review.
 
 The M101 result is a bounded real-data validation for one science/calibration set, not survey-wide calibration approval. Six-region injection/recovery is exploratory and non-blind. A synthetic FITS fixture or unit test does not pass the real-file gate; conversely, one real MEF audit does not validate every detector, field or product family. Do not generalise beyond the verified evidence.
 
