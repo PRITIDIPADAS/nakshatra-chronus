@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Mapping, Sequence
+import base64
+import hashlib
+import json
 import math
+import os
 
 import numpy as np
 
@@ -31,6 +35,61 @@ def _utc_timestamp(value: Any, label: str) -> datetime:
     return result
 
 
+def canonical_feasibility_attestation_payload(record: Mapping[str, Any]) -> bytes:
+    """Canonical bytes that an external visibility service must sign with Ed25519."""
+    if not isinstance(record, Mapping):
+        raise ValueError("feasibility record must be an object")
+    payload = {str(key): value for key, value in record.items() if key != "attestation"}
+    try:
+        return json.dumps(
+            payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("feasibility record must be strict JSON before attestation") from exc
+
+
+def _verify_feasibility_attestation(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Verify a detached Ed25519 signature against an out-of-band pinned key."""
+    configured_key_id = os.environ.get("CHRONOS_FEASIBILITY_ATTESTATION_KEY_ID", "").strip()
+    configured_public_key = os.environ.get(
+        "CHRONOS_FEASIBILITY_ATTESTATION_PUBLIC_KEY_B64", ""
+    ).strip()
+    if not configured_key_id or not configured_public_key:
+        return {
+            "valid": False,
+            "reason": "trusted_feasibility_public_key_not_configured",
+        }
+    attestation = record.get("attestation")
+    if not isinstance(attestation, Mapping):
+        return {"valid": False, "reason": "detached_attestation_missing"}
+    if attestation.get("algorithm") != "Ed25519":
+        return {"valid": False, "reason": "unsupported_attestation_algorithm"}
+    if attestation.get("key_id") != configured_key_id:
+        return {"valid": False, "reason": "attestation_key_id_does_not_match_pinned_key"}
+    try:
+        public_key_bytes = base64.b64decode(configured_public_key, validate=True)
+        signature = base64.b64decode(
+            str(attestation.get("signature_b64", "")), validate=True
+        )
+        if len(public_key_bytes) != 32 or len(signature) != 64:
+            raise ValueError("invalid Ed25519 key or signature length")
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        payload = canonical_feasibility_attestation_payload(record)
+        Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(signature, payload)
+    except Exception as exc:
+        return {
+            "valid": False,
+            "reason": f"detached_attestation_invalid:{type(exc).__name__}",
+        }
+    return {
+        "valid": True,
+        "algorithm": "Ed25519",
+        "key_id": configured_key_id,
+        "signed_payload_sha256": hashlib.sha256(payload).hexdigest(),
+    }
+
+
 def _feasibility_record(candidate: Mapping[str, Any]) -> dict[str, Any]:
     record = candidate.get("feasibility")
     if record is None:
@@ -47,6 +106,19 @@ def _feasibility_record(candidate: Mapping[str, Any]) -> dict[str, Any]:
             "supplied_record": supplied,
             "reason": "The supplied feasibility record is not marked verified.",
         }
+
+    # A caller-provided status string is not an attestation. Only a detached
+    # signature under the deployment's out-of-band pinned Ed25519 key can
+    # promote the record to verified.
+    attestation_check = _verify_feasibility_attestation(supplied)
+    if attestation_check.get("valid") is not True:
+        return {
+            "status": "unverified",
+            "supplied_record": supplied,
+            "attestation_verification": attestation_check,
+            "reason": "External feasibility evidence is unsigned or its pinned-key signature did not verify.",
+        }
+
     source_uri = supplied.get("source_uri")
     if not isinstance(source_uri, str) or not source_uri.startswith("https://"):
         raise ValueError("verified feasibility requires an exact HTTPS source_uri")
@@ -64,6 +136,14 @@ def _feasibility_record(candidate: Mapping[str, Any]) -> dict[str, Any]:
     end = _utc_timestamp(window_end, "window_end_utc")
     if end <= start:
         raise ValueError("feasibility window end must be later than its start")
+    if not supplied.get("calculator") or not supplied.get("query_id"):
+        raise ValueError("verified feasibility requires calculator and query_id")
+    query_parameters = supplied.get("query_parameters")
+    if not isinstance(query_parameters, Mapping) or not query_parameters:
+        raise ValueError("verified feasibility requires exact query_parameters")
+    digest = str(supplied.get("evidence_sha256", "")).lower()
+    if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+        raise ValueError("verified feasibility requires a valid evidence_sha256")
     normalized_window = {
         "start_utc": start.isoformat(),
         "end_utc": end.isoformat(),
@@ -76,6 +156,11 @@ def _feasibility_record(candidate: Mapping[str, Any]) -> dict[str, Any]:
         "window": normalized_window,
         "constraints": dict(supplied.get("constraints") or {}),
         "result_detail": supplied.get("result_detail"),
+        "calculator": supplied["calculator"],
+        "query_id": supplied["query_id"],
+        "query_parameters": dict(query_parameters),
+        "evidence_sha256": digest,
+        "attestation_verification": attestation_check,
     }
 
 
@@ -332,6 +417,7 @@ def plan_candidate_observations(candidates: Sequence[Mapping[str, Any]], *,
                         and set(evidence_digest) <= set("0123456789abcdef"))
         query_parameters = raw_f.get("query_parameters")
         good = (f.get("status") == "verified" and f.get("feasible") is True
+                and (f.get("attestation_verification") or {}).get("valid") is True
                 and str(f.get("source_uri", "")).startswith("https://")
                 and bool(f.get("checked_utc")) and bool(raw_f.get("calculator"))
                 and bool(raw_f.get("query_id")) and digest_valid
@@ -348,6 +434,6 @@ def plan_candidate_observations(candidates: Sequence[Mapping[str, Any]], *,
         "feasible_ranked": verified, "science_only_ranked": ranked,
         "blocked_or_unverified": blocked,
         "prior_sensitivity": base.get("prior_sensitivity", {}),
-        "feasibility_policy": "A candidate is recommended only when the external record is verified and contains an HTTPS source, timezone-aware check time, calculator, query ID, exact query parameters and evidence SHA-256. CHRONOS validates fields but does not authenticate that service.",
+        "feasibility_policy": "A candidate is recommended only when the external record has a detached Ed25519 signature verified against the deployment's out-of-band pinned public key, plus an HTTPS source, timezone-aware check time, calculator, query ID, exact query parameters and evidence SHA-256. Without the pinned key, the record remains unverified.",
         "limitations": base["limitations"] + ["Forecasts must come from fitted physical models.", "The planner does not schedule or command a telescope."],
     }
