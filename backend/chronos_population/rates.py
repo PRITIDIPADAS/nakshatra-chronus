@@ -35,6 +35,20 @@ def _positive_finite(value: Any, label: str) -> float:
     return number
 
 
+def _add_signed_corrected_excess(
+    total: np.ndarray,
+    science_counts: np.ndarray,
+    null_counts: np.ndarray,
+    completeness: np.ndarray,
+) -> np.ndarray:
+    """Accumulate signed, completeness-corrected excess without field truncation."""
+    if not (total.shape == science_counts.shape == null_counts.shape == completeness.shape):
+        raise ValueError("population-rate draw arrays must have identical shapes")
+    if np.any(~np.isfinite(completeness)) or np.any(completeness <= 0):
+        raise ValueError("completeness draws must be finite and positive")
+    return total + (science_counts - null_counts) / np.maximum(completeness, 1e-6)
+
+
 def _revalidate_coverage(
     fields: Sequence[Mapping[str, Any]],
     coverage_audit: Mapping[str, Any] | None,
@@ -193,8 +207,15 @@ def estimate_event_rate(
             size=draws,
         )
         null_count_draws = rng.poisson(null_mean_science)
-        excess = np.maximum(science_count_draws - null_count_draws, 0)
-        total_corrected_excess_draws += excess / np.maximum(completeness_draws, 1e-6)
+        # Keep each field's signed excess until all independent fields have
+        # been pooled. Truncating each field at zero biases the population
+        # rate upward whenever a control fluctuation exceeds its science count.
+        total_corrected_excess_draws = _add_signed_corrected_excess(
+            total_corrected_excess_draws,
+            science_count_draws,
+            null_count_draws,
+            completeness_draws,
+        )
         field_exposure = area * days
         total_science_exposure_sqdeg_days += field_exposure
         included.append({
@@ -214,7 +235,12 @@ def estimate_event_rate(
 
     if total_science_exposure_sqdeg_days <= 0:
         raise ValueError("total science area-time exposure must be positive")
-    total_rate_draws = total_corrected_excess_draws / total_science_exposure_sqdeg_days
+    # A population rate is non-negative, but apply that boundary only after
+    # summing all signed field contributions on their shared area-time scale.
+    total_rate_draws = (
+        np.maximum(total_corrected_excess_draws, 0.0)
+        / total_science_exposure_sqdeg_days
+    )
     q16, median, q84 = np.quantile(total_rate_draws, [0.16, 0.5, 0.84])
     q025, q975 = np.quantile(total_rate_draws, [0.025, 0.975])
     return {
