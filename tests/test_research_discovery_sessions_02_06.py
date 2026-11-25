@@ -381,6 +381,6 @@ def test_injection_requires_exposure_bound_calibration_record():
 
 def test_injection_rejects_nonfinite_gain():
     from research_discovery.validation.injection_recovery import inject_source_patch
-    with pytest.raises(ValueError,match="finite and positive"):
+    with pytest.raises(ValueError,match="absolute-gain conversion is invalid"):
         inject_source_patch(np.zeros((10,10)),np.ones((10,10)),np.zeros((10,10),dtype=np.uint16),
             np.ones((3,3)),5,5,rng=np.random.default_rng(1),electrons_per_image_unit=float("nan"))
