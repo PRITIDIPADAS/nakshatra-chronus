@@ -43,9 +43,12 @@ def _candidate(source_id, region, *, published, class_1, ml):
 
 def _write_csv(path, rows, *, fieldnames=None):
     path.parent.mkdir(parents=True, exist_ok=True)
-    columns = list(rows[0]) if rows else list(fieldnames or [])
-    if not columns:
-        raise ValueError(f"empty fixture CSV needs explicit fieldnames: {path}")
+    # Empty query results still need a header row so they are distinguishable
+    # from a missing query artifact.
+    columns = list(rows[0]) if rows else list(fieldnames or [
+        "obs_id", "access_url", "_chronos_collection", "_chronos_release",
+        "_chronos_dataset_class", "_chronos_region",
+    ])
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns)
         writer.writeheader()
@@ -349,6 +352,61 @@ def test_failed_optional_source_epoch_query_ignores_stale_match_csv(tmp_path):
     # Stale Taurus match rows are excluded; the two current Perseus rows remain.
     assert result["candidate_source_exposure_coverage"]["match_row_count"] == 2
     assert result["cross_region_candidate_source_exposure_overlap"]["source_plane_pairs_in_multiple_region_queries"] == 0
+
+
+
+
+def test_failed_optional_full_region_query_does_not_require_missing_csv(tmp_path):
+    _fixture(tmp_path)
+    report_path = tmp_path / "yso_population_recon.json"
+    report = json.loads(report_path.read_text())
+    report["region_results"][0]["optional_query_errors"] = {
+        "dr1_level2_exposures_full_region": "TAP geometry function unavailable"
+    }
+    (tmp_path / "Taurus_Auriga" / "dr1_level2_exposures_full_region.csv").unlink()
+    report["report_sha256"] = sha256_json({
+        key: value for key, value in report.items() if key != "report_sha256"
+    })
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    result = analyze(tmp_path)
+    first_region = result["regional_candidate_and_coverage_summaries"][0]
+    assert first_region["dr1_level2_full_region_intersection_query_status"] == "unavailable"
+    assert first_region["dr1_level2_full_region_intersection_exposure_rows"] is None
+    assert result["cross_region_full_region_exposure_overlap"]["exposure_rows_across_regions"] == 2
+
+
+def test_failed_optional_source_epoch_query_does_not_require_missing_csv(tmp_path):
+    _fixture(tmp_path)
+    report_path = tmp_path / "yso_population_recon.json"
+    report = json.loads(report_path.read_text())
+    report["region_results"][0]["optional_query_errors"] = {
+        "candidate_source_exposure_matches": "source-to-polygon query rejected"
+    }
+    (tmp_path / "Taurus_Auriga" / "candidate_source_exposure_matches.csv").unlink()
+    (tmp_path / "Taurus_Auriga" / "candidate_source_epoch_summary.csv").unlink()
+    report["report_sha256"] = sha256_json({
+        key: value for key, value in report.items() if key != "report_sha256"
+    })
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    result = analyze(tmp_path)
+    first_region = result["regional_candidate_and_coverage_summaries"][0]
+    assert first_region["candidate_source_exposure_query_status"] == "unavailable"
+    assert first_region["candidate_source_exposure_match_rows"] is None
+    assert result["candidate_source_exposure_coverage"]["match_row_count"] == 2
+
+
+def test_schema_1_1_missing_siav2_csv_is_unavailable_not_zero(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    missing = tmp_path / "Taurus_Auriga" / "region_footprints_sia_spherex_dr1.csv"
+    missing.unlink()
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    status = first["dr1_level2_full_region_spectral_image_products_by_collection"]["spherex_dr1"]
+    assert status["query_status"] == "unavailable"
+    assert status["product_rows"] is None
+    assert first["dr1_level2_full_region_spectral_image_product_rows"] is None
 
 
 def test_input_report_hash_and_candidate_row_count_are_fail_closed(tmp_path):
