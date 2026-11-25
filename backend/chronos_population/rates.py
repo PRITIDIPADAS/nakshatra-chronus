@@ -183,9 +183,7 @@ def estimate_event_rate(
         )
         null_count_draws = rng.poisson(null_mean_science)
         excess = np.maximum(science_count_draws - null_count_draws, 0)
-        total_rate_draws += (
-            excess / np.maximum(completeness_draws, 1e-6)
-        )
+        total_corrected_excess_draws += excess / np.maximum(completeness_draws, 1e-6)
         field_exposure = area * days
         total_science_exposure_sqdeg_days += field_exposure
         included.append({
