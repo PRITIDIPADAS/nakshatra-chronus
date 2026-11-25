@@ -234,6 +234,7 @@ def measure_equivalent_width(
         "interpretation": "Positive EW is absorption; negative EW is emission under this continuum convention.",
         "limitations": [
             "Feature interval is user supplied; no molecule is identified.",
+            "This equivalent-width and feature-depth measurement is not a molecular identification.",
             "A resolution value is only as valid as the supplied product, detector, wavelength and calibration provenance.",
             "Potential blend intervals are screening flags; no deblending or line-spread-function fit is performed.",
             "Continuum model must be inspected against the source spectrum; compare alternative models before interpretation.",
