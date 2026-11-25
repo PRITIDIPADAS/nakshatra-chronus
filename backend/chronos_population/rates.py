@@ -84,7 +84,7 @@ def estimate_event_rate(
     fields: Sequence[Mapping[str, Any]],
     *,
     coverage_audit: Mapping[str, Any],
-    minimum_completeness: float = 0.1,
+    minimum_completeness: float | None = None,
     draws: int = 10000,
     seed: int = 1,
 ) -> dict[str, Any]:
@@ -101,6 +101,17 @@ def estimate_event_rate(
     """
     if not fields:
         raise ValueError("at least one independent field is required")
+    if minimum_completeness is None:
+        if not isinstance(coverage_audit, Mapping) or not isinstance(coverage_audit.get("thresholds"), Mapping):
+            raise ValueError(
+                "coverage_audit with a frozen minimum_completeness threshold is required"
+            )
+        try:
+            minimum_completeness = float(coverage_audit["thresholds"]["minimum_completeness"])
+        except (KeyError, TypeError, ValueError):
+            raise ValueError(
+                "coverage_audit is missing a valid minimum_completeness threshold"
+            ) from None
     if not math.isfinite(float(minimum_completeness)) or not 0 < minimum_completeness <= 1:
         raise ValueError("minimum_completeness must be in (0, 1]")
     draws = _count(draws, "draws")
