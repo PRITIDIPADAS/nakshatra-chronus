@@ -53,6 +53,7 @@ def assess_population_coverage(
     selection_trials: Sequence[Mapping[str, Any]] | None = None,
     selection_bin_spec: Mapping[str, Any] | None = None,
     minimum_trials_per_selection_cell: int = 20,
+    minimum_fields_per_cell: int | None = None,
     minimum_selection_probability: float = 0.05,
 ) -> dict[str, Any]:
     """Audit field, source, wavelength, cadence, injection and null-control coverage.
@@ -79,6 +80,12 @@ def assess_population_coverage(
     minimum_continuum_samples = _positive_int(
         minimum_continuum_samples, "minimum_continuum_samples"
     )
+    minimum_fields_per_cell = _positive_int(
+        minimum_independent_fields if minimum_fields_per_cell is None else minimum_fields_per_cell,
+        "minimum_fields_per_cell",
+    )
+    if minimum_fields_per_cell > minimum_independent_fields:
+        raise ValueError("minimum_fields_per_cell cannot exceed minimum_independent_fields")
     if not math.isfinite(float(minimum_median_snr)) or minimum_median_snr < 0:
         raise ValueError("minimum_median_snr must be finite and non-negative")
     if not math.isfinite(float(minimum_completeness)) or not 0 < minimum_completeness <= 1:
@@ -106,7 +113,7 @@ def assess_population_coverage(
                 selection_trials, selection_bin_spec, field_records=fields,
                 minimum_trials_per_cell=minimum_trials_per_selection_cell,
                 minimum_independent_fields=minimum_independent_fields,
-                minimum_fields_per_cell=minimum_independent_fields,
+                minimum_fields_per_cell=minimum_fields_per_cell,
                 minimum_detection_probability=minimum_selection_probability,
             )
         except (ValueError, TypeError, KeyError, ImportError) as exc:
@@ -386,7 +393,7 @@ def assess_population_coverage(
             "minimum_median_snr": minimum_median_snr,
             "minimum_completeness": minimum_completeness,
             "minimum_trials_per_selection_cell": int(minimum_trials_per_selection_cell),
-            "minimum_fields_per_selection_cell": minimum_independent_fields,
+            "minimum_fields_per_selection_cell": minimum_fields_per_cell,
             "minimum_selection_probability": float(minimum_selection_probability),
         },
         "field_count": len(field_reports),

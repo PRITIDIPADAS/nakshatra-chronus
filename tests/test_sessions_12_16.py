@@ -714,9 +714,11 @@ def test_population_coverage_rejects_same_source_counted_in_multiple_fields():
         blue_continuum_um=[2.8, 2.95],
         red_continuum_um=[3.3, 3.4],
     )
-    for field in result["fields"]:
+    for field in result["fields"][:2]:
         assert "source_reused_across_fields" in field["sources"][0]["reasons"]
         assert field["eligible"] is False
+    for field in result["fields"][2:]:
+        assert "source_reused_across_fields" not in field["sources"][0]["reasons"]
     assert result["eligible_for_predeclared_population_protocol"] is False
 
 

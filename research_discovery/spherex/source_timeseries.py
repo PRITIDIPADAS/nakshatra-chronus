@@ -304,6 +304,10 @@ def assemble_source_timeseries(
         if not isinstance(compatibility, Mapping) or compatibility.get("status") != "compatible":
             raise ValueError(f"product {product_id} lacks an explicit compatible calibration decision")
         compatibility_sha = _require_sha(compatibility.get("sha256"), f"{product_id} compatibility decision SHA-256")
+        native_mef_audit_sha256 = _require_sha(
+            product.get("native_mef_audit_sha256"),
+            f"{product_id} native MEF audit SHA-256",
+        )
         files = {}
         for role in PRODUCT_ROLES:
             record = product.get(role)
@@ -327,6 +331,7 @@ def assemble_source_timeseries(
             "detector": detector,
             "calibration_group": calibration_group,
             "compatibility_decision_sha256": compatibility_sha,
+            "native_mef_audit_sha256": native_mef_audit_sha256,
             "files": files,
         }
 

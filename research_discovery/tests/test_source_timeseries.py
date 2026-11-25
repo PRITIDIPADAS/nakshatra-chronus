@@ -16,7 +16,7 @@ def _write(path: Path, payload: bytes) -> dict:
 
 
 def _write_fits(path: Path, hdus) -> dict:
-    fits.HDUList(hdus).writeto(path)
+    fits.HDUList(hdus).writeto(path, overwrite=True)
     return {
         "uri": f"https://archive.example/{path.name}",
         "local_path": str(path),
@@ -196,7 +196,9 @@ def test_source_timeseries_rejects_incompatible_product_and_array_geometry(tmp_p
                       header=fits.Header({"DETECTOR": 2, "BUNIT": "arcsec2"}),
                       name="IMAGE"),
     ]).writeto(path, overwrite=True)
-    manifest["products"][0]["solid_angle"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    updated_area_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest["products"][0]["solid_angle"]["sha256"] = updated_area_sha
+    manifest["products"][0]["compatibility_decision"]["solid_angle_sha256"] = updated_area_sha
     with pytest.raises(ValueError, match="solid-angle dimensions"):
         assemble_source_timeseries(manifest)
 
