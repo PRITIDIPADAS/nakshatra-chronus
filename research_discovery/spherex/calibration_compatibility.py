@@ -65,6 +65,22 @@ def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
         checks[key] = {"status": "pass" if ok else "fail",
                        "expected": expected, "audit": actual}
 
+    for label, local_path, expected_hash in (
+        ("science_local_file", science.get("local_path"), science.get("sha256")),
+        ("spectral_wcs_local_file", calibration.get("local_path"), calibration.get("sha256")),
+        ("solid_angle_local_file", calibration.get("solid_angle_map_path"), calibration.get("solid_angle_map_sha256")),
+    ):
+        if not local_path or not expected_hash:
+            checks[label] = {"status": "unknown", "reason": "local downloaded file path and manifest SHA-256 are required"}
+        else:
+            local = Path(str(local_path))
+            if not local.is_file():
+                checks[label] = {"status": "fail", "reason": f"local product file is missing: {local}"}
+            else:
+                actual_hash = _sha256(local)
+                checks[label] = {"status": "pass" if actual_hash.lower() == str(expected_hash).lower() else "fail",
+                                 "manifest_sha256": expected_hash, "local_sha256": actual_hash}
+    
     science_meta = {
         "release": report.get("release"),
         "detector": report.get("science_detector"),
@@ -130,6 +146,9 @@ def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
             area.get("uri") == calibration.get("solid_angle_map_uri") and
             area.get("sha256") and
             area.get("sha256") == calibration.get("solid_angle_map_sha256") and
+            calibration.get("solid_angle_map_path") and
+            Path(str(calibration.get("solid_angle_map_path"))).is_file() and
+            _sha256(Path(str(calibration.get("solid_angle_map_path")))).lower() == str(area.get("sha256")).lower() and
             area.get("shape") == [2040,2040] and
             _detector(area.get("detector")) == _detector(science.get("detector")) and
             str(area.get("bunit","")).lower().replace(" ","") in {"arcsec2","arcsec**2","arcsec^2"}
