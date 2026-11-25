@@ -21,6 +21,11 @@ def _detector(value):
     if s.startswith("D"):s=s[1:]
     return "D"+s if s in {"1","2","3","4","5","6"} else None
 
+def _is_surface_brightness_unit(value):
+    compact=re.sub(r"\\s+", "", str(value or "")).lower()
+    return compact in {"mjy/sr", "mjy\\\\sr"}
+
+
 def _is_absolute_gain_unit(value):
     compact=re.sub(r"[\s(){}]", "", str(value or "")).lower()
     return ("mjy" in compact and "sr" in compact and
@@ -48,8 +53,8 @@ def derive_electrons_per_image_unit(*,calibration_path,expected_sha256,detector,
     if detector_id is None:raise ValueError(f"invalid science detector: {detector!r}")
     exptime=float(exposure_time_s)
     if not np.isfinite(exptime) or exptime<=0:raise ValueError("exposure_time_s must be finite and positive")
-    if str(science_image_unit).strip()!="MJy/sr":
-        raise ValueError("SPHEREx IMAGE units must be MJy/sr for this conversion path")
+    if not _is_surface_brightness_unit(science_image_unit):
+        raise ValueError(f"SPHEREx IMAGE units must be MJy/sr for this conversion path; received {science_image_unit!r}")
     with fits.open(path,memmap=True,checksum=True) as hdul:
         candidates=[hdu for hdu in hdul if hdu.data is not None and np.asarray(hdu.data).ndim==2]
         if not candidates:raise ValueError("absolute-gain FITS has no 2D image")
