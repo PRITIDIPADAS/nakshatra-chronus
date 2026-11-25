@@ -541,7 +541,7 @@ def main():
     manifest_products = []
     science_manifest = product_record(
         product_type="level2_science_mef",
-        native_uri=science_uri,
+        native_uri=normalize_archive_uri(science_uri),
         archive_id=str(science_record["archive_id"]) if science_record["archive_id"] else None,
         release=science_release,
         detector=science_detector,
@@ -576,7 +576,7 @@ def main():
             manifest_status = "discovered_not_downloaded"
         row = product_record(
             product_type=str(product.get("family") or "calibration"),
-            native_uri=str(product.get("uri")),
+            native_uri=normalize_archive_uri(product.get("uri")),
             archive_id=str(product.get("artifactid")) if product.get("artifactid") else None,
             release=product.get("release"),
             detector=product.get("detector"),
