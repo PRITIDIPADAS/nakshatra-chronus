@@ -50,6 +50,8 @@ def audit(science_path,spectral_wcs_path,*,solid_angle_path=None,compatibility_e
   im=sci[names.index("IMAGE")]
   if im.data is None or np.asarray(im.data).ndim!=2:raise ValueError("IMAGE HDU must contain a 2D array")
   image=np.asarray(im.data)
+  science_detector=str(im.header.get("DETECTOR","")).strip()
+  image_header=dict(im.header)
   report["image_shape"]=list(image.shape)
   report["image_bunit"]=im.header.get("BUNIT")
   report["checks"]["image_unit"]={"status":"pass" if im.header.get("BUNIT")=="MJy/sr" else "review_required","bunit":im.header.get("BUNIT")}
@@ -105,7 +107,7 @@ def audit(science_path,spectral_wcs_path,*,solid_angle_path=None,compatibility_e
      a=np.asarray(hdu.data,float)
      valid=np.isfinite(a)&(a>0)
      report["solid_angle"]={"file":str(solid_angle_path),"sha256":sha256(solid_angle_path),"shape":list(a.shape),"bunit":hdu.header.get("BUNIT"),"positive_fraction":float(valid.mean())}
-     sci_det=str(sci["IMAGE"].header.get("DETECTOR","")).strip(); cal_det=str(hdu.header.get("DETECTOR",om[0].header.get("DETECTOR",""))).strip()
+     sci_det=science_detector; cal_det=str(hdu.header.get("DETECTOR",om[0].header.get("DETECTOR",""))).strip()
      report["checks"]["solid_angle"]={"status":"pass" if a.shape==(2040,2040) and valid.all() and sci_det and cal_det and sci_det==cal_det else "review_required","science_detector":sci_det,"calibration_detector":cal_det}
   else:report["checks"]["solid_angle"]={"status":"review_required","reason":"matching pixel solid-angle calibration was not supplied"}
  if compatibility_evidence:
