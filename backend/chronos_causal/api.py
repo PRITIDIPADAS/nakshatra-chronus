@@ -559,6 +559,7 @@ class FalsificationRequest(BaseModel):
     observations: list[dict[str, Any]]
     challenge_specs: list[dict[str, Any]] | None = None
     candidate_family: list[dict[str, Any]] | None = None
+    candidate_family_complete: bool = False
     flux_covariance: list[list[float]] | None = None
     challenge_plan_sha256: str | None = None
     bootstrap_draws: int = 1000
@@ -626,6 +627,7 @@ def causal_falsify(request: FalsificationRequest):
         challenge_specs=request.challenge_specs,
         challenge_plan_sha256=request.challenge_plan_sha256,
         candidate_family=request.candidate_family,
+        candidate_family_complete=request.candidate_family_complete,
         flux_covariance=request.flux_covariance,
         bootstrap_draws=request.bootstrap_draws,
         transient_draws=request.transient_draws,
