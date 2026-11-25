@@ -50,7 +50,7 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
         raise ValueError("field_id values must be non-empty and unique")
     group_by_field = {
         str(item.get("field_id") or (item.get("input_signature") or {}).get("field_id")):
-        str(item.get("split_group_id") or item.get("field_id") or (item.get("input_signature") or {}).get("field_id"))
+        str(item.get("split_group_id") or item.get("independence_group_id") or item.get("field_id") or (item.get("input_signature") or {}).get("field_id"))
         for item in fields
     }
     groups = sorted(set(group_by_field.values()))
