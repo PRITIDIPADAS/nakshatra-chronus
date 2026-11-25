@@ -702,3 +702,72 @@ def test_transient_candidate_family_is_not_trusted_without_explicit_completeness
     assert report["verdict"] == "unknown"
     assert report["candidate_selection_correction"]["status"] == "candidate_family_completeness_not_declared"
     assert report["candidate_selection_correction"]["candidate_family_completeness_independently_verified"] is False
+
+
+def test_pixel_forward_integrates_linear_motion_over_the_finite_exposure():
+    from chronos_causal.pixel_forward import simulate_spectral_exposure
+
+    common = {
+        "shape": (32, 32),
+        "mjd": 60000.0,
+        "exposure_time_s": 8640.0,
+        "wavelengths_um": [2.0],
+        "bandwidths_um": [1.0],
+        "wavelength_response": np.ones((1, 32, 32)).tolist(),
+        "sources": [{
+            "source_id": "MOVING-1",
+            "x": 16.0,
+            "y": 16.0,
+            "reference_mjd": 60000.0,
+            "dx_pixels_per_day": 80.0,
+            "dy_pixels_per_day": 0.0,
+            "flux_density_electrons_per_s_um": [2.0],
+        }],
+        "psf_kernel": [[1.0]],
+        "seed": 17,
+    }
+    instantaneous = simulate_spectral_exposure(
+        **common, motion_integration_substeps=1
+    )
+    integrated = simulate_spectral_exposure(
+        **common, motion_integration_substeps= nine
+    )
+    instant_map = np.asarray(instantaneous["components"]["source_electrons"])
+    trail_map = np.asarray(integrated["components"]["source_electrons"])
+    assert np.count_nonzero(trail_map > 0) > np.count_nonzero(instant_map > 0)
+    assert trail_map.sum() == pytest.approx(instant_map.sum(), rel=1e-12)
+    assert integrated["motion_integration_substeps"] == 9
+    assert integrated["sources"][0]["motion_trail_length_px"] == pytest.approx(8.0)
+    assert integrated["sources"][0]["exposure_start_xy_px"] == pytest.approx([12.0, 16.0])
+    assert integrated["sources"][0]["exposure_end_xy_px"] == pytest.approx([20.0, 16.0])
+
+
+def test_pixel_forward_rejects_invalid_motion_integration_substeps():
+    from chronos_causal.pixel_forward import simulate_spectral_exposure
+
+    arguments = {
+        "shape": (8, 8),
+        "mjd": 60000.0,
+        "exposure_time_s": 10.0,
+        "wavelengths_um": [1.0],
+        "bandwidths_um": [0.1],
+        "wavelength_response": np.ones((1, 8, 8)).tolist(),
+        "sources": [],
+        "psf_kernel": [[1.0]],
+    }
+    for value in (0, 1.5, 102, True):
+        with pytest.raises(ValueError, match="motion_integration_substeps"):
+            simulate_spectral_exposure(
+                **arguments, motion_integration_substeps=value
+            )
+
+
+def test_jacobian_audit_rejects_non_symmetric_measurement_covariance():
+    from chronos_causal.identifiability import audit_forward_model_identifiability
+
+    with pytest.raises(ValueError, match="covariance must be symmetric"):
+        audit_forward_model_identifiability(
+            [[1.0, 0.0], [0.0, 1.0]],
+            ["sky_amplitude", "detector_amplitude"],
+            covariance=[[1.0, 0.25], [0.0, 1.0]],
+        )
