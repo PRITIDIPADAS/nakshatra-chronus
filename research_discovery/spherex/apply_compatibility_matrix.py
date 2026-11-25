@@ -6,8 +6,13 @@ from collections import defaultdict
 from research_discovery.spherex.archive_manifest import build_manifest,validate_manifest
 
 def apply_matrix(manifest,matrix):
+ validation=validate_manifest(manifest)
+ if not validation["valid"]:
+  raise ValueError(f"Input archive manifest is invalid: {validation['issues'][:5]}")
  products=[dict(p) for p in manifest.get("products",[])]
  by_uri={p.get("native_uri"):p for p in products}
+ if len(by_uri)!=len(products):
+  raise ValueError("Input manifest contains duplicate native URIs; refusing compatibility assignment")
  compatible=defaultdict(list)
  for row in matrix.get("compatible_pairs",[]):
   compatible[row.get("science_uri")].append(row)
@@ -15,20 +20,24 @@ def apply_matrix(manifest,matrix):
  for science_uri,rows in compatible.items():
   # Multiple compatible calibration files for one exposure are ambiguous; do not choose.
   unique={r.get("calibration_uri") for r in rows}
-  if len(unique)!=1 or science_uri not in by_uri or next(iter(unique)) not in by_uri:
-   unresolved.append({"science_uri":science_uri,"reason":"ambiguous or missing manifest product row"})
+  area_uris={r.get("solid_angle_uri") for r in rows}
+  if (len(unique)!=1 or len(area_uris)!=1 or None in area_uris or
+      science_uri not in by_uri or next(iter(unique)) not in by_uri or next(iter(area_uris)) not in by_uri):
+   unresolved.append({"science_uri":science_uri,"reason":"ambiguous or missing science, CWAVE/CBAND, or solid-angle manifest product row"})
    continue
-  row=rows[0];cal_uri=row["calibration_uri"]
+  row=rows[0];cal_uri=row["calibration_uri"];area_uri=row["solid_angle_uri"]
   group=row.get("compatibility_group")
   if not group:
    group="SPX:"+hashlib.sha256((science_uri+"\n"+cal_uri).encode()).hexdigest()[:16]
-  sci=by_uri[science_uri];cal=by_uri[cal_uri]
-  sci["compatibility_status"]="compatible";cal["compatibility_status"]="compatible"
-  sci["compatibility_group"]=group;cal["compatibility_group"]=group
-  sci["notes"]=(str(sci.get("notes") or "")+" | Pair verified by compatibility matrix.").strip(" |")
-  cal["notes"]=(str(cal.get("notes") or "")+" | Pair verified by compatibility matrix.").strip(" |")
+  sci=by_uri[science_uri];cal=by_uri[cal_uri];area=by_uri[area_uri]
+  for product in (sci,cal,area):
+   product["compatibility_status"]="compatible"
+   product["compatibility_group"]=group
+   product["notes"]=(str(product.get("notes") or "")+" | Pair verified by compatibility matrix.").strip(" |")
   used_cal.setdefault(cal_uri,set()).add(group)
-  applied.append({"science_uri":science_uri,"calibration_uri":cal_uri,"compatibility_group":group})
+  used_cal.setdefault(area_uri,set()).add(group)
+  applied.append({"science_uri":science_uri,"calibration_uri":cal_uri,
+    "solid_angle_uri":area_uri,"compatibility_group":group})
  for uri,groups in used_cal.items():
   if len(groups)>1:
    unresolved.append({"calibration_uri":uri,"reason":"calibration candidate maps to multiple compatibility groups"})
