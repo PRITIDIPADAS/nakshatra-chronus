@@ -164,9 +164,9 @@ Detailed single-exposure evidence, exact product hashes and injection/recovery i
 
 ## Live SPLICES / DR1 catalogue reconnaissance
 
-**Status: completed descriptive reconnaissance; not a population result.** The latest passing workflow is [run #36](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583599). It returned 16,663 regional catalogue rows, 2,421 candidate-union rows, 1,540 Level-2 centre-point footprint rows and 6,214 DR1/QR3 SIAv2 spectral-image product rows. Candidate labels remain separate: 1,490 `YSO_PUB`, 1,490 `CLASS_1` YSO flags and 1,165 `STYPE_ML` YSO flags. Source-to-exposure linkage is unavailable for all six regions because IRSA rejects the optional source-table metadata request; no source-level visit or cadence count is claimed. The All-Sky Cube query is capped at 1,000 rows and incomplete. See [the checksummed run-#36 report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
+**Status: completed descriptive reconnaissance with geometric archive-footprint linkage; not a population result.** The latest successful workflow is [run #38](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45648715196). It returned 16,663 regional catalogue rows, 2,421 candidate-union rows, 1,540 Level-2 region-centre rows and 6,214 DR1/QR3 SIAv2 Level-2 image products. Local spherical matching against SIAv2 s_region polygons yielded 924,443 geometric candidate–product footprint pairs, with at least one match for all 2,421 candidates in the five star-forming regions. All four SIAv2 collections completed below their caps; no candidate coordinates or returned product polygons were invalid. The All-Sky Cube metadata inventory returned 32 records for the six searched field cones, not the whole sky. Exact hashes and field-level results are in [the run-#38 report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
 
-The catalogue labels are not independent truth labels. The 931 ML-only rows are review candidates, not newly confirmed YSOs. These results do not pass the population-discovery gate.
+These are metadata footprint associations, not extracted source flux, usable time cadence, validated light curves or physical class confirmation. The 931 ML-only rows remain follow-up candidates, not newly confirmed YSOs. This does not satisfy the YSO population-discovery gate.
 
 ## Gain-derived source Poisson implementation and multi-field workflow
 
@@ -182,7 +182,7 @@ The source-Poisson pilot recovered 5/20, 14/20 and 17/20 sources at 54.198, 108.
 
 ## SPLICES / DR1 regional reconnaissance
 
-The current successful workflow [#36 / run 45641583599](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583599) covers five star-forming regions and a high-latitude control. It returned 16,663 catalogue rows and 2,421 candidate-union rows. The six region-centre Level-2 searches sum to 1,540 exposures; the four DR1/QR3 SIAv2 collections return 6,214 spectral-image metadata rows. Candidate-source-to-exposure matching is unavailable for all six regions, and the All-Sky Cube metadata query reached its 1,000-row cap. The [run-#36 report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md) preserves the errors, nulls and exact checksums. It does not establish source cadence, a YSO census or a discovery.
+Workflow [#38 / run 45648715196](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45648715196) completed five star-forming regions plus a high-latitude control. It returned 16,663 catalogue rows, 2,421 candidate rows, 1,540 region-centre Level-2 rows and 6,214 DR1/QR3 SIAv2 Level-2 image products. The SIAv2 polygon matcher returned 924,443 geometric source–product pairs and at least one footprint association for every candidate source in the star-forming regions. The All-Sky Cube metadata search returned 32 distinct tile metadata records across the six predeclared field cones; it is not a full-sky inventory. No source flux was extracted, and metadata time spans are not validated epochs or cadence. See the [run-#38 report](SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
 
 ## Latest fail-closed M101 workflow verification — 25 November 2026
 

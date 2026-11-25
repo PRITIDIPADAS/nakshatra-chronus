@@ -88,6 +88,10 @@ This completes the exploratory six-field injection/recovery workflow only. Gain-
 
 Workflow [#888 / run 45641583358](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583358) passed **314 tests with 7 warnings**, including both JavaScript syntax checks. Its M101 real-field job also completed archive retrieval, native compatibility audit, machine-readable evidence validation and artifact upload. This validates code and evidence handling, not human calibration review or blind scientific acceptance.
 
+## Six-region archive-footprint evidence — 25 November 2026
+
+The live SPLICES/DR1/QR3 reconnaissance [#38 / run 45648715196](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45648715196) completed with 2,421 candidate-source summaries and 924,443 geometric candidate–product footprint pairs across the five star-forming regions. The method parses SIAv2 s_region polygons and uses spherical point-in-polygon matching; it does not use the failed direct TAP SPLICES/artifact join. All four collections completed below row caps and no invalid product polygons were observed. These are archive metadata matches, not extracted photometry, vetted epochs, a population discovery or a blind method comparison. The 32 All-Sky Cube records are metadata-only results for six field cones.
+
 ## Acceptance gates that remain open
 
 | Gate | Status |

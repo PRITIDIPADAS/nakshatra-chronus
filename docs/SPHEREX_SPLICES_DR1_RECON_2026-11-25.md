@@ -4,15 +4,15 @@
 
 ## Reproducible live run
 
-- GitHub Actions: [run 45645371633](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45645371633), workflow run **#37**.
-- Code revision: b8bcdad3bc814300d76999972bd03941901e5fa6.
+- GitHub Actions: [run 45648715196](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45648715196), workflow run **#38**.
+- Code revision: cb66210536713df52e5530a05185d6fe1353c6e3.
 - Conclusion: success; catalogue, Level-2 region-centre coverage, four SIAv2 collection searches, local source-footprint matching, cube metadata inventory, candidate audit and artifact upload completed.
-- Artifact ID 15038485632, 6,123,743 bytes; ZIP SHA-256 4bd902e551ac90585f16d5d9516fb5bbbbd73d89fb544496cb6e6abf1c408fd2.
-- Reconnaissance JSON: 708,876 bytes; raw SHA-256 9e90d0f46e98964e74bd6d5483ab586990a6d965b4e03263b407f62a18255eab; embedded canonical SHA-256 158ed16f88b5a1161aa9648736e64a25d2614cf6635d3600c252cbc687e5aba7, independently recomputed and matched.
-- Candidate audit JSON: 37,762 bytes; raw SHA-256 59be7907a663fe6c20cb40de9d931fbe74a7f9243fe204f161b3631431272d4e; embedded canonical SHA-256 61bc1cb1349e5c1118cc50d6158753744231483e1839406a2e80d1e1ffece088, independently recomputed and matched.
+- Artifact ID 15038898474, 6,123,743 bytes; ZIP SHA-256 6be5058a25ec68f94492bc61ebd895a818d67276da01ba31a0b194d01f5df81f.
+- Reconnaissance JSON: 708,876 bytes; raw SHA-256 d3d00040375ea04b1da5546e74020460492b136d281a6ac03a25e44c24d07a22; embedded canonical SHA-256 b8bbbfec64a24d4eaf514282e496ee6948dd2acf73ceb414aa98dd7bcaa1d646, independently recomputed and matched.
+- Candidate audit JSON: 37,762 bytes; raw SHA-256 a18c65bcae35ff57c8c86bb5bd4e646ee49feaaa1a8e1cbe6d4f138110258d51; embedded canonical SHA-256 4ca24f0558e74173b20771fa26242fe8148db8c562ea5f83b95fd1ad23662850, independently recomputed and matched.
 - Schema chronos-spllices-yso-recon/1.1; 2,421 candidate records; required catalogue and region-centre queries succeeded.
 
-The production source-matching code on run #37 is unchanged by the subsequent test-only revision cb66210536713df52e5530a05185d6fe1353c6e3. The updated tests passed separately (run #897: 316 passed, 7 warnings) and with the M101 real-field job (run #896: 316 passed, 12 warnings).
+Run #38 executed on revision cb66210536713df52e5530a05185d6fe1353c6e3, which includes the local SIAv2 source-footprint matcher and the regression tests for its spherical geometry. The updated tests passed separately (run #897: 316 passed, 7 warnings) and with the M101 real-field job (run #896: 316 passed, 12 warnings).
 
 ## Regional catalogue and archive results
 
