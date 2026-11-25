@@ -119,3 +119,13 @@ The sequential six-region D2 DR1 workflow completed on run 45624461435. Six dist
 ## Latest SPLICES / DR1 query boundary — 25 November 2026
 
 The latest live run [45636514684](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45636514684) completed its catalogue, candidate-label and region-centre footprint queries. Its candidate export has 2,421 rows with unique source IDs; the three label fields overlap as described in `docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md`. The optional full-region intersection and candidate-source-to-exposure queries were rejected by IRSA TAP. Candidate source-level exposure matches and cadence therefore remain unmeasured. These catalogue labels do not establish a YSO population or discovery.
+
+
+## Current strict evidence update — 25 November 2026
+
+The latest completed strict six-field calibrated-Jy run is [workflow #19 / run 45639895735](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45639895735). Its final validator confirms six requested, returned and completed fields, zero incomplete fields, exact field-manifest/role checks, all per-field eligibility checks and a matching aggregate report digest. The artifact and digest are recorded in [the six-region report](../docs/SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md). This is an exploratory, non-blind, one-exposure-per-region study. Lupus III remains a 0/20, 0/20, 0/20 anomaly and must not be silently dropped or averaged away. Gain-to-electron conversion review remains pending.
+
+The latest completed M101 archive/CI run used for this evidence refresh is [45652295910](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45652295910): 316 tests passed, both JavaScript syntax checks passed, and the real M101 DR1 D2 native calibration/provenance/Jy evidence validator passed. Artifact 15041901578 was retained with the native MEF, exact calibration inputs and reports. This does not substitute for independent instrument calibration review.
+
+The latest SPLICES/DR1/QR3 reconnaissance is [run #38 / 45648715196](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45648715196): 2,421 catalogue candidate rows, 6,214 Level-2 SIAv2 product metadata rows, 924,443 geometric candidate-to-product footprint pairs and 32 All-Sky Cube metadata rows in the six searched cones. These are footprint metadata associations, not measured source fluxes, validated epochs, cadence, spectra or a YSO discovery.
+
