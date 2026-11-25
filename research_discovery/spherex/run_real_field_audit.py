@@ -133,6 +133,15 @@ def science_record(path: Path, uri: str):
         }
 
 
+def normalize_release(value: str) -> str | None:
+    """Return the exact SPHEREx archive release token from a native URI."""
+    path = urlparse(str(value)).path.lower()
+    for release in ("dr1", "qr3"):
+        if f"/spherex/{release}/" in path or f"/{release}/" in path:
+            return release.upper()
+    return None
+
+
 def normalise_irsa_uri(value: str) -> str:
     value = str(value).strip()
     if value.startswith("https://"):
