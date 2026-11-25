@@ -77,7 +77,7 @@ def _detector_position_scatter(state, x, y):
 def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mapping[str, Any], *,
                                 sky_detector_twin_detections: Sequence[Mapping[str, Any]] | None,
                                 score_thresholds: Mapping[str, Sequence[float]],
-                                snr_threshold: float = 5.0,
+                                snr_threshold: float | None = None,
                                 forensics_thresholds: Mapping[str, float] | None = None) -> dict[str, Any]:
     """Build common-input records from one prepared CHRONOS field state.
 
@@ -91,14 +91,20 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
         raise ValueError("state must contain the exposure list from one pipeline.run result")
     if "cands" not in state:
         raise ValueError("state must contain cands; call pipeline.run before building baselines")
-    if float(snr_threshold) <= 0 or not math.isfinite(float(snr_threshold)):
-        raise ValueError("snr_threshold must be finite and positive")
     if not isinstance(score_thresholds, Mapping) or any(name not in score_thresholds for name in REQUIRED_METHODS):
         raise ValueError("score_thresholds must define every required baseline")
+    normalized_thresholds = {}
     for method in REQUIRED_METHODS:
         values = [float(value) for value in score_thresholds[method]]
         if not values or any(not math.isfinite(value) for value in values):
             raise ValueError(f"{method} needs finite score thresholds")
+        normalized_thresholds[method] = values
+    minimum_snr_score = min(normalized_thresholds["snr_only"])
+    detection_floor = minimum_snr_score if snr_threshold is None else float(snr_threshold)
+    if not math.isfinite(detection_floor) or detection_floor <= 0:
+        raise ValueError("snr_threshold must be finite and positive")
+    if detection_floor > minimum_snr_score:
+        raise ValueError("snr_threshold cannot exceed the lowest requested SNR curve threshold")
 
     snr_map = state.get("DEEPS")
     if snr_map is None:
@@ -106,10 +112,11 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
     snr_detections = [
         _detection(
             f"snr-{index:06d}", x, y, score,
-            {"method": "snr_only", "map": "DEEPS", "score_definition": "matched-filter S/N"},
+            {"method": "snr_only", "map": "DEEPS", "score_definition": "matched-filter S/N",
+             "collection_floor": detection_floor},
         )
         for index, (x, y, score) in enumerate(
-            pipeline.peaks(snr_map, float(snr_threshold), pipeline.TH["edge"])
+            pipeline.peaks(snr_map, detection_floor, pipeline.TH["edge"])
         )
     ]
 
@@ -196,7 +203,7 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
             for name in REQUIRED_METHODS
         },
         "score_thresholds": {
-            name: [float(value) for value in score_thresholds[name]]
+            name: normalized_thresholds[name]
             for name in REQUIRED_METHODS
         },
         "baseline_contract": {
@@ -205,6 +212,7 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
             "same_mask_checksum": signature["mask_sha256"],
             "same_coordinate_frame": signature["coordinate_frame"],
             "snr_only_map": "DEEPS",
+            "snr_detection_floor": detection_floor,
             "pda_source": "pipeline.run -> state.cands",
             "instrument_forensics_policy": "P/D/A candidates plus measured flag/detector-position diagnostics",
             "sky_detector_twin_source": "supplied detections from causal inference on this field",
