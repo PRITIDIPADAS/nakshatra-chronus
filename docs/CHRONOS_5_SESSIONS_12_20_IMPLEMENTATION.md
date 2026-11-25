@@ -130,6 +130,10 @@ This implementation supplies methods and infrastructure; it does not supply a sc
 
 Do not tag a validated CHRONOS 5.0 scientific release until real archive calibration is verified, held-out fields have passed the blind protocol, negative controls and ablations are reported, and another researcher can reproduce the result from original inputs and recorded configuration.
 
-## Remaining empirical work
+## Empirical status update — 25 November 2026
 
-No compatible real SPHEREx sample was downloaded or reprocessed as part of this software change. No blind held-out real-field evaluation, YSO population inference, independent review or paper submission has been performed here. The website may be used with real data only when the wavelength/calibration provenance gates pass; synthetic tests validate software behaviour, not astronomy performance.
+The original software-only status above is superseded by the current, separately documented empirical pilot. One real M101 DR1 D2 Level-2 exposure has now been retrieved with its exact archive provenance, native spectral-WCS calibration, detector solid-angle map and absolute-gain input. The native MEF/calibration audit returned compatible, and a local calibrated-Jy injection/recovery experiment completed. Its electron-conversion record remains pending independent human review and the result is one-exposure exploratory evidence only.
+
+A separate SPLICES/DR1 reconnaissance completed for five star-forming regions and one high-latitude control. It reports catalogue labels and footprint coverage but does not establish a population rate or discover new YSOs. The six-region calibrated-Jy pilot, blind held-out benchmark, independent astronomical review/reproduction and scientific release gates remain open until separately evidenced.
+
+See [CHRONOS 5 empirical status — 25 November 2026](CHRONOS_5_EMPIRICAL_STATUS_2026-11-25.md) for the precise measurements, archive identities, report hashes, limitations and acceptance-gate table. Do not substitute software-test success, catalogue ML labels or a running GitHub Actions job for those empirical gates.
