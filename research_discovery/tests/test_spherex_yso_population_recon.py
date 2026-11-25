@@ -57,6 +57,70 @@ def test_dr1_exposure_coverage_uses_centre_point_and_optional_full_region_inters
         assert f"'{band}'" in query
         assert f"'{band}'" in full_region
 
+    source_epoch = queries["candidate_source_exposure_matches"]
+    assert f"SELECT TOP {recon.SOURCE_EPOCH_ROW_LIMIT}" in source_epoch
+    assert "FROM spherex.splices s, spherex.artifact a, spherex.plane p" in source_epoch
+    assert "CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1" in source_epoch
+    assert "s.yso_pub IS NOT NULL" in source_epoch
+    assert "LOWER(a.uri) LIKE '%/dr1/level2/%'" in source_epoch
+    assert "p.time_bounds_lower" in source_epoch
+    assert "CIRCLE(" not in source_epoch  # Exact cone filtering is performed locally.
+
+
+
+def test_source_exposure_cone_filter_handles_ra_wrap_and_deduplicates_source_plane_pairs():
+    region = {"name": "Wrap_Test", "ra_deg": 0.0, "dec_deg": 0.0,
+              "radius_deg": 1.0, "role": "control"}
+    rows = [
+        {
+            "source_id": "S1", "designation": "J0000", "ra": 359.8, "dec": 0.1,
+            "yso_pub": 1, "class_1": "YSO", "stype_ml": "YSO",
+            "planeid": "P1", "obsid": "O1", "uri": "p1.fits",
+            "energy_bandpassname": "SPHEREx-D1",
+            "time_bounds_lower": 60000.0, "time_bounds_upper": 60000.1,
+        },
+        {
+            "source_id": "S1", "designation": "J0000", "ra": 359.8, "dec": 0.1,
+            "yso_pub": 1, "class_1": "YSO", "stype_ml": "YSO",
+            "planeid": "P1", "obsid": "O1", "uri": "p1-duplicate.fits",
+            "energy_bandpassname": "SPHEREx-D1",
+            "time_bounds_lower": 60000.0, "time_bounds_upper": 60000.1,
+        },
+        {
+            "source_id": "S1", "designation": "J0000", "ra": 359.8, "dec": 0.1,
+            "yso_pub": 1, "class_1": "YSO", "stype_ml": "YSO",
+            "planeid": "P2", "obsid": "O2", "uri": "p2.fits",
+            "energy_bandpassname": "SPHEREx-D2",
+            "time_bounds_lower": 60001.0, "time_bounds_upper": 60001.1,
+        },
+        {
+            "source_id": "S2", "designation": "outside", "ra": 2.0, "dec": 0.0,
+            "yso_pub": None, "class_1": "STAR", "stype_ml": "YSO",
+            "planeid": "P3", "obsid": "O3", "uri": "p3.fits",
+            "energy_bandpassname": "SPHEREx-D3",
+            "time_bounds_lower": 60002.0, "time_bounds_upper": 60002.1,
+        },
+    ]
+    candidate_rows = [
+        {"source_id": "S1", "ra": 359.8, "dec": 0.1,
+         "yso_pub": 1, "class_1": "YSO", "stype_ml": "YSO"},
+        {"source_id": "S2", "ra": 2.0, "dec": 0.0,
+         "yso_pub": None, "class_1": "STAR", "stype_ml": "YSO"},
+    ]
+    matched, summaries, report = recon.summarize_candidate_source_epochs(
+        region, candidate_rows, rows
+    )
+    assert recon.great_circle_separation_deg(359.8, 0.1, 0.0, 0.0) < 1.0
+    assert len(matched) == 2
+    assert {row["planeid"] for row in matched} == {"P1", "P2"}
+    assert len(summaries) == 1
+    assert summaries[0]["source_id"] == "S1"
+    assert summaries[0]["unique_level2_plane_count"] == 2
+    assert summaries[0]["unique_observation_count"] == 2
+    assert summaries[0]["bands"] == "SPHEREx-D1;SPHEREx-D2"
+    assert report["candidate_source_ids_with_level2_footprint_match"] == 1
+    assert report["candidate_source_ids_without_level2_footprint_match"] == 1
+
 
 def test_region_predicate_uses_irsa_adql_catalogue_cone_syntax():
     region = {"ra_deg": 65.7, "dec_deg": 26.0, "radius_deg": 2.0}
@@ -78,6 +142,27 @@ def test_local_catalogue_summary_reports_exact_counts_when_below_cap(monkeypatch
         {"source_id": 3, "class_1": "STAR", "yso_pub": None, "stype_ml": "STAR"},
     ]
     def fake_query(sql):
+        if sql.startswith(f"SELECT TOP {recon.SOURCE_EPOCH_ROW_LIMIT} "):
+            return {
+                "query": sql,
+                "row_count": 2,
+                "rows": [
+                    {
+                        "source_id": 1, "designation": "T1", "ra": 65.8, "dec": 26.1,
+                        "yso_pub": 10, "class_1": "YSO", "stype_ml": "YSO",
+                        "planeid": "plane-a", "obsid": "obs-a", "uri": "a.fits",
+                        "energy_bandpassname": "SPHEREx-D2",
+                        "time_bounds_lower": 60000.0, "time_bounds_upper": 60000.1,
+                    },
+                    {
+                        "source_id": 2, "designation": "T2", "ra": 65.9, "dec": 26.2,
+                        "yso_pub": None, "class_1": "STAR", "stype_ml": "YSO",
+                        "planeid": "plane-b", "obsid": "obs-b", "uri": "b.fits",
+                        "energy_bandpassname": "SPHEREx-D1",
+                        "time_bounds_lower": 60001.0, "time_bounds_upper": 60001.1,
+                    },
+                ],
+            }
         if "spherex.splices" in sql and "stype_ml" in sql:
             if sql.startswith("SELECT TOP 5000 "):
                 return {"query": sql, "row_count": 2, "rows": rows[:2]}
@@ -101,6 +186,10 @@ def test_local_catalogue_summary_reports_exact_counts_when_below_cap(monkeypatch
     assert result["counts"]["ml_yso_rows"] == 2
     assert result["counts"]["catalogue_query_complete"] is True
     assert result["counts"]["dr1_level2_exposure_rows_by_band"]["SPHEREx-D2"]["exposure_rows"] == 2
+    assert result["counts"]["candidate_source_exposure_query_complete"] is True
+    assert result["counts"]["candidate_source_exposure_match_rows"] == 2
+    assert result["counts"]["candidate_unique_source_ids_with_level2_footprint_match"] == 2
+    assert len(result["queries"]["candidate_source_epoch_summary"]["rows"]) == 2
     assert len(result["queries"]["class_distribution"]["rows"]) == 3
 
 
@@ -128,9 +217,11 @@ def test_query_failures_are_explicit_not_zero_detections(monkeypatch):
         "catalogue_sources", "candidate_sources", "dr1_level2_exposures"
     }
     assert set(result["optional_query_errors"]) == {
-        "dr1_level2_exposures_full_region"
+        "dr1_level2_exposures_full_region", "candidate_source_exposure_matches"
     }
     assert result["counts"]["dr1_level2_exposures_intersecting_full_region_total"] is None
+    assert result["counts"]["candidate_source_exposure_match_rows"] is None
+    assert result["counts"]["candidate_source_footprint_matches_measured"] is False
     assert result["counts"]["dr1_level2_full_region_optional_query_error"]
     assert result["counts"]["total_catalogue_rows"] is None
     assert result["counts"]["published_yso_label_rows"] is None
