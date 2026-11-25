@@ -126,7 +126,7 @@ astronomical reproduction/review remain open. The validated scientific
 release gate remains closed.
 
 
-## Follow-on source Poisson calibration path — implemented, not yet measured
+## Gain-derived source Poisson method — implementation record, superseded by the completed run below
 
 The completeness numbers above belong to the earlier deterministic injection
 run. They must not be reinterpreted as having included source Poisson noise.
@@ -156,12 +156,12 @@ calibration reviewer, its status is
 explicit opt-in and records \`independent_human_reviewed: false\`; it is
 not allowed to masquerade as a verified calibration record.
 
-The runner and tests now record expected electrons, realized electrons and
-the per-flux-bin variance increment. A fresh real-data run is required before
-any Poisson-aware completeness values can be reported. Until that run
-completes and its artifact is inspected, the 60-source deterministic results
-above remain the only measured M101 injection/recovery results. Source
-Poisson-aware M101 and multi-field results are **pending**, not passed.
+At the time this implementation note was first added, the gain-derived source-
+Poisson run had not yet completed. The runner and tests now record expected
+electrons, realized electrons and the per-flux-bin variance increment. The
+subsequent section, **Updated gain-derived source-Poisson run**, records the
+completed real-data execution and supersedes that earlier pending status. The
+60-source deterministic table above remains a separate historical baseline.
 
 ## Updated gain-derived source-Poisson run — 25 November 2026
 
