@@ -182,6 +182,20 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
              "bunit": hdu.header.get("BUNIT"), "header": _header_summary(hdu.header),
              "history": [str(card.value) for card in hdu.header.cards if card.keyword == "HISTORY"]}
             for hdu in calibration]
+        cwave_hdu = calibration["CWAVE"] if "CWAVE" in cal_names else calibration[0]
+        cal_header = cwave_hdu.header
+        cal_primary = calibration[0].header
+        report["spectral_wcs_metadata"] = {
+            "release": str(cal_primary.get("RELEASE", cal_header.get("RELEASE", ""))).strip() or None,
+            "detector": str(cal_header.get("DETECTOR", cal_primary.get("DETECTOR", ""))).strip() or None,
+            "pipeline_version": str(cal_header.get("VERSION", cal_primary.get("VERSION", ""))).strip() or None,
+            "processing_date": str(cal_header.get("PROCDATE", cal_primary.get("PROCDATE", ""))).strip() or None,
+            "coordinate_frame": "native_detector" if (
+                cal_names.count("CWAVE") == 1 and cal_names.count("CBAND") == 1 and
+                calibration["CWAVE"].data is not None and calibration["CBAND"].data is not None and
+                np.asarray(calibration["CWAVE"].data).shape == (2040,2040) and
+                np.asarray(calibration["CBAND"].data).shape == (2040,2040)) else None
+        }
         missing_cal = [name for name in ("CWAVE", "CBAND") if name not in cal_names]
         if missing_cal:
             report["checks"]["cwave_cband"] = {"status": "fail", "missing": missing_cal}
