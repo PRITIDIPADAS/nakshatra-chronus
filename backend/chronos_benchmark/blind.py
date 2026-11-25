@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 
 from chronos_addons.validation import split_fields
 from .runner import (
-    SCHEMA as BENCHMARK_SCHEMA, compare_benchmark_package, canonical_json,
+    SCHEMA as BENCHMARK_SCHEMA, REQUIRED_METHODS, compare_benchmark_package, canonical_json,
     sha256_json, _validate_signature,
 )
 
@@ -225,6 +225,183 @@ def verify_frozen_configuration(record: Mapping[str, Any]) -> dict[str, Any]:
         "expected_sha256": digest,
         "actual_sha256": actual,
         "reason": "configuration unchanged" if digest == actual else "configuration was changed after freeze",
+    }
+
+
+
+def build_blind_detection_run(
+    public_manifest: Mapping[str, Any],
+    run_manifest: Mapping[str, Any],
+    frozen_configuration: Mapping[str, Any],
+    field_records: Sequence[Mapping[str, Any]],
+    *,
+    benchmark_id: str,
+) -> dict[str, Any]:
+    """Assemble a blind analysis handoff using opaque field tokens and detections only.
+
+    This function does not accept a truth catalogue, encryption key, or private
+    field manifest. Each field record must have been created by
+    adapters.build_blind_detection_field_record from the same frozen public
+    signature and a prepared pipeline state.
+    """
+    if public_manifest.get("schema") != BLIND_SCHEMA or run_manifest.get("schema") != BLIND_SCHEMA:
+        raise ValueError("unsupported blind manifest schema")
+    if not isinstance(benchmark_id, str) or not benchmark_id.strip():
+        raise ValueError("benchmark_id must be a non-empty string")
+    public_fields = run_manifest.get("fields")
+    if not isinstance(public_fields, list) or not public_fields:
+        raise ValueError("run_manifest.fields must be a non-empty public field list")
+    canonical_run_manifest = {
+        "schema": BLIND_SCHEMA,
+        "fields": sorted(public_fields, key=lambda row: row.get("blind_field_token", "")),
+    }
+    if sha256_json(canonical_run_manifest) != public_manifest.get("run_manifest_sha256"):
+        raise ValueError("run_manifest does not match the checksum in public_manifest")
+    frozen_check = verify_frozen_configuration(frozen_configuration)
+    if not frozen_check["valid"]:
+        raise ValueError("frozen configuration seal is invalid")
+    dataset_digest = sha256_json({
+        "public_manifest": dict(public_manifest),
+        "run_manifest": canonical_run_manifest,
+    })
+    if dataset_digest != frozen_configuration.get("dataset_digest"):
+        raise ValueError("public manifest and run manifest differ from the frozen dataset digest")
+    public_commit = str(frozen_configuration.get("source_commit", "")).lower()
+    if len(public_commit) not in {40, 64} or any(ch not in "0123456789abcdef" for ch in public_commit):
+        raise ValueError("frozen configuration has an invalid source commit")
+
+    public_by_token = {}
+    radii = {}
+    for row in public_fields:
+        if not isinstance(row, Mapping):
+            raise ValueError("every public field row must be an object")
+        token = str(row.get("blind_field_token", "")).strip()
+        signature = row.get("input_signature")
+        if not token or token in public_by_token:
+            raise ValueError("public blind field tokens must be unique and non-empty")
+        if not isinstance(signature, Mapping) or signature.get("field_id") != token:
+            raise ValueError(f"{token}: public input signature must use the opaque field token")
+        if str(row.get("data_locator_token", "")) != token:
+            raise ValueError(f"{token}: data_locator_token must match the opaque field token")
+        if row.get("split_role") not in {"development", "blind_test"}:
+            raise ValueError(f"{token}: unsupported public split role")
+        radius = float(row.get("match_radius", 0.0))
+        if not math.isfinite(radius) or radius <= 0:
+            raise ValueError(f"{token}: public match_radius must be finite and positive")
+        public_by_token[token] = row
+        radii[token] = radius
+
+    blind_tokens = set(map(str, public_manifest.get("blind_test_tokens") or []))
+    public_blind_tokens = {
+        token for token, row in public_by_token.items()
+        if row.get("split_role") == "blind_test"
+    }
+    if not blind_tokens or blind_tokens != public_blind_tokens:
+        raise ValueError("public blind_test_tokens do not match the run manifest split labels")
+
+    configuration = frozen_configuration.get("configuration")
+    if not isinstance(configuration, Mapping):
+        raise ValueError("frozen configuration body is missing")
+    from_frozen_radii = configuration.get("matching_radii_by_field")
+    if canonical_json(from_frozen_radii) != canonical_json(radii):
+        raise ValueError("frozen matching radii do not match all public field tokens")
+    thresholds = configuration.get("score_thresholds")
+    if not isinstance(thresholds, Mapping) or set(thresholds) != set(REQUIRED_METHODS):
+        raise ValueError("frozen score_thresholds must define exactly the four required methods")
+    if not isinstance(configuration.get("matched_target"), Mapping):
+        raise ValueError("frozen matched_target must be a mapping")
+    for method in REQUIRED_METHODS:
+        values = thresholds[method]
+        if not isinstance(values, (list, tuple)) or not values:
+            raise ValueError(f"{method}: frozen thresholds must be a non-empty sequence")
+        if any(not math.isfinite(float(value)) for value in values):
+            raise ValueError(f"{method}: frozen thresholds must all be finite")
+
+    records_by_token = {}
+    forbidden_keys = {
+        "truth_catalogue", "truth", "private_field", "original_field_id",
+        "split_group_id", "independence_group_id", "source_ids",
+    }
+    for record in field_records:
+        if not isinstance(record, Mapping):
+            raise ValueError("blind field records must be objects")
+        leaked = forbidden_keys.intersection(record)
+        if leaked:
+            raise ValueError("blind field record contains forbidden private fields: " + ", ".join(sorted(leaked)))
+        token = str(record.get("blind_field_token", "")).strip()
+        if token not in blind_tokens:
+            raise ValueError(f"unknown or non-holdout blind field token: {token}")
+        if token in records_by_token:
+            raise ValueError(f"duplicate blind field record for token: {token}")
+        public = public_by_token[token]
+        signature = dict(public["input_signature"])
+        if canonical_json(record.get("input_signature")) != canonical_json(signature):
+            raise ValueError(f"{token}: detection input signature differs from the custodian-issued public signature")
+        if float(record.get("match_radius", 0.0)) != radii[token]:
+            raise ValueError(f"{token}: detection matching radius differs from the frozen public manifest")
+        methods = record.get("methods")
+        if not isinstance(methods, Mapping) or set(methods) != set(REQUIRED_METHODS):
+            raise ValueError(f"{token}: exactly the four required method records must be supplied")
+        for method in REQUIRED_METHODS:
+            method_record = methods[method]
+            if not isinstance(method_record, Mapping):
+                raise ValueError(f"{token}.{method}: method record must be an object")
+            if canonical_json(method_record.get("input_signature")) != canonical_json(signature):
+                raise ValueError(f"{token}.{method}: method signature differs from the common public input")
+            detections = method_record.get("detections")
+            if not isinstance(detections, list):
+                raise ValueError(f"{token}.{method}: detections must be a list")
+            for index, detection in enumerate(detections):
+                if not isinstance(detection, Mapping):
+                    raise ValueError(f"{token}.{method}[{index}]: detection must be an object")
+                if not all(key in detection for key in ("detection_id", "x", "y", "score", "provenance")):
+                    raise ValueError(f"{token}.{method}[{index}]: incomplete detection record")
+                values = [float(detection[key]) for key in ("x", "y", "score")]
+                if any(not math.isfinite(value) for value in values):
+                    raise ValueError(f"{token}.{method}[{index}]: non-finite detection coordinate or score")
+                if not isinstance(detection["provenance"], Mapping) or not detection["provenance"]:
+                    raise ValueError(f"{token}.{method}[{index}]: detection provenance is required")
+        baseline = record.get("baseline_contract") or {}
+        if baseline.get("same_pipeline_state") is not True:
+            raise ValueError(f"{token}: same-pipeline-state contract was not verified")
+        if sorted(baseline.get("verified_exposure_ids") or []) != sorted(signature.get("exposure_ids") or []):
+            raise ValueError(f"{token}: prepared exposure IDs differ from the public opaque exposure tokens")
+        if str(baseline.get("verified_mask_sha256", "")).lower() != str(signature.get("mask_sha256", "")).lower():
+            raise ValueError(f"{token}: prepared mask checksum differs from the public blind signature")
+        if str(baseline.get("verified_pixel_wcs_sha256", "")).lower() != str(signature.get("pixel_wcs_sha256", "")).lower():
+            raise ValueError(f"{token}: prepared WCS checksum differs from the public blind signature")
+        records_by_token[token] = {
+            "blind_field_token": token,
+            "input_signature": signature,
+            "match_radius": radii[token],
+            "methods": {name: dict(methods[name]) for name in REQUIRED_METHODS},
+        }
+
+    if set(records_by_token) != blind_tokens:
+        missing = sorted(blind_tokens - set(records_by_token))
+        raise ValueError(f"blind detection run must include every holdout field exactly once; missing={missing}")
+
+    return {
+        "schema": BLIND_SCHEMA,
+        "benchmark_id": benchmark_id.strip(),
+        "public_fields": canonical_run_manifest["fields"],
+        "fields": [records_by_token[token] for token in sorted(records_by_token)],
+        "dataset_digest": dataset_digest,
+        "source_commit": public_commit,
+        "frozen_configuration_sha256": frozen_configuration["configuration_sha256"],
+        "configuration": dict(configuration),
+        "score_thresholds": dict(thresholds),
+        "matched_target": dict(configuration["matched_target"]),
+        "matching_radii_by_field": dict(radii),
+        "blind_run_contract": {
+            "truth_catalogues_accessed": False,
+            "private_field_ids_accessed": False,
+            "all_holdout_tokens_present_once": True,
+            "same_field_signature_enforced_for_all_methods": True,
+            "four_method_records_present": list(REQUIRED_METHODS),
+            "mask_and_wcs_signatures_verified": True,
+            "truth_release_allowed": False,
+        },
     }
 
 
