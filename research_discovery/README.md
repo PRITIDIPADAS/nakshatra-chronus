@@ -8,7 +8,7 @@
 2. **The calibration products are public, but are not retrieved by the SIA2 image query.** IRSA says to use the browsable calibration directories. The files are detector-specific, and the science wavelength solution should use `CWAVE` and `CBAND` in the separate Spectral WCS calibration product.
 3. **Detector-template projection can be performed without pretending a detector map has a sky WCS.** The new reprojection routine maps output sky pixels through the science MEF celestial WCS back into a native detector map. It uses IRSA's documented `CRPIX1A` / `CRPIX2A` cutout-origin relation, requires an explicit native-frame declaration and refuses cutouts without required origin metadata or headers declaring a different frame.
 4. **The Level-2 flag meanings and masking policies are encoded.** `flag_policy.py` records the published bit positions and separates the official suggested photometry and background-estimation masks. The default CLI uses a conservative photometry mask that also excludes DICHROIC pixels; all original flag values remain in the input.
-5. **A single-field real-data pilot has completed.** The M101 SPHEREx DR1 D2 run retrieved a native Level-2 MEF and detector-matched calibration products, verified provenance and FITS structure, and completed 60 deterministic Jy-domain source injections in one local ePSF zone. Recovery was 5/20, 13/20 and 19/20 across three flux levels. This is not blind validation, a multi-field performance estimate or an all-sky metric; see `docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md`.
+5. **A single-field real-data pilot has completed.** The M101 SPHEREx DR1 D2 run retrieved a native Level-2 MEF and detector-matched calibration products, verified provenance and FITS structure, and completed 60 deterministic Jy-domain source injections in one local ePSF zone. Recovery was 5/20, 13/20 and 19/20 across three flux levels in that historical run. A new gain-derived source-Poisson mode is implemented with a strict pending-independent-review record and is undergoing a fresh real-data rerun. Neither run is blind or a survey-wide completeness estimate; see `docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md`.
 6. **A citizen-science pilot workflow is prepared, not conducted.** It keeps the answer key private, offers an offline annotation UI and documents blinding, control cases, ethics and analysis. No volunteers were recruited and no human responses were fabricated.
 7. **A single validated Planet X ephemeris cannot exist today.** NASA says Planet Nine has not been discovered. The scientifically supportable output is a probability distribution over candidate sky positions generated from an explicitly sourced orbital reference population, with model and dynamical uncertainties reported.
 
@@ -25,6 +25,7 @@
 - `spherex/run_provenance_calibration_audit.py`: query IRSA `spherex.provenance_input`, retrieve linked calibration artifacts and preserve byte counts, archive checksums and SHA-256 records.
 - `spherex/psf_physicality.py`: fail-closed bounded handling of tiny negative ePSF interpolation ringing; the raw stamp is preserved and the corrected unit-sum stamp is separately hashed.
 - `spherex/yso_population_recon.py`: predeclared SPLICES label and DR1 Level-2 regional coverage reconnaissance, with literature and ML classifications retained separately.
+- `spherex/run_multifield_jy_pilot.py`: sequential six-region real D2 field runner; each field is eligible only if the native MEF audit, exact calibration provenance, bounded calibration-mask policy, completed Jy injection and gain-derived source-Poisson evidence all pass.
 - `validation/injection_recovery.py`: inject ePSF-derived sources into real images and measure conditional completeness; optionally converts integrated Jy to MJy/sr using a detector-aligned solid-angle map.
 - `citizen_science/build_task_manifest.py`: construct randomized, blinded tasks from actual epoch cutouts.
 - `citizen_science/review.html`: offline participant review interface; no server, identity collection or upload.
@@ -34,6 +35,8 @@
 - `planet9/compare_horizons.py`: compare a prediction table against independently exported JPL Horizons positions.
 - `.github/workflows/spherex-real-field-audit.yml`: reproducible M101 native-data retrieval and calibration audit.
 - `.github/workflows/spherex-yso-population-recon.yml`: predeclared SPLICES and SPHEREx DR1 regional coverage query workflow.
+- `.github/workflows/spherex-multifield-jy-pilot.yml`: sequential multi-region D2 calibrated-Jy pilot, with JSON evidence and logs only.
+- `docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md`: exact live six-region catalogue and Level-2 footprint results, report and artifact hashes, and interpretation limits.
 - `docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md`: archive identifiers, product hashes, calibration findings, injection metrics and scientific limits.
 - `docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md`: authoritative gate-by-gate scientific status.
 - `docs/`: protocol, evidence, workflow and limitations, including the historical 14 November environment blocker, Planet Nine candidate coordinate diagnostic, and why a solo AI audit is not citizen science.
@@ -95,10 +98,19 @@ The local Jy injection/recovery experiment completed 60 deterministic injections
 
 ## SPLICES / YSO reconnaissance boundary
 
-The predeclared reconnaissance workflow queries Taurus/Auriga, Perseus/NGC 1333, Orion A, Rho Ophiuchi, Lupus III and a high-latitude control. It retains `YSO_PUB` literature references, `CLASS_1` harmonised source classes and `STYPE_ML` machine-learning labels as separate fields, and queries Level-2 exposure coverage by detector band. A SPLICES target list is not a census of confirmed YSOs. Coverage counts are not source-level spectra or epochs. A regional catalogue count is not a population rate and cannot by itself establish a discovery.
+The live predeclared query completed for Taurus/Auriga, Perseus/NGC 1333, Orion A, Rho Ophiuchi, Lupus III and a high-latitude control. It returned 16,663 catalogue rows and 2,421 candidate-union rows across regional results; 1,490 rows had non-null `YSO_PUB`, and 1,165 rows had `STYPE_ML` containing YSO. `CLASS_1` was counted separately. All queries completed below their caps. These are catalogue-label counts, not confirmed YSOs or unique population counts; see `docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md`.
 
 ## Honest completion boundary
 
-The 14 November execution-attempt note is a historical record of an earlier environment that lacked dependencies and archive access; it is not the current data-access status. The M101 single-exposure pilot is now complete, but it is not a blind benchmark, multi-field performance test, four-method comparison or YSO population result. The source-injection seed and truth were visible, and source Poisson variance was not added because a verified exposure-specific electron-conversion record was not part of the run.
+The 14 November execution-attempt note is a historical record of an earlier environment that lacked dependencies and archive access; it is not the current data-access status. The historical M101 single-exposure pilot is complete, but it is not a blind benchmark, multi-field performance test, four-method comparison or YSO population result. Its reported 60 injections were deterministic and did not add source Poisson variance. A gain-derived, provenance-bound Poisson mode has now been added behind an explicit exploratory opt-in; it remains labelled pending independent human review and the fresh M101 and six-region runs must pass before any new result is reported.
 
 The independent blind benchmark still requires a real external custodian, a genuinely held-out field set, a verifiable external preregistration receipt and the same frozen four-method run on identical inputs. No independent astronomer has yet reproduced or reviewed the result. The SPLICES/DR1 reconnaissance is an input to study design, not a population analysis. The citizen-science workflow is prepared but not conducted; it requires ethics review, recruitment, informed consent and actual participant responses. The Planet Nine workflow produces a hypothesis-conditional sky ensemble, not a validated ephemeris or confirmed object. The validated scientific release gate remains closed.
+
+
+## Executed SPLICES / DR1 reconnaissance
+
+The first valid live IRSA reconnaissance is documented in `docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md`. Workflow run 45619403576 completed all six regional catalogue queries and all six SPHEREx Level-2 exposure-footprint queries. No query error occurred and no query cap was reached. The output is descriptive only: it is not a source census, YSO population rate or discovery.
+
+## Multi-field calibrated Jy evaluation
+
+A sequential six-region D2 workflow has been added. For each region it must retrieve a native Level-2 exposure and exact Spectral-WCS / absolute-gain provenance, select a detector-matched supplemental solid-angle product, pass the native MEF compatibility audit, and complete Jy injection/recovery with a per-pixel electron conversion derived from the linked absolute-gain map. The conversion record is marked `derived_pending_independent_review`; the generic validation interface requires an explicit exploratory opt-in and does not call this human review. The multi-field scientific gate remains closed until the exact-run report shows six distinct eligible science observations and distinct native file hashes.
