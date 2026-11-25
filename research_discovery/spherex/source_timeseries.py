@@ -215,7 +215,8 @@ def _verify_native_pixel(
         "native_map_shape": list(cwave.shape),
         "spectral_pixel_value_tolerance_um": 1e-6,
     }
-\ndef assemble_source_timeseries(
+
+def assemble_source_timeseries(
     manifest: Mapping[str, Any],
     *,
     minimum_epochs: int = 2,
