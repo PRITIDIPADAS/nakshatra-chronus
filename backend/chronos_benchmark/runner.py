@@ -372,6 +372,16 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
         ):
             raise ValueError("all fields in one benchmark must use the same coordinate frame and unit")
 
+        control_type = str(field.get("control_type", "science"))
+        allowed_controls = {
+            "science", "empty_field", "negative_control",
+            "shuffled_time_control", "detector_pattern_control",
+        }
+        if control_type not in allowed_controls:
+            raise ValueError(f"field {field_id}: unsupported control_type {control_type!r}")
+        injection_stratum = field.get("injection_stratum") or {}
+        if not isinstance(injection_stratum, Mapping):
+            raise ValueError(f"field {field_id}: injection_stratum must be an object")
         radius = float(field.get("match_radius", 0))
         if not math.isfinite(radius) or radius <= 0:
             raise ValueError(f"field {field_id} needs a positive match_radius")
@@ -394,6 +404,8 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
             "independence_group_id": independence_group_id,
             "dataset_class": signature["dataset_class"],
             "split": field["split"],
+            "control_type": control_type,
+            "injection_stratum": dict(injection_stratum),
             "input_signature": signature,
             "match_radius": radius,
             "field_area_deg2": float(area) if area is not None else None,
@@ -413,6 +425,23 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
                 selected_fields.append(point)
             point = _aggregate_point(selected_fields)
             point["threshold"] = threshold
+            control_groups = {}
+            stratum_groups = {}
+            for report, field_point in zip(per_field, selected_fields):
+                control_groups.setdefault(report["control_type"], []).append(field_point)
+                for dimension, value in report["injection_stratum"].items():
+                    stratum_groups.setdefault(str(dimension), {}).setdefault(str(value), []).append(field_point)
+            point["by_control_type"] = {
+                label: _aggregate_point(rows)
+                for label, rows in sorted(control_groups.items())
+            }
+            point["by_injection_stratum"] = {
+                dimension: {
+                    label: _aggregate_point(rows)
+                    for label, rows in sorted(groups.items())
+                }
+                for dimension, groups in sorted(stratum_groups.items())
+            }
             point["by_field"] = [
                 {"field_id": field_report["field_id"], **next(
                     row for row in field_report["method_curves"][method]
