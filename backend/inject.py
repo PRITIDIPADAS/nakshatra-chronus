@@ -64,6 +64,13 @@ def _calibrated_gain(exposure, record):
         raise ValueError(f"{exposure.id}: calibration record missing " + ", ".join(missing))
     if record["verification_status"] != "verified" or record["calibration_product"] != "abs_gain_matrix":
         raise ValueError(f"{exposure.id}: a verified abs_gain_matrix record is required")
+    from datetime import datetime
+    try:
+        verified_at = datetime.fromisoformat(str(record["verified_utc"]).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{exposure.id}: verified_utc must be ISO-8601") from exc
+    if verified_at.tzinfo is None:
+        raise ValueError(f"{exposure.id}: verified_utc must include a timezone")
     if str(record["science_observation_id"]) != str(getattr(exposure, "source_observation_id", "") or str(exposure.id).split("_D")[0]):
         raise ValueError(f"{exposure.id}: original OBSID mismatch")
     native_sha = str(record.get("science_native_file_sha256", record["science_file_sha256"])).lower()
