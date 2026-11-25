@@ -41,10 +41,13 @@ def _candidate(source_id, region, *, published, class_1, ml):
     }
 
 
-def _write_csv(path, rows):
+def _write_csv(path, rows, *, fieldnames=None):
     path.parent.mkdir(parents=True, exist_ok=True)
+    columns = list(rows[0]) if rows else list(fieldnames or [])
+    if not columns:
+        raise ValueError(f"empty fixture CSV needs explicit fieldnames: {path}")
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(handle, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
 
@@ -174,7 +177,14 @@ def _fixture_sia_v11(root):
                 "_chronos_dataset_class": "real",
                 "_chronos_region": region,
             } for i in range(count)]
-            _write_csv(root / region / f"region_footprints_sia_{collection}.csv", products)
+            _write_csv(
+                root / region / f"region_footprints_sia_{collection}.csv",
+                products,
+                fieldnames=[
+                    "obs_id", "access_url", "_chronos_collection",
+                    "_chronos_release", "_chronos_dataset_class", "_chronos_region",
+                ],
+            )
     _write_csv(root / "dr1_all_sky_cube_sia_metadata.csv", [{
         "obs_id": "DR1-ALLSKY-CUBE",
         "access_url": "https://irsa.example/dr1/allsky-cube.fits",

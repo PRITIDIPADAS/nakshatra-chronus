@@ -377,7 +377,9 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
             source_summary_rows = []
 
         centre_point_exposures.extend({**row, "recon_region": name} for row in exposures)
-        full_region_products.extend(full_region_rows)
+        full_region_products.extend(
+            {**row, "recon_region": name} for row in full_region_rows
+        )
         candidate_source_exposure_matches.extend(
             {**row, "recon_region": name} for row in source_match_rows
         )
@@ -530,9 +532,13 @@ def analyze(root: Path) -> dict:
     cube_raw = report.get("dr1_all_sky_cube_inventory") or {}
     cube_summary = {
         **(report.get("dr1_all_sky_cube") or {}),
-        "metadata_rows_verified_against_csv": len(cube_metadata_rows),
-        "metadata_access_uri_rows": sum(
-            nonempty(row.get("access_url") or row.get("uri")) for row in cube_metadata_rows
+        "metadata_rows_verified_against_csv": (
+            None if cube_raw.get("error") else len(cube_metadata_rows)
+        ),
+        "metadata_access_uri_rows": (
+            None if cube_raw.get("error") else sum(
+                nonempty(row.get("access_url") or row.get("uri")) for row in cube_metadata_rows
+            )
         ),
         "native_cube_downloaded": cube_raw.get("native_cube_downloaded", False),
         "temporal_epoch_series": cube_raw.get("temporal_epoch_series", False),
@@ -546,8 +552,10 @@ def analyze(root: Path) -> dict:
         candidate_source_epoch_summaries,
     ) = _region_summaries(root, report, candidates)
 
-    def overlap_summary(exposures: list[dict], semantics: str) -> dict:
-        if any(row.get("_chronos_collection") for row in exposures):
+    def overlap_summary(
+        exposures: list[dict], semantics: str, *, archive_products: bool = False
+    ) -> dict:
+        if archive_products or any(row.get("_chronos_collection") for row in exposures):
             products = defaultdict(set)
             unidentified = 0
             for row in exposures:
@@ -603,7 +611,12 @@ def analyze(root: Path) -> dict:
     )
     full_region_overlap = overlap_summary(
         full_region_exposures,
-        "region_circle_intersects_exposure_polygon",
+        (
+            "IRSA SIAv2 POS-circle spectral-image products; metadata rows, not epochs"
+            if report.get("schema") == "chronos-spllices-yso-recon/1.1"
+            else "region_circle_intersects_exposure_polygon"
+        ),
+        archive_products=report.get("schema") == "chronos-spllices-yso-recon/1.1",
     )
     source_pair_membership = defaultdict(set)
     for row in candidate_source_exposure_matches:
@@ -644,8 +657,19 @@ def analyze(root: Path) -> dict:
         ),
         "dr1_all_sky_cube_inventory": cube_summary,
         "candidate_source_exposure_coverage": {
-            "match_row_count": len(candidate_source_exposure_matches),
-            "source_summary_row_count": len(candidate_source_epoch_summaries),
+            "match_row_count": (
+                None if report.get("schema") == "chronos-spllices-yso-recon/1.1"
+                and any(row.get("candidate_source_exposure_query_status") == "unavailable"
+                        for row in regional)
+                else len(candidate_source_exposure_matches)
+            ),
+            "observed_match_row_count_lower_bound": len(candidate_source_exposure_matches),
+            "source_summary_row_count": (
+                None if report.get("schema") == "chronos-spllices-yso-recon/1.1"
+                and any(row.get("candidate_source_exposure_query_status") == "unavailable"
+                        for row in regional)
+                else len(candidate_source_epoch_summaries)
+            ),
             "regions_with_completed_query": sum(
                 row.get("candidate_source_exposure_query_status") == "complete_below_declared_row_cap"
                 for row in regional
