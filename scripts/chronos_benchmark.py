@@ -121,12 +121,16 @@ def command_unblind(args):
     })
     if frozen.get("dataset_digest") != dataset_digest:
         raise ValueError("frozen configuration refers to a different blind dataset")
+    attestation = read_json(args.custodian_attestation)
     report = unblind_benchmark(
         public,
         Path(args.truth_store).read_bytes(),
         read_key(args.key_file),
         frozen,
         detection_run,
+        custodian_attestation=attestation,
+        custodian_public_key=Path(args.custodian_public_key).read_bytes(),
+        expected_custodian_public_key_sha256=args.expected_custodian_key_sha256,
         bootstrap_draws=args.draws,
         seed=args.seed,
     )
@@ -174,6 +178,9 @@ def parser():
     unblind.add_argument("--frozen-configuration", type=Path, required=True)
     unblind.add_argument("--detection-run", type=Path, required=True)
     unblind.add_argument("--output", type=Path, required=True)
+    unblind.add_argument("--custodian-attestation", type=Path, required=True)
+    unblind.add_argument("--custodian-public-key", type=Path, required=True)
+    unblind.add_argument("--expected-custodian-key-sha256", required=True)
     unblind.add_argument("--draws", type=int, default=2000)
     unblind.add_argument("--seed", type=int, default=20261125)
     unblind.set_defaults(function=command_unblind)
