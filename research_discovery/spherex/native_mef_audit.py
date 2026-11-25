@@ -145,7 +145,7 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
             release_basis = str(science_uri or science_path).lower()
             release = "dr1" if "/dr1/" in release_basis else "qr3" if "/qr3/" in release_basis else "unknown"
         filename_match = __import__("re").search(
-            r"-v[0-9.]+-(20[0-9]{2}-[0-9]{3})\\.fits$",
+            r"-v[0-9.]+-(20[0-9]{2}-[0-9]{3})\.fits$",
             science_path.name, __import__("re").I)
         science_processing_date = str(
             image_hdu.header.get("PROCDATE", primary.get("PROCDATE", ""))).strip() or (
