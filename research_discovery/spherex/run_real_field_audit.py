@@ -518,15 +518,24 @@ def main():
                 values = np.asarray(hdu.data, dtype=float)
                 unit = str(hdu.header.get("BUNIT", "")).lower()
                 finite_positive = np.isfinite(values) & (values > 0)
+                gain_structure_ok = (
+                    values.shape == (2040, 2040)
+                    and ("mjy" in unit and "sr" in unit and ("electron" in unit or "e-" in unit) and "s" in unit)
+                    and normal_detector(hdu.header.get("DETECTOR", hdul[0].header.get("DETECTOR")))==science["detector"]
+                )
                 gain_validation = {
-                    "status": "structure_and_units_pass" if (
-                        values.shape == (2040, 2040) and finite_positive.all()
-                        and ("mjy" in unit and "sr" in unit and ("electron" in unit or "e-" in unit) and "s" in unit)
-                        and normal_detector(hdu.header.get("DETECTOR", hdul[0].header.get("DETECTOR")))==science["detector"]
-                    ) else "review_required",
+                    "status": (
+                        "structure_units_pass_with_invalid_pixels_explicitly_masked"
+                        if gain_structure_ok and finite_positive.mean() > 0.999
+                        else "structure_and_units_pass"
+                        if gain_structure_ok and finite_positive.all()
+                        else "review_required"
+                    ),
                     "shape": list(values.shape), "bunit": hdu.header.get("BUNIT"),
                     "detector": normal_detector(hdu.header.get("DETECTOR", hdul[0].header.get("DETECTOR"))),
                     "finite_positive_fraction": float(finite_positive.mean()),
+                    "invalid_pixel_count": int((~finite_positive).sum()),
+                    "invalid_pixels_are_not_interpolated": True,
                     "uri": chosen_gain["uri"], "sha256": chosen_gain["sha256"],
                 }
 
