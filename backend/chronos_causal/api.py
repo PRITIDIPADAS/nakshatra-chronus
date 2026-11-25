@@ -1,7 +1,7 @@
 """HTTP endpoints for the CHRONOS research workspaces."""
 from __future__ import annotations
 from typing import Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from .inference import investigate
@@ -86,6 +86,17 @@ class ManifestRequest(BaseModel):
 
 class ManifestVerifyRequest(BaseModel):
     manifest: dict[str, Any]
+
+class InvestigationPackageRequest(BaseModel):
+    candidate_id: str
+    analysis: dict[str, Any]
+    evidence_graph: dict[str, Any]
+    source_files: list[dict[str, Any]]
+    reproduction_command: str
+    code_commit: str | None = None
+    environment: dict[str, Any] = Field(default_factory=dict)
+    processing_configuration: dict[str, Any] = Field(default_factory=dict)
+    failed_checks: list[dict[str, Any]] = Field(default_factory=list)
 
 class ObservationPlanRequest(BaseModel):
     candidates: list[dict[str, Any]]
@@ -297,6 +308,40 @@ def evidence_manifest(request: ManifestRequest):
 def evidence_manifest_verify(request: ManifestVerifyRequest):
     from .provenance import verify_manifest
     return verify_manifest(request.manifest)
+
+@router.post("/evidence/package/export")
+def evidence_package_export(request: InvestigationPackageRequest):
+    def run():
+        import tempfile
+        from pathlib import Path
+        from chronos_causal.investigation_package import create_investigation_package
+        if any("local_path" in row for row in request.source_files):
+            raise ValueError(
+                "HTTP package export accepts source metadata only; use the local export utility to embed FITS bytes"
+            )
+        with tempfile.TemporaryDirectory(prefix="chronos-package-") as directory:
+            package_path = Path(directory) / "investigation.zip"
+            create_investigation_package(
+                package_path,
+                candidate_id=request.candidate_id,
+                analysis=request.analysis,
+                evidence_graph=request.evidence_graph,
+                source_files=request.source_files,
+                reproduction_command=request.reproduction_command,
+                code_commit=request.code_commit,
+                environment=request.environment or None,
+                processing_configuration=request.processing_configuration,
+                failed_checks=request.failed_checks,
+                include_source_bytes=False,
+            )
+            payload = package_path.read_bytes()
+        safe_id = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in request.candidate_id)[:64]
+        return Response(
+            content=payload,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="chronos_{safe_id or "candidate"}.zip"'},
+        )
+    return guarded(run)
 
 @router.post("/evidence/graph")
 def evidence_graph(request: EvidenceGraphRequest):
