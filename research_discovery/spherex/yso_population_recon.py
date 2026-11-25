@@ -4,8 +4,9 @@
 This script does not claim a YSO discovery. It separates published catalogue
 labels from SPLICES machine-learning classes, retains comparison classes, and
 measures SPHEREx DR1 + QR3 Level-2 archive coverage for the same predeclared fields.
-Full-region footprint intersection uses IRSA SIAv2 POS searches; source-to-exposure
-associations use an ADQL point-in-polygon predicate in WHERE.
+Full-region footprint intersection and candidate-to-product associations use IRSA SIAv2
+metadata. Candidate coordinates are tested locally against each product's spherical
+s_region polygon; metadata matches are not extracted photometry or validated light curves.
 """
 from __future__ import annotations
 
@@ -43,7 +44,8 @@ SIA_COLLECTION_RELEASE = {
     "spherex_qr3_deep": "qr3",
 }
 DR1_ALL_SKY_CUBE_COLLECTION = "spherex_dr1_cube"
-CUBE_METADATA_ROW_LIMIT = 1000
+CUBE_METADATA_ROW_LIMIT = 20_000
+FOOTPRINT_MATCH_ALGORITHM = "spherical-gnomonic-pip/1.0"
 
 
 def scalar(value: Any) -> Any:
@@ -108,14 +110,19 @@ def query_region_footprints_sia(region: dict, collection: str) -> dict:
     }
 
 
-def query_dr1_all_sky_cube_sia() -> dict:
-    """Inventory the DR1 all-sky spectral cube without treating it as epochs.
+def query_dr1_all_sky_cube_sia(region: dict) -> dict:
+    """Inventory DR1 all-sky-cube tiles overlapping one predeclared field.
 
-    The all-sky cube is a spatial-spectral product. This query intentionally
-    does not request a POS cone or join its rows to source exposure timestamps.
-    The returned table is metadata only; the native cube is not downloaded here.
+    This is a spatial-spectral product, not a time series. A POS circle bounds
+    the inventory to the field; no native cube bytes are downloaded here.
     """
+    position = (
+        float(region["ra_deg"]),
+        float(region["dec_deg"]),
+        float(region["radius_deg"]),
+    )
     table = Irsa.query_sia(
+        pos=position,
         collection=DR1_ALL_SKY_CUBE_COLLECTION,
         maxrec=CUBE_METADATA_ROW_LIMIT,
     )
@@ -126,6 +133,7 @@ def query_dr1_all_sky_cube_sia() -> dict:
         item["_chronos_collection"] = DR1_ALL_SKY_CUBE_COLLECTION
         item["_chronos_release"] = "dr1"
         item["_chronos_dataset_class"] = "real"
+        item["_chronos_region"] = region["name"]
         item["_chronos_product_role"] = "all_sky_spatial_spectral_cube"
         item["_chronos_nominal_spectral_channels"] = 102
         item["_chronos_nominal_wavelength_min_um"] = 0.75
@@ -134,8 +142,10 @@ def query_dr1_all_sky_cube_sia() -> dict:
         rows.append(item)
     return {
         "service": "IRSA SIAv2",
+        "pos_circle_deg": list(position),
         "collection": DR1_ALL_SKY_CUBE_COLLECTION,
         "release": "dr1",
+        "region": region["name"],
         "product_role": "all_sky_spatial_spectral_cube",
         "nominal_spectral_channels": 102,
         "nominal_wavelength_range_um": [0.75, 5.0],
@@ -146,7 +156,9 @@ def query_dr1_all_sky_cube_sia() -> dict:
         "query_complete_below_row_cap": len(rows) < CUBE_METADATA_ROW_LIMIT,
         "native_cube_downloaded": False,
         "temporal_epoch_series": False,
+        "metadata_only": True,
     }
+
 
 
 def digest_json(value: Any) -> str:
@@ -219,50 +231,10 @@ def build_region_queries(region: dict) -> dict[str, str]:
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
         + ")) ORDER BY p.time_bounds_lower"
     )
-    # Optional source-to-exposure coverage: the only spatial predicate is
-    # the supported POINT-in-exposure-POLYGON test. A conservative RA/Dec
-    # bounding box limits candidate rows to this region; exact great-circle
-    # cone membership is checked locally after TAP returns.
-    centre_dec_rad = math.radians(float(region["dec_deg"]))
-    radius_rad = math.radians(float(region["radius_deg"]))
-    ra_half_width = math.degrees(
-        math.asin(min(1.0, math.sin(radius_rad) / max(math.cos(centre_dec_rad), 1e-12)))
-    )
-    ra_min = float(region["ra_deg"]) - ra_half_width
-    ra_max = float(region["ra_deg"]) + ra_half_width
-    if ra_min < 0:
-        ra_condition = f"(s.ra >= {ra_min + 360.0:.8f} OR s.ra <= {ra_max:.8f})"
-    elif ra_max >= 360:
-        ra_condition = f"(s.ra >= {ra_min:.8f} OR s.ra <= {ra_max - 360.0:.8f})"
-    else:
-        ra_condition = f"s.ra BETWEEN {ra_min:.8f} AND {ra_max:.8f}"
-    dec_min = max(-90.0, float(region["dec_deg"]) - float(region["radius_deg"]))
-    dec_max = min(90.0, float(region["dec_deg"]) + float(region["radius_deg"]))
-    source_epoch_sql = (
-        f"SELECT TOP {SOURCE_EPOCH_ROW_LIMIT} s.source_id, s.designation, s.ra, s.dec, "
-        "s.yso_pub, s.class_1, s.stype_ml, p.planeid, p.obsid, a.uri, "
-        "p.energy_bandpassname, p.time_bounds_lower, p.time_bounds_upper "
-        # Begin with the archive artifact table used by the working M101 provenance query.
-        # Keep the single point-in-polygon expression in WHERE, never in a JOIN condition.
-        "FROM spherex.artifact a "
-        "JOIN spherex.plane p ON p.planeid = a.planeid "
-        "JOIN spherex.splices s ON 1 = 1 "
-        "WHERE CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1 "
-        "AND ("
-        f"{ra_condition} "
-        f"AND s.dec BETWEEN {dec_min:.8f} AND {dec_max:.8f} "
-        "AND (s.yso_pub IS NOT NULL OR UPPER(s.class_1) LIKE '%YSO%' "
-        "OR UPPER(s.stype_ml) LIKE '%YSO%') "
-        "AND (LOWER(a.uri) LIKE '%/dr1/level2/%' OR LOWER(a.uri) LIKE '%/qr3/level2/%') "
-        "AND p.energy_bandpassname IN ("
-        + ", ".join(f"'{band}'" for band in DR1_BANDS)
-        + ")) ORDER BY s.source_id, p.time_bounds_lower"
-    )
     return {
         "catalogue_sources": catalogue_sql,
         "candidate_sources": candidate_sql,
         "dr1_level2_exposures": exposure_sql,
-        "candidate_source_exposure_matches": source_epoch_sql,
     }
 
 
@@ -275,6 +247,278 @@ def great_circle_separation_deg(ra1: float, dec1: float,
         + math.cos(d1) * math.cos(d2) * math.cos(r1 - r2)
     )
     return math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+
+
+def parse_sia_s_region_polygon(s_region: Any) -> list[tuple[float, float]] | None:
+    """Parse an ICRS POLYGON s_region into (RA, Dec) vertices."""
+    if not isinstance(s_region, str):
+        return None
+    tokens = s_region.strip().split()
+    if len(tokens) < 8 or tokens[0].upper() != "POLYGON" or tokens[1].upper() != "ICRS":
+        return None
+    try:
+        values = [float(value) for value in tokens[2:]]
+    except (TypeError, ValueError):
+        return None
+    if len(values) < 6 or len(values) % 2:
+        return None
+    vertices = []
+    for ra, dec in zip(values[::2], values[1::2]):
+        if not (math.isfinite(ra) and math.isfinite(dec)):
+            return None
+        if not (0.0 <= ra < 360.0 and -90.0 <= dec <= 90.0):
+            return None
+        vertices.append((ra, dec))
+    if len(vertices) > 3 and vertices[0] == vertices[-1]:
+        vertices.pop()
+    if len(set(vertices)) < 3:
+        return None
+    return vertices
+
+
+def _unit_vector(ra_deg: float, dec_deg: float) -> tuple[float, float, float]:
+    ra_rad, dec_rad = math.radians(ra_deg), math.radians(dec_deg)
+    cos_dec = math.cos(dec_rad)
+    return (
+        cos_dec * math.cos(ra_rad),
+        cos_dec * math.sin(ra_rad),
+        math.sin(dec_rad),
+    )
+
+
+def _prepared_polygon(vertices: list[tuple[float, float]]) -> list[tuple[float, float, float]]:
+    return [_unit_vector(ra, dec) for ra, dec in vertices]
+
+
+def _sky_tangent_basis(ra_deg: float, dec_deg: float):
+    ra_rad, dec_rad = math.radians(ra_deg), math.radians(dec_deg)
+    centre = _unit_vector(ra_deg, dec_deg)
+    east = (-math.sin(ra_rad), math.cos(ra_rad), 0.0)
+    north = (
+        -math.sin(dec_rad) * math.cos(ra_rad),
+        -math.sin(dec_rad) * math.sin(ra_rad),
+        math.cos(dec_rad),
+    )
+    return centre, east, north
+
+
+def _point_in_prepared_spherical_polygon(basis, vertices, boundary_tolerance: float = 1e-10) -> bool:
+    """Gnomonic-project a small spherical polygon and ray-cast at the origin."""
+    centre, east, north = basis
+    projected = []
+    for vector in vertices:
+        denominator = sum(a * b for a, b in zip(centre, vector))
+        if denominator <= 1e-12:
+            return False
+        projected.append((
+            sum(a * b for a, b in zip(east, vector)) / denominator,
+            sum(a * b for a, b in zip(north, vector)) / denominator,
+        ))
+    inside = False
+    for (x1, y1), (x2, y2) in zip(projected, projected[1:] + projected[:1]):
+        dx, dy = x2 - x1, y2 - y1
+        length_squared = dx * dx + dy * dy
+        if length_squared > 0:
+            fraction = max(0.0, min(1.0, -(x1 * dx + y1 * dy) / length_squared))
+            px, py = x1 + fraction * dx, y1 + fraction * dy
+            if px * px + py * py <= boundary_tolerance ** 2:
+                return True
+        if (y1 > 0.0) != (y2 > 0.0):
+            crossing_x = x1 + (x2 - x1) * (-y1) / (y2 - y1)
+            if crossing_x > 0.0:
+                inside = not inside
+    return inside
+
+
+def spherical_point_in_polygon(
+    ra_deg: float, dec_deg: float, vertices: list[tuple[float, float]],
+) -> bool:
+    """Test a sky coordinate against ICRS polygon vertices; RA wrap is natural."""
+    if len(vertices) < 3:
+        return False
+    try:
+        return _point_in_prepared_spherical_polygon(
+            _sky_tangent_basis(float(ra_deg), float(dec_deg)),
+            _prepared_polygon(vertices),
+        )
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def match_candidates_to_sia_footprints(
+    region: dict,
+    candidate_rows: list[dict],
+    product_rows: list[dict],
+    *,
+    candidate_query_complete: bool,
+    collection_results: dict[str, dict],
+) -> tuple[list[dict], list[dict], dict]:
+    """Match catalogue coordinates to SIAv2 s_region polygons with compact provenance."""
+    centre_ra, centre_dec, radius = (
+        float(region["ra_deg"]), float(region["dec_deg"]), float(region["radius_deg"])
+    )
+    candidate_by_id = {}
+    invalid_candidate_coordinates = 0
+    for row in candidate_rows:
+        source_id = str(row.get("source_id") or "").strip()
+        if not source_id:
+            invalid_candidate_coordinates += 1
+            continue
+        try:
+            ra, dec = float(row.get("ra")), float(row.get("dec"))
+            if not (math.isfinite(ra) and math.isfinite(dec)):
+                raise ValueError("non-finite coordinate")
+        except (TypeError, ValueError):
+            invalid_candidate_coordinates += 1
+            continue
+        if great_circle_separation_deg(ra, dec, centre_ra, centre_dec) <= radius + 1e-9:
+            candidate_by_id.setdefault(source_id, {**row, "ra": ra, "dec": dec})
+
+    prepared_products = []
+    invalid_product_polygons = 0
+    products_without_archive_identity = 0
+    for product in product_rows:
+        vertices = parse_sia_s_region_polygon(product.get("s_region"))
+        if vertices is None:
+            invalid_product_polygons += 1
+            continue
+        product_id = str(
+            product.get("obs_publisher_did") or product.get("access_url")
+            or product.get("obs_id") or ""
+        ).strip()
+        if not product_id:
+            products_without_archive_identity += 1
+            continue
+        prepared_products.append((product, product_id, _prepared_polygon(vertices)))
+
+    products_by_source = {}
+    product_pair_count = 0
+    for source_id, candidate in candidate_by_id.items():
+        basis = _sky_tangent_basis(candidate["ra"], candidate["dec"])
+        source_products = products_by_source.setdefault(source_id, {})
+        for product, product_id, polygon in prepared_products:
+            if _point_in_prepared_spherical_polygon(basis, polygon) and product_id not in source_products:
+                source_products[product_id] = product
+                product_pair_count += 1
+
+    matched_summaries, all_summaries = [], []
+    for source_id, candidate in sorted(candidate_by_id.items()):
+        products = list(products_by_source.get(source_id, {}).items())
+        product_ids = sorted(product_id for product_id, _ in products)
+        observation_ids = sorted({
+            str(row.get("obs_id") or "").strip()
+            for _, row in products if row.get("obs_id") not in (None, "")
+        })
+        intervals, lower_times, upper_times = set(), [], []
+        band_counts, releases = {}, set()
+        for _, row in products:
+            band = str(row.get("energy_bandpassname") or "UNKNOWN")
+            band_counts[band] = band_counts.get(band, 0) + 1
+            release = str(row.get("_chronos_release") or release_from_uri(row.get("access_url")))
+            if release != "unknown":
+                releases.add(release)
+            try:
+                lower, upper = float(row.get("t_min")), float(row.get("t_max"))
+                if math.isfinite(lower) and math.isfinite(upper) and upper >= lower:
+                    lower_times.append(lower)
+                    upper_times.append(upper)
+                    intervals.add((lower, upper))
+            except (TypeError, ValueError):
+                continue
+        first_mjd = min(lower_times) if lower_times else None
+        last_mjd = max(upper_times) if upper_times else None
+        baseline = (
+            max(0.0, last_mjd - first_mjd)
+            if first_mjd is not None and last_mjd is not None else None
+        )
+        summary = {
+            "source_id": source_id,
+            "designation": candidate.get("designation"),
+            "ra": candidate.get("ra"),
+            "dec": candidate.get("dec"),
+            "yso_pub": candidate.get("yso_pub"),
+            "class_1": candidate.get("class_1"),
+            "stype_ml": candidate.get("stype_ml"),
+            "region": region["name"],
+            "region_role": region["role"],
+            "has_archive_footprint_match": bool(products),
+            "matched_archive_product_count": len(product_ids),
+            "unique_archive_observation_id_count": len(observation_ids),
+            "unique_time_interval_count": len(intervals),
+            "unique_band_count": len(band_counts),
+            "band_product_counts_json": json.dumps(band_counts, sort_keys=True),
+            "bands": ";".join(sorted(band_counts)),
+            "data_releases": ";".join(sorted(releases)),
+            "first_mjd": first_mjd,
+            "last_mjd": last_mjd,
+            "metadata_time_baseline_days": baseline,
+            "archive_product_id_set_sha256": hashlib.sha256(
+                "\n".join(product_ids).encode("utf-8")
+            ).hexdigest(),
+            "example_archive_product_ids": ";".join(product_ids[:5]),
+            "match_method": FOOTPRINT_MATCH_ALGORITHM,
+            "metadata_only": True,
+            "extracted_flux_available": False,
+            "validated_temporal_epoch_series": False,
+        }
+        all_summaries.append(summary)
+        if products:
+            matched_summaries.append(summary)
+
+    complete_collections = sum(
+        not result.get("error") and result.get("query_complete_below_row_cap") is True
+        for result in collection_results.values()
+    )
+    all_collections_complete = (
+        set(collection_results) == set(SIA_COLLECTIONS)
+        and complete_collections == len(SIA_COLLECTIONS)
+    )
+    polygons_complete = invalid_product_polygons == 0 and products_without_archive_identity == 0
+    coordinates_complete = invalid_candidate_coordinates == 0
+    complete = candidate_query_complete and all_collections_complete and polygons_complete and coordinates_complete
+    baselines = sorted(
+        row["metadata_time_baseline_days"] for row in all_summaries
+        if row["metadata_time_baseline_days"] is not None
+    )
+    median_baseline = None
+    if baselines:
+        middle = len(baselines) // 2
+        median_baseline = (
+            baselines[middle] if len(baselines) % 2
+            else (baselines[middle - 1] + baselines[middle]) / 2.0
+        )
+    matched_count = len(matched_summaries)
+    report = {
+        "method": FOOTPRINT_MATCH_ALGORITHM,
+        "candidate_source_count_in_region": len(candidate_by_id),
+        "candidate_sources_with_archive_footprint_match": matched_count,
+        "candidate_sources_without_archive_footprint_match": (
+            len(candidate_by_id) - matched_count if complete else None
+        ),
+        "candidate_source_product_pair_match_count": product_pair_count,
+        "candidate_summary_row_count": len(all_summaries),
+        "product_rows_examined": len(product_rows),
+        "products_with_valid_s_region_polygon": len(prepared_products),
+        "products_with_invalid_or_unsupported_s_region": invalid_product_polygons,
+        "products_without_archive_identity": products_without_archive_identity,
+        "candidate_rows_with_invalid_coordinates": invalid_candidate_coordinates,
+        "candidate_query_complete": candidate_query_complete,
+        "siav2_collection_count_requested": len(SIA_COLLECTIONS),
+        "siav2_collection_count_complete_below_cap": complete_collections,
+        "all_siav2_collections_complete_below_cap": all_collections_complete,
+        "footprint_polygon_inventory_complete": polygons_complete,
+        "coordinate_inventory_complete": coordinates_complete,
+        "source_footprint_matching_complete": complete,
+        "status": "complete_below_declared_caps" if complete else "observed_lower_bound",
+        "median_metadata_time_baseline_days": median_baseline,
+        "interpretation": (
+            "Spherical positional association between SPLICES catalogue coordinates and IRSA SIAv2 "
+            "spectral-image s_region polygons. Product IDs and time metadata are archive-coverage "
+            "diagnostics only; no image pixels were extracted, no calibrated source flux was measured, "
+            "and no temporal light curve or YSO identity was validated."
+        ),
+    }
+    return matched_summaries, all_summaries, report
 
 
 def release_from_uri(uri: Any) -> str:
@@ -581,51 +825,82 @@ def inspect_region(region: dict) -> dict:
         row["machine_only_candidate"] for row in candidate_profiles
     )
 
-    source_epoch_result = query_results["candidate_source_exposure_matches"]
-    source_epoch_error = source_epoch_result.get("error")
-    source_epoch_rows = source_epoch_result.get("rows", [])
-    if source_epoch_error:
-        matched_source_exposure_rows = []
-        source_epoch_summaries = []
-        source_epoch_summary = {
-            "status": "unavailable_due_to_optional_query_error",
-            "error": source_epoch_error,
-            "candidate_source_id_count": None,
-            "candidate_source_ids_with_level2_footprint_match": None,
-            "candidate_source_ids_without_level2_footprint_match": None,
-        }
-    else:
-        matched_source_exposure_rows, source_epoch_summaries, source_epoch_summary = (
-            summarize_candidate_source_epochs(region, candidate_rows, source_epoch_rows)
-        )
-        source_epoch_summary["status"] = (
-            "lower_bound_at_declared_row_cap"
-            if source_epoch_summary["source_epoch_query_at_cap"]
-            else "complete_below_declared_row_cap"
-        )
-    counts["candidate_source_exposure_query_complete"] = (
-        not source_epoch_error
-        and not source_epoch_summary.get("source_epoch_query_at_cap", False)
-        and bool(counts["candidate_query_complete"])
+    candidate_result = query_results["candidate_sources"]
+    candidate_rows = candidate_result.get("rows", [])
+    candidate_query_complete = (
+        not candidate_result.get("error") and len(candidate_rows) < CANDIDATE_LIMIT
     )
+    successful_sia_products = []
+    collection_results = {}
+    for collection in SIA_COLLECTIONS:
+        result = query_results[f"region_footprints_sia_{collection}"]
+        collection_results[collection] = result
+        if not result.get("error"):
+            successful_sia_products.extend(result.get("rows", []))
+    matched_source_summaries, all_source_summaries, source_footprint_report = (
+        match_candidates_to_sia_footprints(
+            region, candidate_rows, successful_sia_products,
+            candidate_query_complete=candidate_query_complete,
+            collection_results=collection_results,
+        )
+    )
+    source_match_measured = (
+        not candidate_result.get("error")
+        and any(not result.get("error") for result in collection_results.values())
+    )
+    source_match_complete = source_footprint_report["source_footprint_matching_complete"]
+    source_match_status = (
+        "complete_below_declared_caps" if source_match_complete
+        else "observed_lower_bound" if source_match_measured else "unavailable"
+    )
+    counts["candidate_source_exposure_query_complete"] = source_match_complete
+    counts["candidate_source_exposure_query_status"] = source_match_status
     counts["candidate_source_exposure_match_rows"] = (
-        len(matched_source_exposure_rows) if not source_epoch_error else None
+        len(matched_source_summaries) if source_match_measured else None
+    )
+    counts["candidate_source_archive_product_pair_match_count"] = (
+        source_footprint_report["candidate_source_product_pair_match_count"]
+        if source_match_measured else None
     )
     counts["candidate_unique_source_ids_with_level2_footprint_match"] = (
-        source_epoch_summary.get("candidate_source_ids_with_level2_footprint_match")
+        source_footprint_report["candidate_sources_with_archive_footprint_match"]
+        if source_match_measured else None
     )
     counts["candidate_unique_source_ids_without_level2_footprint_match"] = (
-        source_epoch_summary.get("candidate_source_ids_without_level2_footprint_match")
+        source_footprint_report["candidate_sources_without_archive_footprint_match"]
+        if source_match_measured else None
     )
-    counts["candidate_source_footprint_matches_measured"] = not bool(source_epoch_error)
+    counts["candidate_source_footprint_matches_measured"] = source_match_measured
+    counts["candidate_source_footprint_matching_method"] = FOOTPRINT_MATCH_ALGORITHM
+    counts["candidate_source_footprint_matching_status"] = source_match_status
+    counts["candidate_source_product_rows_examined"] = (
+        source_footprint_report["product_rows_examined"] if source_match_measured else None
+    )
+    counts["candidate_source_invalid_product_polygons"] = (
+        source_footprint_report["products_with_invalid_or_unsupported_s_region"]
+        if source_match_measured else None
+    )
+    counts["candidate_source_median_metadata_time_baseline_days"] = (
+        source_footprint_report["median_metadata_time_baseline_days"]
+        if source_match_measured else None
+    )
     counts["source_level_epoch_coverage_measured"] = False
-    query_results["candidate_source_exposure_matches"]["rows"] = (
-        matched_source_exposure_rows if not source_epoch_error else []
-    )
+    counts["source_level_calibrated_flux_measured"] = False
+    counts["source_level_lightcurve_validated"] = False
+    query_results["candidate_source_exposure_matches"] = {
+        "method": FOOTPRINT_MATCH_ALGORITHM,
+        "rows": matched_source_summaries,
+        "row_count": len(matched_source_summaries),
+        "summary": source_footprint_report,
+        "metadata_only": True,
+    }
     query_results["candidate_source_epoch_summary"] = {
-        "method": "great-circle cone filter and unique SPLICES source ID / Level-2 plane ID pairs",
-        "summary": source_epoch_summary,
-        "rows": source_epoch_summaries,
+        "method": FOOTPRINT_MATCH_ALGORITHM,
+        "rows": all_source_summaries,
+        "row_count": len(all_source_summaries),
+        "summary": source_footprint_report,
+        "metadata_only": True,
+        "temporal_epoch_series_validated": False,
     }
 
     exposure_result = query_results["dr1_level2_exposures"]
@@ -723,10 +998,18 @@ def inspect_region(region: dict) -> dict:
         "region": region,
         "counts": counts,
         "queries": query_results,
-        "query_sha256": digest_json(query_definitions),
+        "query_sha256": digest_json({
+            "tap_query_definitions": query_definitions,
+            "siav2_collections": list(SIA_COLLECTIONS),
+            "region_pos_circle_deg": [
+                float(region["ra_deg"]), float(region["dec_deg"]), float(region["radius_deg"])
+            ],
+            "candidate_footprint_matching_algorithm": FOOTPRINT_MATCH_ALGORITHM,
+        }),
         "query_errors": query_errors,
         "optional_query_errors": optional_query_errors,
         "optional_sia_errors": optional_sia_errors,
+        "candidate_source_footprint_summary": source_footprint_report,
     }
 
 
@@ -740,6 +1023,8 @@ def main() -> None:
     all_source_exposure_matches = []
     all_source_epoch_summaries = []
     all_region_sia_footprints = []
+    all_cube_metadata_rows = []
+    cube_region_summaries = []
     errors = []
     for region in REGIONS:
         print(f"Querying SPLICES and DR1/QR3 coverage: {region['name']}", flush=True)
@@ -752,6 +1037,7 @@ def main() -> None:
                 "query_errors": result["query_errors"],
                 "optional_query_errors": result["optional_query_errors"],
                 "optional_sia_errors": result["optional_sia_errors"],
+                "candidate_source_footprint_summary": result["candidate_source_footprint_summary"],
             })
             if result["query_errors"]:
                 errors.append({
@@ -798,28 +1084,61 @@ def main() -> None:
     write_csv(OUTPUT / "candidate_source_exposure_matches_all_regions.csv", all_source_exposure_matches)
     write_csv(OUTPUT / "candidate_source_epoch_summary_all_regions.csv", all_source_epoch_summaries)
     write_csv(OUTPUT / "region_intersecting_footprints_sia_all_regions.csv", all_region_sia_footprints)
-    cube_error = None
-    try:
-        cube_inventory = query_dr1_all_sky_cube_sia()
-    except Exception as exc:
-        cube_error = f"{type(exc).__name__}: {exc}"
-        cube_inventory = {
-            "service": "IRSA SIAv2",
-            "collection": DR1_ALL_SKY_CUBE_COLLECTION,
-            "release": "dr1",
-            "product_role": "all_sky_spatial_spectral_cube",
-            "nominal_spectral_channels": 102,
-            "nominal_wavelength_range_um": [0.75, 5.0],
-            "maxrec": CUBE_METADATA_ROW_LIMIT,
-            "columns": [],
-            "row_count": None,
-            "rows": [],
-            "query_complete_below_row_cap": False,
-            "native_cube_downloaded": False,
-            "temporal_epoch_series": False,
-            "error": cube_error,
-        }
-    write_csv(OUTPUT / "dr1_all_sky_cube_sia_metadata.csv", cube_inventory["rows"])
+    cube_errors = {}
+    for region in REGIONS:
+        region_name = region["name"]
+        try:
+            inventory = query_dr1_all_sky_cube_sia(region)
+            cube_region_summaries.append({
+                "region": region_name,
+                "metadata_row_count": inventory["row_count"],
+                "query_complete_below_row_cap": inventory["query_complete_below_row_cap"],
+                "row_cap": inventory["maxrec"],
+                "native_cube_downloaded": False,
+                "temporal_epoch_series": False,
+            })
+            all_cube_metadata_rows.extend(inventory["rows"])
+            write_csv(
+                OUTPUT / region_name / "dr1_all_sky_cube_sia_metadata.csv",
+                inventory["rows"],
+            )
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            cube_errors[region_name] = error
+            cube_region_summaries.append({
+                "region": region_name,
+                "metadata_row_count": None,
+                "query_complete_below_row_cap": False,
+                "row_cap": CUBE_METADATA_ROW_LIMIT,
+                "error": error,
+                "native_cube_downloaded": False,
+                "temporal_epoch_series": False,
+            })
+    cube_complete = (
+        len(cube_region_summaries) == len(REGIONS)
+        and not cube_errors
+        and all(item["query_complete_below_row_cap"] for item in cube_region_summaries)
+    )
+    cube_inventory = {
+        "service": "IRSA SIAv2",
+        "collection": DR1_ALL_SKY_CUBE_COLLECTION,
+        "release": "dr1",
+        "product_role": "all_sky_spatial_spectral_cube",
+        "nominal_spectral_channels": 102,
+        "nominal_wavelength_range_um": [0.75, 5.0],
+        "query_scope": "POS-circle metadata searches for the six predeclared fields",
+        "region_query_count": len(cube_region_summaries),
+        "region_results": cube_region_summaries,
+        "observed_metadata_row_count": len(all_cube_metadata_rows),
+        "metadata_row_count": len(all_cube_metadata_rows) if cube_complete else None,
+        "maxrec_per_region": CUBE_METADATA_ROW_LIMIT,
+        "query_complete_below_row_cap": cube_complete,
+        "query_errors": cube_errors,
+        "metadata_only": True,
+        "native_cube_downloaded": False,
+        "temporal_epoch_series": False,
+    }
+    write_csv(OUTPUT / "dr1_all_sky_cube_sia_metadata.csv", all_cube_metadata_rows)
     report = {
         "schema": "chronos-spllices-yso-recon/1.1",
         "started_utc": started,
@@ -838,13 +1157,16 @@ def main() -> None:
             "nominal_channels": cube_inventory["nominal_spectral_channels"],
             "wavelength_range_um": cube_inventory["nominal_wavelength_range_um"],
             "role": cube_inventory["product_role"],
-            "queried_in_this_reconnaissance": cube_error is None,
-            "metadata_row_count": cube_inventory["row_count"],
+            "queried_in_this_reconnaissance": bool(cube_region_summaries) and not cube_errors,
+            "metadata_row_count": cube_inventory["metadata_row_count"],
+            "observed_metadata_row_count": cube_inventory["observed_metadata_row_count"],
             "query_complete_below_row_cap": cube_inventory["query_complete_below_row_cap"],
+            "query_scope": cube_inventory["query_scope"],
+            "region_query_count": cube_inventory["region_query_count"],
             "metadata_only": True,
             "native_cube_downloaded": False,
             "temporal_epoch_series": False,
-            "query_error": cube_error,
+            "query_errors": cube_errors,
             "metadata_report": "data/yso_population_recon/dr1_all_sky_cube_sia_metadata.csv",
         },
         "dr1_all_sky_cube_inventory": cube_inventory,
@@ -854,7 +1176,15 @@ def main() -> None:
         "class_distribution_record_count": len(all_classes),
         "label_disagreement_candidate_count": len(all_label_disagreements),
         "candidate_source_exposure_match_row_count": len(all_source_exposure_matches),
+        "candidate_source_archive_product_pair_match_count": sum(
+            int(row.get("matched_archive_product_count") or 0)
+            for row in all_source_exposure_matches
+        ),
         "candidate_source_epoch_summary_row_count": len(all_source_epoch_summaries),
+        "candidate_source_footprint_matching_method": FOOTPRINT_MATCH_ALGORITHM,
+        "source_level_epoch_coverage_measured": False,
+        "source_level_calibrated_flux_measured": False,
+        "source_level_lightcurve_validated": False,
         "region_intersecting_spectral_image_footprint_row_count": len(all_region_sia_footprints),
         "region_footprint_sia_collections": list(SIA_COLLECTIONS),
         "optional_query_errors": {
@@ -884,7 +1214,9 @@ def main() -> None:
             "The DR1 All-Sky Cube is queried separately through SIAv2 and retained as metadata-only spatial-spectral context; the native cube is not downloaded by this reconnaissance and is never treated as a sequence of independent temporal exposures.",
             "DR1 and QR3 are the current uniformly processed spectral-image set; QR2 is not combined into this analysis.",
             "The row-cap checks establish only that each completed query returned fewer than 20000 rows; they do not establish survey-wide or source-level coverage completeness.",
-            "The candidate-source TAP query matches SPLICES coordinates to DR1/QR3 Level-2 exposure polygons; this is geometric archive footprint coverage, not extracted-flux validity, spectrum quality, usable epoch cadence or source-level epoch completeness.",
+            "Candidate-to-image matching is performed locally against SIAv2 s_region polygons using a query-centred spherical gnomonic projection; source summaries retain product counts, obs_id counts, bands, MJD metadata span and a hash of matched product IDs.",
+            "The positional source-to-product association is archive metadata only. It does not measure extracted flux, calibrated photometry, a light curve, independently validated temporal epochs or YSO identity.",
+            "The DR1 All-Sky Cube is queried with one POS circle per predeclared region. This is not a global all-sky tile inventory and is not Level-2 time-series data.",
         ],
         "report_sha256": None,
     }
