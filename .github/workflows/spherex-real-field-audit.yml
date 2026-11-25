@@ -40,7 +40,8 @@ jobs:
 
       - name: Retrieve M101 native science MEF and detector calibrations
         run: |
-          python -m research_discovery.spherex.run_real_field_audit \
+          set -o pipefail
+          CHRONOS_GIT_COMMIT="$GITHUB_SHA" python -m research_discovery.spherex.run_real_field_audit \
             --field M101,210.80227,54.34895 \
             --bandpass SPHEREx-D2 \
             --release dr1 \
