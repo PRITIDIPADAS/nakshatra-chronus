@@ -8,6 +8,8 @@ continuum sidebands repeatedly within the same distinct epochs.
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
+import json
 import math
 from typing import Any, Mapping, Sequence
 
@@ -301,7 +303,11 @@ def assess_population_coverage(
     passed = eligible_fields >= minimum_independent_fields and all(
         row["eligible"] for row in field_reports
     )
+    input_digest = hashlib.sha256(json.dumps(
+        fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
+    ).encode("utf-8")).hexdigest()
     return {
+        "input_fields_sha256": input_digest,
         "status": "coverage_passed_preregistration_required" if passed else "not_ready_or_infeasible",
         "eligible_for_predeclared_population_protocol": passed,
         "target_class": target_class,
