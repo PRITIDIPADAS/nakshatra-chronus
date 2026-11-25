@@ -211,6 +211,69 @@ def resolve_archive_provenance(science_uri: str) -> dict:
     }
 
 
+
+
+def query_related_solid_angle_candidates(release: str, detector_number: int) -> list[dict]:
+    """Query the calibration artifact table for a same-release and detector area map."""
+    detector = f"D{int(detector_number)}"
+    release_token = str(release).lower()
+    sql = f"""
+    SELECT a.artifactid, a.planeid, a.uri, a.producttype, a.releasetype,
+      a.contenttype, a.contentlength, a.contentchecksum, p.productid
+    FROM spherex.artifact a
+    JOIN spherex.plane p ON p.planeid = a.planeid
+    WHERE a.producttype = 'calibration'
+      AND LOWER(a.uri) LIKE '%/spherex/{release_token}/solid_angle_pixel_map/%'
+      AND UPPER(p.productid) = '{detector}'
+    """
+    return tap_rows(sql)
+
+
+def download_artifact_row(row: dict, *, family: str, product_name: str,
+                          release: str, detector_number: int, out_dir: Path,
+                          provenance: dict, science_uri: str,
+                          direct_pipeline_input: bool) -> dict:
+    """Download an exact artifact-table URI and verify its published MD5."""
+    uri = normalise_irsa_uri(str(row["uri"]))
+    destination = out_dir / family / Path(urlparse(uri).path).name
+    record = download_calibration(
+        uri, release=release.lower(), product=product_name,
+        detector=detector_number, out=destination,
+    )
+    if record.get("status") != "downloaded":
+        raise RuntimeError(f"{family} download failed: {record.get('error')}")
+    expected = str(row.get("contentchecksum") or "").strip().lower()
+    actual = md5_file(destination)
+    if expected.startswith("md5:") and actual != expected.split(":", 1)[1]:
+        raise RuntimeError(
+            f"{family} MD5 differs from the IRSA artifact row: {actual} != {expected}"
+        )
+    link = (
+        provenance_link_for_uri(provenance, science_uri, uri, destination)
+        if direct_pipeline_input else None
+    )
+    if direct_pipeline_input and link is None:
+        raise RuntimeError(
+            f"{family} failed exact spherex.provenance_input linkage or archive MD5 verification"
+        )
+    probe = header_record(destination, family, uri)
+    probe.update({
+        "retrieval_status": "downloaded",
+        "artifact_id": row.get("artifactid"),
+        "archive_plane_id": row.get("planeid"),
+        "archive_content_length": row.get("contentlength"),
+        "archive_content_checksum": row.get("contentchecksum"),
+        "archive_md5_actual": actual,
+        "archive_md5_status": "pass" if expected.startswith("md5:") else "not_supplied",
+        "provenance_relation": (
+            "exact_input_to_this_science_plane" if direct_pipeline_input
+            else "supplemental_same_release_detector_area_map"
+        ),
+        "provenance_link": link,
+    })
+    return probe
+
+
 def provenance_link_for_uri(provenance: dict, science_uri: str, calibration_uri: str,
                            local_path: Path | None = None) -> dict | None:
     target = normalise_irsa_uri(calibration_uri)
@@ -428,57 +491,71 @@ def main():
     science["exposure_time_s"] = provenance["science"].get("time_exposure")
     detector_number = int(science["detector"][1:])
 
-    families = {
-        "spectral_wcs": ("spectral_wcs", "spectral_wcs"),
-        "solid_angle": ("solid_angle", "solid_angle"),
-        "absolute_gain": ("gain", "abs_gain_matrix"),
+    # Wavelength and gain files must come from the exact provenance_input
+    # graph for this science plane. The detector solid-angle map is queried
+    # separately and remains explicitly supplemental if not directly linked.
+    exact_artifacts = [
+        row for row in provenance.get("calibration_artifacts", [])
+        if str(row.get("producttype", "")).lower() == "calibration"
+    ]
+    wcs_rows = [
+        row for row in exact_artifacts
+        if "/spectral_wcs/" in str(row.get("uri", "")).lower()
+        and normalize_release(normalise_irsa_uri(row["uri"])) == args.release.upper()
+    ]
+    gain_rows = [
+        row for row in exact_artifacts
+        if "/abs_gain_matrix/" in str(row.get("uri", "")).lower()
+        and normalize_release(normalise_irsa_uri(row["uri"])) == args.release.upper()
+    ]
+    if len(wcs_rows) != 1:
+        raise RuntimeError(
+            "Expected exactly one provenance-linked spectral-WCS artifact for this "
+            f"science plane; found {len(wcs_rows)}"
+        )
+    if len(gain_rows) != 1:
+        raise RuntimeError(
+            "Expected exactly one provenance-linked absolute-gain artifact for this "
+            f"science plane; found {len(gain_rows)}"
+        )
+
+    wcs_date = path_tokens(normalise_irsa_uri(wcs_rows[0]["uri"]))["archive_processing_date"]
+    area_rows = query_related_solid_angle_candidates(args.release, detector_number)
+    area_rows = [
+        row for row in area_rows
+        if path_tokens(normalise_irsa_uri(str(row.get("uri") or "")))["archive_processing_date"] == wcs_date
+    ]
+    if len(area_rows) != 1:
+        raise RuntimeError(
+            "Expected exactly one same-release, same-detector, same-calibration-date "
+            f"solid-angle artifact; found {len(area_rows)}"
+        )
+
+    selections = {
+        "spectral_wcs": (wcs_rows[0], "spectral_wcs", True),
+        "solid_angle": (area_rows[0], "solid_angle", False),
+        "absolute_gain": (gain_rows[0], "abs_gain_matrix", True),
     }
     calibration_records = []
     candidate_lists = {}
-    for family, (discovery_name, download_name) in families.items():
-        urls = find_products(discovery_name, detector_number, release=args.release)
-        urls = [u for u in urls if f"/{detector_number}/" in urlparse(u).path]
-        urls = sorted(urls, key=lambda u: candidate_sort_key(u, science.get("processing_date")), reverse=True)
-        candidate_lists[family] = urls
-        selected = urls[:max(1, args.limit_per_family)]
-        family_dir = args.out / "calibrations" / family
-        for index, uri in enumerate(selected, start=1):
-            basename = Path(urlparse(uri).path).name
-            destination = family_dir / basename
-            record = download_calibration(uri, release=args.release, product=download_name,
-                                          detector=detector_number, out=destination)
-            if record["status"] == "downloaded":
-                probe = header_record(destination, family, uri)
-                probe["retrieval_status"] = "downloaded"
-                probe["candidate_rank"] = index
-                probe["same_processing_date_as_science_filename"] = (
-                    bool(science.get("processing_date")) and
-                    path_tokens(uri)["archive_processing_date"] == science.get("processing_date"))
-                calibration_records.append(probe)
-            else:
-                calibration_records.append({
-                    "family": family, "uri": uri, "retrieval_status": record["status"],
-                    "error": record.get("error"), "candidate_rank": index,
-                })
+    for family, (archive_row, product_name, direct_link) in selections.items():
+        uri = normalise_irsa_uri(str(archive_row["uri"]))
+        candidate_lists[family] = [uri]
+        probe = download_artifact_row(
+            archive_row, family=family, product_name=product_name,
+            release=args.release, detector_number=detector_number,
+            out_dir=args.out / "calibrations", provenance=provenance,
+            science_uri=science_uri, direct_pipeline_input=direct_link,
+        )
+        calibration_records.append(probe)
 
     def valid_candidate(family):
-        valid = []
-        for row in calibration_records:
-            if row.get("family") != family or row.get("retrieval_status") != "downloaded":
-                continue
-            if row.get("detector") != science.get("detector"):
-                continue
-            if family == "spectral_wcs":
-                hdus = {x["name"].upper(): x for x in row.get("hdus", [])}
-                if not all(k in hdus and hdus[k].get("shape") == [2040, 2040] for k in ("CWAVE", "CBAND")):
-                    continue
-            else:
-                if row.get("hdus") is None or not any(x.get("shape") == [2040, 2040] for x in row["hdus"]):
-                    continue
-            valid.append(row)
-        valid.sort(key=lambda r: (r.get("same_processing_date_as_science_filename", False),
-                                  r.get("archive_processing_date") or ""), reverse=True)
-        return valid
+        return [
+            row for row in calibration_records
+            if row.get("family") == family
+            and row.get("retrieval_status") == "downloaded"
+            and row.get("detector") == science.get("detector")
+        ]
 
     wcs_candidates = valid_candidate("spectral_wcs")
     area_candidates = valid_candidate("solid_angle")
@@ -513,6 +590,25 @@ def main():
             solid_angle_path=Path(chosen_area["local_path"]),
             solid_angle_uri=chosen_area["uri"],
             science_uri=science_uri, spectral_wcs_uri=chosen_wcs["uri"])
+        # Fill only missing archive identity from the exact URI/TAP record.
+        # These identifiers are distinct from the direct FITS header values.
+        base_audit["release"] = science["release"].lower()
+        base_audit["science_processing_date"] = science.get("processing_date")
+        base_audit["science_detector"] = science["detector"]
+        base_audit["science_pipeline_version"] = (
+            base_audit.get("science_pipeline_version") or science.get("pipeline_version")
+        )
+        cal_meta_for_audit = base_audit.get("spectral_wcs_metadata") or {}
+        cal_meta_for_audit["release"] = normalize_release(chosen_wcs["uri"]).lower()
+        cal_meta_for_audit["detector"] = chosen_wcs.get("detector") or science["detector"]
+        cal_meta_for_audit["pipeline_version"] = (
+            cal_meta_for_audit.get("pipeline_version") or chosen_wcs.get("header_version")
+        )
+        cal_meta_for_audit["processing_date"] = (
+            path_tokens(chosen_wcs["uri"]).get("archive_processing_date")
+        )
+        cal_meta_for_audit["coordinate_frame"] = "native_detector"
+        base_audit["spectral_wcs_metadata"] = cal_meta_for_audit
         base_audit_path = args.out / "native_mef_audit_precompat.json"
         base_audit_path.write_text(json.dumps(base_audit, indent=2, default=str), encoding="utf-8")
         audit_path = args.out / "native_mef_audit.json"
@@ -540,6 +636,9 @@ def main():
                 "solid_angle_map_sha256": chosen_area["sha256"],
                 "solid_angle_map_path": chosen_area["local_path"],
                 "archive_provenance_link": wcs_link,
+                "solid_angle_provenance_status": "supplemental_not_listed_as_direct_pipeline_input",
+                "solid_angle_archive_content_checksum": chosen_area.get("archive_content_checksum"),
+                "solid_angle_archive_md5_status": chosen_area.get("archive_md5_status"),
             }
             audit_report = audit_native_mef(
                 science_path, Path(chosen_wcs["local_path"]),
@@ -639,6 +738,11 @@ def main():
             "linked_calibration_artifact_count": len(provenance.get("calibration_artifacts", [])),
             "query_sha256": provenance.get("query_sha256"),
             "exact_product_links": provenance_links,
+            "solid_angle_map_pipeline_input": False,
+            "solid_angle_map_selection_basis": (
+                "same DR1 release, D2 detector and calibration processing date as the "
+                "provenance-linked spectral-WCS artifact; separate artifact-table lookup"
+            ),
         },
         "calibrated_jy_injection_evaluation": calibrated_injection,
         "matching_boundary": (
