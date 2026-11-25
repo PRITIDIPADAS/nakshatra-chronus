@@ -179,7 +179,7 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                            psf_reference_xy: tuple[float,float] | None = None,
                            psf_region_radius: float | None = None,
                            background: np.ndarray | None = None,
-                           electrons_per_image_unit: float | None = None,
+                           electrons_per_image_unit: np.ndarray | None = None,
                            electron_calibration_record: dict | None = None) -> dict:
     image=np.asarray(image,float); variance=np.asarray(variance,float); flags=np.asarray(flags)
     if image.ndim!=2 or variance.shape!=image.shape or flags.shape!=image.shape: raise ValueError("IMAGE/VARIANCE/FLAGS must have equal 2D shapes")
@@ -195,10 +195,17 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
         work_image=image.copy()
     if flux_unit not in {"image_sum", "Jy"}: raise ValueError("flux_unit must be 'image_sum' or 'Jy'")
     if electrons_per_image_unit is not None:
-        electrons_per_image_unit = validate_electron_calibration_record(
-            electron_calibration_record, electrons_per_image_unit=electrons_per_image_unit)
+        if electron_calibration_record is None:
+            raise ValueError("A conversion map cannot be used without its signed calibration record")
+        validate_electron_calibration_record(electron_calibration_record)
+        electrons_per_image_unit = np.asarray(electrons_per_image_unit, dtype=float)
+        if electrons_per_image_unit.shape != image.shape:
+            raise ValueError("per-pixel electrons-per-image-unit map must align exactly with IMAGE")
+        conversion_valid = np.isfinite(electrons_per_image_unit) & (electrons_per_image_unit > 0)
+        if not conversion_valid.any():
+            raise ValueError("absolute-gain map has no finite positive conversion pixels")
     elif electron_calibration_record is not None:
-        electrons_per_image_unit = validate_electron_calibration_record(electron_calibration_record)
+        raise ValueError("electron calibration record supplied without its derived per-pixel conversion map")
     omega = None
     if flux_unit == "Jy":
         if solid_angle_sr_map is None: raise ValueError("Jy injections require a detector-aligned solid-angle map in steradians")
@@ -209,6 +216,8 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
     good=np.isfinite(work_image)&np.isfinite(variance)&(variance>0)
     if excluded_flag_bits: good &= (flags.astype(np.uint64)&np.uint64(excluded_flag_bits))==0
     if flux_unit == "Jy": good &= np.isfinite(omega) & (omega > 0)
+    if electrons_per_image_unit is not None:
+        good &= np.isfinite(electrons_per_image_unit) & (electrons_per_image_unit > 0)
     margin=max(px,py)+min_injection_separation//2+2
     if image.shape[0] <= 2*margin or image.shape[1] <= 2*margin:
         raise ValueError(f"image is too small for safe injection margins: shape={image.shape}, required dimension > {2*margin}")
@@ -303,9 +312,11 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
       "source_photon_noise": {
           "enabled": electrons_per_image_unit is not None,
           "physically_modelled": electrons_per_image_unit is not None and electron_calibration_record is not None,
-          "electrons_per_image_unit": electrons_per_image_unit,
+          "conversion_map_shape": list(electrons_per_image_unit.shape) if electrons_per_image_unit is not None else None,
+          "conversion_map_valid_fraction": float(np.mean(np.isfinite(electrons_per_image_unit) & (electrons_per_image_unit > 0))) if electrons_per_image_unit is not None else None,
+          "conversion": "exposure_time_s / abs_gain_matrix at each detector pixel" if electrons_per_image_unit is not None else None,
           "calibration_record": electron_calibration_record,
-          "variance_update": "Added source Poisson variance in image units from the verified per-exposure conversion" if electrons_per_image_unit is not None else "Not modelled; deterministic signal only",
+          "variance_update": "Added pixel-dependent source Poisson variance in IMAGE units" if electrons_per_image_unit is not None else "Not modelled; deterministic signal only",
       },
       "background_interpretation":"Caller-supplied aligned background model subtracted before matched filtering" if background is not None else "No background model subtracted; users should supply the matching ZODI/background or precomputed residual map for scientifically appropriate detection",
       "flux_interpretation":"Jy integrated source flux converted through a detector-aligned steradian pixel-area map" if flux_unit == "Jy" else "sum of per-pixel IMAGE units; not an integrated Jy flux",
