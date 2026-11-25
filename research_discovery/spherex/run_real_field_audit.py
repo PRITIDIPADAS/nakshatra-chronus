@@ -360,6 +360,13 @@ def main():
     science = science_record(science_path, science_uri)
     if science["detector"] is None:
         raise RuntimeError("Downloaded science IMAGE HDU has no usable DETECTOR identity")
+    provenance = resolve_archive_provenance(science_uri)
+    science["archive_planeid"] = provenance["science_planeid"]
+    science["processing_date"] = science["processing_date"] or (
+        re.search(r"-v[0-9.]+-(20[0-9]{2}-[0-9]{3})\\.fits$", science_path.name, re.I).group(1)
+        if re.search(r"-v[0-9.]+-(20[0-9]{2}-[0-9]{3})\\.fits$", science_path.name, re.I) else None
+    )
+    science["exposure_time_s"] = provenance["science"].get("time_exposure")
     detector_number = int(science["detector"][1:])
 
     families = {
@@ -422,19 +429,83 @@ def main():
     chosen_gain = gain_candidates[0] if gain_candidates else None
 
     audit_report = None
+    provenance_links = {}
+    if chosen_wcs:
+        provenance_links["spectral_wcs"] = provenance_link_for_uri(provenance, science_uri, chosen_wcs["uri"])
+    if chosen_gain:
+        provenance_links["absolute_gain"] = provenance_link_for_uri(provenance, science_uri, chosen_gain["uri"])
+    # The native MEF embeds the position-dependent EPSF table. Record the
+    # archive input link for its calibration family as an independent check.
+    epsf_artifacts = [
+        x for x in provenance.get("calibration_artifacts", [])
+        if "/epsf/" in str(x.get("uri", "")).lower()
+    ]
+    provenance_links["epsf"] = (
+        provenance_link_for_uri(provenance, science_uri, normalise_irsa_uri(epsf_artifacts[0]["uri"]))
+        if len(epsf_artifacts) == 1 else None
+    )
+
     if chosen_wcs and chosen_area:
-        audit_report = audit_native_mef(
+        # First write a base audit without a compatibility verdict. The
+        # compatibility checker then verifies this exact audit file/hash,
+        # the exact FITS files, and the live IRSA provenance foreign key.
+        base_audit = audit_native_mef(
             science_path, Path(chosen_wcs["local_path"]),
             solid_angle_path=Path(chosen_area["local_path"]),
             solid_angle_uri=chosen_area["uri"],
             science_uri=science_uri, spectral_wcs_uri=chosen_wcs["uri"])
+        base_audit_path = args.out / "native_mef_audit_precompat.json"
+        base_audit_path.write_text(json.dumps(base_audit, indent=2, default=str), encoding="utf-8")
         audit_path = args.out / "native_mef_audit.json"
+        wcs_link = provenance_links.get("spectral_wcs")
+        if wcs_link:
+            science_evidence = {
+                "native_uri": science_uri, "sha256": science["sha256"],
+                "local_path": str(science_path), "release": base_audit.get("release"),
+                "detector": science["detector"],
+                "pipeline_version": base_audit.get("science_pipeline_version"),
+                "processing_date": base_audit.get("science_processing_date"),
+                "coordinate_frame": base_audit.get("coordinate_frame"),
+            }
+            cal_meta = base_audit.get("spectral_wcs_metadata") or {}
+            calibration_evidence = {
+                "native_uri": chosen_wcs["uri"], "sha256": chosen_wcs["sha256"],
+                "local_path": chosen_wcs["local_path"], "release": cal_meta.get("release"),
+                "detector": cal_meta.get("detector"),
+                "pipeline_version": cal_meta.get("pipeline_version"),
+                "processing_date": cal_meta.get("processing_date"),
+                "coordinate_frame": cal_meta.get("coordinate_frame"),
+                "wavelength_audit_path": str(base_audit_path),
+                "wavelength_audit_sha256": sha256(base_audit_path),
+                "solid_angle_map_uri": chosen_area["uri"],
+                "solid_angle_map_sha256": chosen_area["sha256"],
+                "solid_angle_map_path": chosen_area["local_path"],
+                "archive_provenance_link": wcs_link,
+            }
+            audit_report = audit_native_mef(
+                science_path, Path(chosen_wcs["local_path"]),
+                solid_angle_path=Path(chosen_area["local_path"]),
+                solid_angle_uri=chosen_area["uri"],
+                science_uri=science_uri, spectral_wcs_uri=chosen_wcs["uri"],
+                compatibility_evidence={
+                    "science": science_evidence,
+                    "calibration": calibration_evidence,
+                })
+        else:
+            audit_report = {
+                **base_audit,
+                "calibration_compatibility": {
+                    "status": "review_required",
+                    "reason": "No exact IRSA provenance_input foreign-key link was found for the selected spectral-WCS artifact.",
+                },
+            }
         audit_path.write_text(json.dumps(audit_report, indent=2, default=str), encoding="utf-8")
     else:
         audit_report = {
             "status": "REVIEW_REQUIRED",
-            "reason": "No detector-matched, full-native-grid spectral-WCS plus solid-angle pair was found among downloaded candidates.",
+            "reason": "No detector-matched, full-native-grid spectral-WCS plus solid-angle pair was found.",
             "science": science,
+            "calibration_compatibility": {"status": "review_required"},
         }
         audit_path = args.out / "native_mef_audit.json"
         audit_path.write_text(json.dumps(audit_report, indent=2, default=str), encoding="utf-8")
@@ -459,6 +530,23 @@ def main():
                     "uri": chosen_gain["uri"], "sha256": chosen_gain["sha256"],
                 }
 
+    calibrated_injection = {"status": "not_run"}
+    if (
+        chosen_area and
+        (audit_report.get("calibration_compatibility") or {}).get("status") == "compatible"
+    ):
+        try:
+            calibrated_injection = run_calibrated_jy_injection(
+                science_path, science_uri,
+                Path(chosen_area["local_path"]), chosen_area["uri"],
+                science["sha256"], chosen_area["sha256"],
+                args.out / "calibrated_injection",
+            )
+        except Exception as exc:
+            calibrated_injection = {
+                "status": "failed", "error": f"{type(exc).__name__}: {exc}"
+            }
+
     summary = {
         "schema_version": "1.0",
         "created_utc": started,
@@ -476,6 +564,15 @@ def main():
         },
         "native_mef_audit": audit_report,
         "absolute_gain_validation": gain_validation,
+        "archive_provenance": {
+            "science_planeid": provenance.get("science_planeid"),
+            "science_metadata": provenance.get("science"),
+            "input_relation_count": len(provenance.get("input_relations", [])),
+            "linked_calibration_artifact_count": len(provenance.get("calibration_artifacts", [])),
+            "query_sha256": provenance.get("query_sha256"),
+            "exact_product_links": provenance_links,
+        },
+        "calibrated_jy_injection_evaluation": calibrated_injection,
         "matching_boundary": (
             "Selected candidates are detector-matched and native-grid checked. They are not labelled fully compatible "
             "unless the science/calibration processing provenance is explicitly reconciled. A shared detector, "
@@ -495,6 +592,10 @@ def main():
         "selected_uris": {k: v.get("uri") if v else None for k, v in summary["selected_products"].items()},
         "native_mef_audit_status": audit_report.get("status"),
         "absolute_gain_status": gain_validation.get("status"),
+        "archive_input_relation_count": len(provenance.get("input_relations", [])),
+        "wavelength_calibration_provenance_linked": bool(provenance_links.get("spectral_wcs")),
+        "calibration_compatibility_status": (audit_report.get("calibration_compatibility") or {}).get("status"),
+        "calibrated_injection_evaluation": calibrated_injection.get("status"),
         "summary": str(args.out / "real_field_audit_summary.json"),
     }, indent=2))
     # Exit non-zero only if the science file or all calibration families were unavailable.
