@@ -655,3 +655,44 @@ def test_sky_detector_twin_detection_must_prove_common_field_signature():
             state, signature, sky_detector_twin_detections=invalid_twin,
             score_thresholds=threshold_map,
         )
+
+
+
+def test_transient_candidate_family_is_not_trusted_without_explicit_completeness_declaration(monkeypatch):
+    from chronos_benchmark.scenarios import generate_scenario
+    import chronos_causal.falsification as falsification
+
+    observations = generate_scenario(
+        "transient", seed=334, n_observations=12
+    )["observations"]
+    flux = [row["flux"] for row in observations]
+    n = len(observations)
+
+    def fake_investigate(rows, **kwargs):
+        return {
+            "candidate_id": "candidate-current",
+            "verdict": "transient",
+            "leading_model": "transient",
+            "relative_model_support": [
+                {"name": "transient", "flux_prediction": flux},
+                {"name": "static_source", "flux_prediction": [sum(flux) / n] * n},
+            ],
+            "delta_bic_to_runner_up": 10.0,
+            "abstention_reasons": [],
+        }
+
+    monkeypatch.setattr(falsification, "investigate", fake_investigate)
+    report = falsification.run_falsification_suite(
+        observations,
+        candidate_family=[{
+            "candidate_id": "candidate-current",
+            "observations": observations,
+        }],
+        candidate_family_complete=False,
+        bootstrap_draws=100,
+        transient_draws=100,
+        seed=9,
+    )
+    assert report["verdict"] == "unknown"
+    assert report["candidate_selection_correction"]["status"] == "candidate_family_completeness_not_declared"
+    assert report["candidate_selection_correction"]["candidate_family_completeness_independently_verified"] is False
