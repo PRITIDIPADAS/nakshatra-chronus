@@ -204,6 +204,8 @@ Citation metadata: [CITATION.cff](CITATION.cff). Code: Apache License 2.0 ([LICE
 
 Implementation details for covariance-aware spectrotemporal reconstruction, resolution-aware feature evolution, epoch-aware source association, candidate-specific follow-up planning, evidence packages, four linked research workspaces, blind benchmark controls and the YSO population coverage gate are documented in [CHRONOS 5 Sessions 12–20](docs/CHRONOS_5_SESSIONS_12_20_IMPLEMENTATION.md).
 
+**Empirical status (25 November 2026):** one M101 DR1 D2 exposure has passed a file-backed calibration/provenance audit and exploratory calibrated-Jy injection/recovery; a six-region SPLICES/DR1 catalogue and footprint reconnaissance has also completed. These are pilot/reconnaissance results, not a blind benchmark or YSO discovery. See [the empirical status report](docs/CHRONOS_5_EMPIRICAL_STATUS_2026-11-25.md) for metrics, limitations and open acceptance gates.
+
 Blind evaluation is custodian-controlled. Keep the Fernet key and encrypted truth store away from the analysis runner and never commit either to this repository. The setup, freeze and unblind commands are in the implementation guide. Verify an exported investigation ZIP with:
 
 \`\`\`bash
