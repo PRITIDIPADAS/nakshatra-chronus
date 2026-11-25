@@ -42,10 +42,20 @@ def sha256_json(value: Any) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def summarize_field_record(field: dict, summary: dict | None, *, return_code: int,
-                           log_path: str, error: str | None = None) -> dict:
-    """Apply strict per-field eligibility checks without inferring missing data."""
+def summarize_field_record(
+    field: dict,
+    summary: dict | None,
+    *,
+    return_code: int,
+    log_path: str,
+    error: str | None = None,
+    injection_report: dict | None = None,
+    injection_report_path: str | None = None,
+    injection_report_sha256: str | None = None,
+) -> dict:
+    """Apply strict per-field gates and bind local-SNR rows to their native exposure."""
     summary = summary if isinstance(summary, dict) else {}
+    injection_report = injection_report if isinstance(injection_report, dict) else {}
     audit = summary.get("native_mef_audit") or {}
     compatibility = audit.get("calibration_compatibility") or {}
     gain = summary.get("absolute_gain_validation") or {}
@@ -76,14 +86,114 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
             for row in flux_bins
         )
     )
-    injection_rows = injection.get("injections") or []
+    report_rows = injection_report.get("injections") or []
+    report_bins = injection_report.get("flux_summary") or []
+    response_diagnostics = injection_report.get("local_response_diagnostics") or {}
+    report_science = injection_report.get("science_provenance") or {}
+    report_photon = injection_report.get("source_photon_noise") or {}
+    report_calibration = report_photon.get("calibration_record") or {}
+    report_science_matches = (
+        bool(science.get("sha256"))
+        and report_science.get("science_sha256") == science.get("sha256")
+    )
+    report_calibration_matches = (
+        bool(electron_record.get("calibration_sha256"))
+        and report_calibration.get("calibration_sha256") == electron_record.get("calibration_sha256")
+    )
+    report_identity_matches = report_science_matches and report_calibration_matches
+    report_bins_match = len(report_bins) == len(flux_bins) == 3
+    if report_bins_match:
+        for compact_bin, detailed_bin in zip(flux_bins, report_bins):
+            try:
+                report_bins_match = report_bins_match and (
+                    abs(float(compact_bin.get("flux_level")) - float(detailed_bin.get("flux_level"))) <= 1e-12
+                    and int(float(compact_bin.get("n_injected"))) == int(float(detailed_bin.get("n_injected")))
+                    and int(float(compact_bin.get("n_recovered"))) == int(float(detailed_bin.get("n_recovered")))
+                )
+            except (TypeError, ValueError):
+                report_bins_match = False
+    try:
+        expected_injection_rows = sum(
+            int(float(row.get("n_injected") or 0))
+            for row in flux_bins
+        ) if flux_bins else 0
+    except (TypeError, ValueError, OverflowError):
+        expected_injection_rows = -1
+        report_bins_match = False
     local_snr_diagnostic_rows = sum(
-        row.get("post_injection_local_max_snr_within_match_radius") is not None
-        for row in injection_rows
+        isinstance(row, dict)
+        and row.get("baseline_local_max_snr_within_match_radius") is not None
+        and row.get("post_injection_local_max_snr_within_match_radius") is not None
+        and row.get("local_snr_delta_within_match_radius") is not None
+        and row.get("post_injection_local_peak_offset_within_match_radius_px") is not None
+        for row in report_rows
     )
+    report_rows_match_bins = report_bins_match and len(report_rows) == expected_injection_rows
+    if report_rows_match_bins:
+        for compact_bin in flux_bins:
+            try:
+                level = float(compact_bin.get("flux_level"))
+                bin_rows = [
+                    row for row in report_rows
+                    if abs(float(row.get("flux_level")) - level) <= 1e-12
+                ]
+                report_rows_match_bins = report_rows_match_bins and (
+                    len(bin_rows) == int(float(compact_bin.get("n_injected")))
+                    and sum(int(row.get("recovered", 0)) for row in bin_rows)
+                    == int(float(compact_bin.get("n_recovered")))
+                )
+            except (TypeError, ValueError, OverflowError):
+                report_rows_match_bins = False
     local_snr_diagnostics_complete = (
-        len(injection_rows) > 0 and local_snr_diagnostic_rows == len(injection_rows)
+        response_diagnostics.get("available") is True
+        and response_diagnostics.get("does_not_change_recovery_or_peak_matching") is True
+        and report_identity_matches
+        and report_rows_match_bins
+        and expected_injection_rows > 0
+        and local_snr_diagnostic_rows == len(report_rows) == expected_injection_rows
     )
+    diagnostic_flux_bins = []
+    if report_bins_match:
+        for compact_bin in flux_bins:
+            try:
+                level = float(compact_bin.get("flux_level"))
+                bin_rows = [
+                    row for row in report_rows
+                    if abs(float(row.get("flux_level")) - level) <= 1e-12
+                ]
+                def median_metric(key):
+                    values = sorted(
+                        float(row[key]) for row in bin_rows
+                        if row.get(key) is not None
+                    )
+                    if not values:
+                        return None
+                    middle = len(values) // 2
+                    return values[middle] if len(values) % 2 else (values[middle - 1] + values[middle]) / 2
+                threshold = float(injection_report.get("threshold_snr", 5.0))
+                diagnostic_flux_bins.append({
+                    "flux_level_jy": level,
+                    "injection_rows": len(bin_rows),
+                    "recovered_rows": sum(int(row.get("recovered", 0)) for row in bin_rows),
+                    "baseline_local_max_snr_ge_threshold": sum(
+                        float(row["baseline_local_max_snr_within_match_radius"]) >= threshold
+                        for row in bin_rows
+                        if row.get("baseline_local_max_snr_within_match_radius") is not None
+                    ),
+                    "post_injection_local_max_snr_ge_threshold": sum(
+                        float(row["post_injection_local_max_snr_within_match_radius"]) >= threshold
+                        for row in bin_rows
+                        if row.get("post_injection_local_max_snr_within_match_radius") is not None
+                    ),
+                    "median_baseline_local_max_snr": median_metric("baseline_local_max_snr_within_match_radius"),
+                    "median_post_injection_local_max_snr": median_metric("post_injection_local_max_snr_within_match_radius"),
+                    "median_local_snr_delta": median_metric("local_snr_delta_within_match_radius"),
+                })
+            except (TypeError, ValueError, OverflowError):
+                diagnostic_flux_bins.append({
+                    "flux_level_jy": compact_bin.get("flux_level"),
+                    "diagnostic_summary_error": "invalid per-injection diagnostic value",
+                })
     recovery_investigation = {
         "zero_recovery_at_all_flux_levels": zero_recovery_all_flux_levels,
         "flux_bin_recoveries": [
@@ -95,14 +205,21 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
             }
             for row in flux_bins
         ],
-        "injection_rows": len(injection_rows),
+        "injection_rows": len(report_rows),
+        "expected_injection_rows": expected_injection_rows,
         "local_snr_diagnostic_rows": local_snr_diagnostic_rows,
         "local_snr_diagnostics_complete": local_snr_diagnostics_complete,
+        "injection_report_identity_matches_science_and_gain": report_identity_matches,
+        "injection_report_flux_bins_match_compact_summary": report_bins_match,
+        "injection_report_recovery_counts_match_rows": report_rows_match_bins,
+        "injection_report_sha256": injection_report_sha256,
+        "injection_report_path": injection_report_path,
+        "local_snr_flux_bin_diagnostics": diagnostic_flux_bins,
         "interpretation": (
             "Zero recovery at every tested flux level is retained as a field-level anomaly for investigation; "
             "it is not converted to a successful sensitivity result."
             if zero_recovery_all_flux_levels else
-            "Per-field recovery counts are retained without pooling field-specific flux levels."
+            "Per-field recovery counts are retained without pooling field-specific flux levels. Local maximum SNR is diagnostic only and does not replace peak-list recovery."
         ),
     }
 
@@ -123,6 +240,8 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
             and photon_noise.get("calibration_review_status") == "pending"
         ),
         "source_poisson_flux_bin_variances_measured": measured_poisson_bins,
+        "injection_report_matches_science_and_calibration": report_identity_matches,
+        "local_snr_diagnostics_complete_and_count_bound": local_snr_diagnostics_complete,
         "electron_conversion_map_valid_fraction_gt_99pct": (
             isinstance(conversion_valid_fraction, (int, float))
             and 0.99 < float(conversion_valid_fraction) <= 1.0
@@ -188,6 +307,8 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
             for key in ("spectral_wcs", "absolute_gain")
         },
         "archive_input_relation_count": provenance.get("input_relation_count"),
+        "injection_report_sha256": injection_report_sha256,
+        "injection_report_path": injection_report_path,
         "error": error,
         "return_code": return_code,
         "log_path": log_path,
@@ -349,6 +470,14 @@ def validate_aggregate_report(report: dict) -> dict:
         summary_digest = str(row.get("summary_sha256") or "").lower()
         if len(summary_digest) != 64 or any(ch not in "0123456789abcdef" for ch in summary_digest):
             errors.append(f"{name}: real-field summary SHA-256 is missing or invalid")
+        injection_digest = str(row.get("injection_report_sha256") or "").lower()
+        if len(injection_digest) != 64 or any(ch not in "0123456789abcdef" for ch in injection_digest):
+            errors.append(f"{name}: per-injection report SHA-256 is missing or invalid")
+        investigation = row.get("recovery_investigation") or {}
+        if investigation.get("local_snr_diagnostics_complete") is not True:
+            errors.append(f"{name}: local per-injection SNR diagnostics are incomplete or unbound")
+        if investigation.get("injection_report_identity_matches_science_and_gain") is not True:
+            errors.append(f"{name}: per-injection report is not bound to the science/gain pair")
         science = row.get("science") or {}
         science_digest = str(science.get("sha256") or "").lower()
         if len(science_digest) != 64 or any(ch not in "0123456789abcdef" for ch in science_digest):
@@ -422,9 +551,29 @@ def run_field(field: dict, root: Path, *, release: str,
         error = "field runner did not produce real_field_audit_summary.json"
     if completed.returncode != 0:
         error = error or f"field runner exited with status {completed.returncode}"
+    injection_report_path = (
+        summary_path.parent / "calibrated_injection" / "calibrated_jy_injection_recovery.json"
+    )
+    injection_report = None
+    injection_report_sha256 = None
+    if injection_report_path.is_file():
+        try:
+            injection_report = json.loads(injection_report_path.read_text(encoding="utf-8"))
+            injection_report_sha256 = sha256_file(injection_report_path)
+        except (OSError, json.JSONDecodeError) as exc:
+            error = error or f"injection_report_read_error:{type(exc).__name__}:{exc}"
     record = summarize_field_record(
-        field, summary, return_code=completed.returncode,
-        log_path=str(log_path.relative_to(root)), error=error,
+        field,
+        summary,
+        return_code=completed.returncode,
+        log_path=str(log_path.relative_to(root)),
+        error=error,
+        injection_report=injection_report,
+        injection_report_path=(
+            str(injection_report_path.relative_to(root))
+            if injection_report_path.is_file() else None
+        ),
+        injection_report_sha256=injection_report_sha256,
     )
     if summary_path.is_file():
         record["summary_sha256"] = sha256_file(summary_path)
