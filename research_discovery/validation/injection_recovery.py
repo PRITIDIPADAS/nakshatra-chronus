@@ -376,6 +376,8 @@ def main():
     if a.electrons_per_image_unit is not None and electron_record is None:
         raise SystemExit("A numeric conversion alone is not accepted. Supply --electron-calibration-record tied to the exact science MEF.")
     if electron_record is not None:
+        if not a.science_uri or str(electron_record.get("science_source_uri","")) != a.science_uri:
+            raise ValueError("electron calibration record science_source_uri does not match --science-uri")
         calibration_path = Path(electron_record.get("calibration_file_path", ""))
         if not calibration_path.is_file():
             raise FileNotFoundError("electron calibration record must point to the locally downloaded calibration file")
