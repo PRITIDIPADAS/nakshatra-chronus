@@ -604,7 +604,11 @@ def test_schema_1_1_cross_region_source_product_overlap_uses_exact_archive_produ
             "_chronos_dataset_class": "real",
             "_chronos_region": region,
         })
-        _write_csv(inventory_path, inventory)
+        _write_csv(
+            inventory_path,
+            inventory,
+            fieldnames=sorted({key for row in inventory for key in row}),
+        )
         pair = {
             "source_id": "source-a",
             "archive_product_id": product_id,

@@ -69,6 +69,42 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
         )
     )
     conversion_valid_fraction = photon_noise.get("conversion_map_valid_fraction")
+    zero_recovery_all_flux_levels = (
+        len(flux_bins) == 3
+        and all(
+            int(float(row.get("n_recovered") or 0)) == 0
+            for row in flux_bins
+        )
+    )
+    injection_rows = injection.get("injections") or []
+    local_snr_diagnostic_rows = sum(
+        row.get("post_injection_local_max_snr_within_match_radius") is not None
+        for row in injection_rows
+    )
+    local_snr_diagnostics_complete = (
+        len(injection_rows) > 0 and local_snr_diagnostic_rows == len(injection_rows)
+    )
+    recovery_investigation = {
+        "zero_recovery_at_all_flux_levels": zero_recovery_all_flux_levels,
+        "flux_bin_recoveries": [
+            {
+                "flux_level_jy": row.get("flux_level"),
+                "n_injected": row.get("n_injected"),
+                "n_recovered": row.get("n_recovered"),
+                "completeness": row.get("completeness"),
+            }
+            for row in flux_bins
+        ],
+        "injection_rows": len(injection_rows),
+        "local_snr_diagnostic_rows": local_snr_diagnostic_rows,
+        "local_snr_diagnostics_complete": local_snr_diagnostics_complete,
+        "interpretation": (
+            "Zero recovery at every tested flux level is retained as a field-level anomaly for investigation; "
+            "it is not converted to a successful sensitivity result."
+            if zero_recovery_all_flux_levels else
+            "Per-field recovery counts are retained without pooling field-specific flux levels."
+        ),
+    }
 
     checks = {
         "native_mef_audit_compatible": compatibility.get("status") == "compatible",
@@ -136,7 +172,8 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
         "status": "completed_calibrated_jy_pilot" if eligible else "incomplete_or_review_required",
         "eligible_for_multi_field_pilot_summary": eligible,
         "checks": checks,
-        "metrics": metrics,
+        "metrics": {**metrics, "recovery_investigation": recovery_investigation},
+        "recovery_investigation": recovery_investigation,
         "science": {
             key: (science.get("image_bunit") if key == "image_unit" else science.get(key))
             for key in ("uri", "sha256", "observation_id", "detector", "release",
@@ -193,6 +230,14 @@ def aggregate_report(records: list[dict], *, started_utc: str,
     completed = [row for row in records if row["eligible_for_multi_field_pilot_summary"]]
     failed = [row for row in records if not row["eligible_for_multi_field_pilot_summary"]]
     field_manifest = audit_predeclared_field_manifest(records)
+    zero_recovery_fields = [
+        row["field"]["name"] for row in records
+        if (row.get("recovery_investigation") or {}).get("zero_recovery_at_all_flux_levels") is True
+    ]
+    fields_missing_local_snr_diagnostics = [
+        row["field"]["name"] for row in records
+        if (row.get("recovery_investigation") or {}).get("local_snr_diagnostics_complete") is not True
+    ]
     results = {
         "schema": SCHEMA,
         "started_utc": started_utc,
@@ -209,6 +254,11 @@ def aggregate_report(records: list[dict], *, started_utc: str,
         "field_results": records,
         "completed_fields": [row["field"]["name"] for row in completed],
         "incomplete_fields": [row["field"]["name"] for row in failed],
+        "recovery_anomalies": {
+            "fields_with_zero_recovery_at_all_flux_levels": zero_recovery_fields,
+            "fields_missing_complete_local_snr_diagnostics": fields_missing_local_snr_diagnostics,
+            "zero_recovery_is_not_relabelled_as_successful_sensitivity": True,
+        },
         "science_observation_ids_unique": (
             len({row["science"].get("observation_id") for row in completed})
             == len(completed)
@@ -229,6 +279,7 @@ def aggregate_report(records: list[dict], *, started_utc: str,
             "No source classification or YSO population estimate is produced by a completeness injection test.",
             "The solid-angle map is supplemental; only Spectral-WCS and absolute-gain products are required to have exact provenance_input links.",
             "The absolute-gain matrix is used for calibration validation and must not be applied a second time to Level-2 science pixels.",
+            "Zero recovery at every tested flux level is retained as a field-level anomaly; it must be investigated and is not hidden by a passed archive or calibration gate.",
         ],
         "scientific_gate_status": {
             "single_field_real_data_pilot": "completed" if completed else "not_completed",

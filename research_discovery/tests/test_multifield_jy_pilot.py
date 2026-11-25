@@ -141,6 +141,32 @@ def test_aggregate_never_claims_blind_or_population_discovery():
     assert report["scientific_gate_status"]["population_level_yso_discovery"] == "not_satisfied"
 
 
+def test_zero_recovery_at_all_flux_levels_is_explicitly_flagged_in_aggregate():
+    records = []
+    for index, field in enumerate(FIELDS):
+        summary = _summary()
+        summary["science"]["observation_id"] = f"obs-zero-{index}"
+        summary["science"]["sha256"] = f"{index + 100:064x}"
+        if index == 4:
+            for row in summary["calibrated_jy_injection_evaluation"]["flux_summary"]:
+                row["n_recovered"] = 0
+                row["completeness"] = 0.0
+        records.append(summarize_field_record(
+            field, summary, return_code=0, log_path=f"{field['name']}.log"
+        ))
+    flagged = records[4]
+    assert flagged["eligible_for_multi_field_pilot_summary"] is True
+    assert flagged["recovery_investigation"]["zero_recovery_at_all_flux_levels"] is True
+    report = aggregate_report(
+        records, started_utc="2026-11-25T00:00:00Z",
+        finished_utc="2026-11-25T00:01:00Z", code_revision="b" * 40,
+    )
+    assert report["recovery_anomalies"]["fields_with_zero_recovery_at_all_flux_levels"] == [
+        "Lupus_III"
+    ]
+    assert report["recovery_anomalies"]["zero_recovery_is_not_relabelled_as_successful_sensitivity"] is True
+
+
 def test_aggregate_rejects_duplicate_exposure_identity_from_multifield_gate():
     records = []
     for field in FIELDS:

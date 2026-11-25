@@ -341,6 +341,41 @@ def _distance(a: np.ndarray,b: np.ndarray)->np.ndarray:
     return np.sqrt(((a[:,None,:2]-b[None,:,:2])**2).sum(axis=2))
 
 
+
+
+def _local_snr_peak(
+    snr_map: np.ndarray, x: float, y: float, radius_px: float,
+) -> tuple[float, float, float] | None:
+    """Return (maximum SNR, x, y) in a circular local search window."""
+    values = np.asarray(snr_map, dtype=float)
+    if values.ndim != 2 or not np.isfinite(radius_px) or radius_px < 0:
+        raise ValueError("SNR map must be 2D and local radius must be finite and nonnegative")
+    if not np.isfinite(x) or not np.isfinite(y):
+        raise ValueError("local SNR search coordinates must be finite")
+    height, width = values.shape
+    x0 = max(0, int(np.ceil(x - radius_px)))
+    x1 = min(width - 1, int(np.floor(x + radius_px)))
+    y0 = max(0, int(np.ceil(y - radius_px)))
+    y1 = min(height - 1, int(np.floor(y + radius_px)))
+    if x1 < x0 or y1 < y0:
+        return None
+    yy, xx = np.mgrid[y0:y1 + 1, x0:x1 + 1]
+    patch = values[y0:y1 + 1, x0:x1 + 1]
+    inside = (xx - x) ** 2 + (yy - y) ** 2 <= radius_px ** 2 + 1e-12
+    valid = np.isfinite(patch) & inside
+    if not np.any(valid):
+        return None
+    selected = np.where(valid, patch, -np.inf)
+    iy, ix = np.unravel_index(int(np.argmax(selected)), selected.shape)
+    return float(patch[iy, ix]), float(xx[iy, ix]), float(yy[iy, ix])
+
+
+def _peak_offset(peak: tuple[float, float, float] | None, x: float, y: float) -> float | None:
+    if peak is None:
+        return None
+    return float(np.hypot(peak[1] - x, peak[2] - y))
+
+
 def _choose_positions(valid: np.ndarray,n: int,margin: int,rng: np.random.Generator,min_distance: int,
                       phase: tuple[float,float]=(0.0,0.0), reference_xy: tuple[float,float] | None=None,
                       region_radius: float | None=None)->np.ndarray:
@@ -499,6 +534,7 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
             valid[(xx-sx)**2+(yy-sy)**2 <= r2] = False
     phase=(0.0,0.0) if psf_reference_xy is None else (float(psf_reference_xy[0])%1.0,float(psf_reference_xy[1])%1.0)
     rows=[]; all_detected=[]; injected=[]
+    extended_diagnostic_radius_px = max(5.0, float(match_radius))
     for level in flux_levels:
         xy=_choose_positions(valid,n_per_level,margin,rng,min_injection_separation,
             phase=phase,reference_xy=psf_reference_xy,region_radius=psf_region_radius)
@@ -543,9 +579,61 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                 if distances[i,j]>match_radius: break
                 if int(j) not in recovered and int(i) not in matched_peak:
                     recovered.add(int(j));matched_peak.add(int(i))
+        level_injection_rows = []
         for j,(x,y) in enumerate(xy):
-            rows.append({"flux_level":float(level),"x":float(x),"y":float(y),"recovered":int(j in recovered),
-                         "nearest_detection_distance_px":float(np.min(distances[:,j])) if len(peaks) else None})
+            baseline_match_peak = _local_snr_peak(
+                baseline_snr, float(x), float(y), float(match_radius)
+            )
+            baseline_extended_peak = _local_snr_peak(
+                baseline_snr, float(x), float(y), extended_diagnostic_radius_px
+            )
+            injected_match_peak = _local_snr_peak(
+                injected_snr, float(x), float(y), float(match_radius)
+            )
+            injected_extended_peak = _local_snr_peak(
+                injected_snr, float(x), float(y), extended_diagnostic_radius_px
+            )
+            baseline_match_snr = baseline_match_peak[0] if baseline_match_peak else None
+            baseline_extended_snr = baseline_extended_peak[0] if baseline_extended_peak else None
+            injected_match_snr = injected_match_peak[0] if injected_match_peak else None
+            injected_extended_snr = injected_extended_peak[0] if injected_extended_peak else None
+            row = {
+                "flux_level": float(level),
+                "x": float(x),
+                "y": float(y),
+                "recovered": int(j in recovered),
+                "nearest_detection_distance_px": (
+                    float(np.min(distances[:,j])) if len(peaks) else None
+                ),
+                "baseline_local_max_snr_within_match_radius": baseline_match_snr,
+                "post_injection_local_max_snr_within_match_radius": injected_match_snr,
+                "post_injection_local_peak_offset_within_match_radius_px": _peak_offset(
+                    injected_match_peak, float(x), float(y)
+                ),
+                "post_injection_local_peak_x_within_match_radius_px": (
+                    injected_match_peak[1] if injected_match_peak else None
+                ),
+                "post_injection_local_peak_y_within_match_radius_px": (
+                    injected_match_peak[2] if injected_match_peak else None
+                ),
+                "baseline_local_max_snr_within_extended_radius": baseline_extended_snr,
+                "post_injection_local_max_snr_within_extended_radius": injected_extended_snr,
+                "post_injection_local_peak_offset_within_extended_radius_px": _peak_offset(
+                    injected_extended_peak, float(x), float(y)
+                ),
+                "local_snr_delta_within_match_radius": (
+                    injected_match_snr - baseline_match_snr
+                    if injected_match_snr is not None and baseline_match_snr is not None
+                    else None
+                ),
+                "local_snr_delta_within_extended_radius": (
+                    injected_extended_snr - baseline_extended_snr
+                    if injected_extended_snr is not None and baseline_extended_snr is not None
+                    else None
+                ),
+            }
+            rows.append(row)
+            level_injection_rows.append(row)
         # Only newly appearing peaks count as candidate false alarms. Genuine
         # pre-existing sky sources are not relabelled as false positives.
         new_peaks=[]
@@ -558,8 +646,47 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                     n_outside_local_psf_region += 1
                     continue
             new_peaks.append(pk)
-        all_detected.append({"flux_level":float(level),"new_unmatched_peaks_within_local_psf_region":len(new_peaks),
-                             "unmatched_peaks_outside_local_psf_region_excluded":n_outside_local_psf_region})
+        local_match_snrs = [
+            row["post_injection_local_max_snr_within_match_radius"]
+            for row in level_injection_rows
+            if row["post_injection_local_max_snr_within_match_radius"] is not None
+        ]
+        local_extended_snrs = [
+            row["post_injection_local_max_snr_within_extended_radius"]
+            for row in level_injection_rows
+            if row["post_injection_local_max_snr_within_extended_radius"] is not None
+        ]
+        local_match_deltas = [
+            row["local_snr_delta_within_match_radius"]
+            for row in level_injection_rows if row["local_snr_delta_within_match_radius"] is not None
+        ]
+        local_extended_deltas = [
+            row["local_snr_delta_within_extended_radius"]
+            for row in level_injection_rows if row["local_snr_delta_within_extended_radius"] is not None
+        ]
+        all_detected.append({
+            "flux_level": float(level),
+            "new_unmatched_peaks_within_local_psf_region": len(new_peaks),
+            "unmatched_peaks_outside_local_psf_region_excluded": n_outside_local_psf_region,
+            "injections_with_local_max_snr_ge_threshold_within_match_radius": sum(
+                value >= snr_threshold for value in local_match_snrs
+            ),
+            "injections_with_local_max_snr_ge_threshold_within_extended_radius": sum(
+                value >= snr_threshold for value in local_extended_snrs
+            ),
+            "median_post_injection_local_max_snr_within_match_radius": (
+                float(np.median(local_match_snrs)) if local_match_snrs else None
+            ),
+            "median_post_injection_local_max_snr_within_extended_radius": (
+                float(np.median(local_extended_snrs)) if local_extended_snrs else None
+            ),
+            "median_local_snr_delta_within_match_radius": (
+                float(np.median(local_match_deltas)) if local_match_deltas else None
+            ),
+            "median_local_snr_delta_within_extended_radius": (
+                float(np.median(local_extended_deltas)) if local_extended_deltas else None
+            ),
+        })
         offsets=[float(np.min(distances[:,j])) for j in sorted(recovered)] if len(peaks) else []
         ci_low,ci_high=wilson_interval(len(recovered),len(xy))
         injected.append({
@@ -621,6 +748,15 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
       "flux_interpretation":"Jy integrated source flux converted through a detector-aligned steradian pixel-area map" if flux_unit == "Jy" else "sum of per-pixel IMAGE units; not an integrated Jy flux",
       "source_exclusion_radius_px":int(source_exclusion_radius),
       "baseline_source_exclusion_applied":True,"seed":int(seed),"n_per_flux_level":int(n_per_level),
+      "local_response_diagnostics": {
+          "available": True,
+          "method": "maximum position-dependent matched-filter SNR within circular search radii around each injected coordinate",
+          "match_radius_px": float(match_radius),
+          "extended_radius_px": float(extended_diagnostic_radius_px),
+          "threshold_snr": float(snr_threshold),
+          "baseline_and_post_injection_maps_use_same_detection_validity_mask": True,
+          "does_not_change_recovery_or_peak_matching": True,
+      },
       "flux_summary":injected,"new_unmatched_peak_summary":all_detected,"injections":rows,
       "interpretation":"Completeness is measured conditional on this field, PSF, masks, flux levels and threshold. It is not all-sky performance.",
       "independence_warning":"Run on pre-registered, held-out fields not used to tune thresholds. Report per-field results and confidence intervals."}

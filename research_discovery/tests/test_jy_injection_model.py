@@ -77,6 +77,15 @@ def test_real_image_jy_injection_path_uses_area_aware_filter_and_reports_contrac
     assert result["detection_template"]["uses_separate_surface_brightness_psf"] is False
     assert len(result["injections"]) == 1
     assert result["flux_summary"][0]["n_injected"] == 1
+    diagnostics = result["local_response_diagnostics"]
+    assert diagnostics["available"] is True
+    assert diagnostics["does_not_change_recovery_or_peak_matching"] is True
+    injection = result["injections"][0]
+    assert injection["baseline_local_max_snr_within_match_radius"] is not None
+    assert injection["post_injection_local_max_snr_within_match_radius"] is not None
+    assert injection["post_injection_local_max_snr_within_extended_radius"] is not None
+    assert injection["local_snr_delta_within_match_radius"] is not None
+    assert "injections_with_local_max_snr_ge_threshold_within_extended_radius" in result["new_unmatched_peak_summary"][0]
 
 
 def test_nonnegative_psf_helper_clips_only_subthreshold_interpolation_overshoot():
