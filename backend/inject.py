@@ -65,8 +65,14 @@ def _calibrated_gain(exposure, record):
         raise ValueError(f"{exposure.id}: a verified abs_gain_matrix record is required")
     if str(record["science_observation_id"]) != str(getattr(exposure, "source_observation_id", "") or str(exposure.id).split("_D")[0]):
         raise ValueError(f"{exposure.id}: original OBSID mismatch")
-    if str(record["science_file_sha256"]).lower() != str(exposure.source_sha256).lower():
-        raise ValueError(f"{exposure.id}: exact science cutout SHA-256 mismatch")
+    native_sha = str(record.get("science_native_file_sha256", record["science_file_sha256"])).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", native_sha):
+        raise ValueError(f"{exposure.id}: native science MEF SHA-256 is malformed")
+    if str(record.get("science_file_sha256", "")).lower() != native_sha:
+        raise ValueError(f"{exposure.id}: science_file_sha256 must identify the native science MEF")
+    cutout_sha = str(record.get("science_cutout_sha256", "")).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", cutout_sha) or cutout_sha != str(exposure.source_sha256).lower():
+        raise ValueError(f"{exposure.id}: exact science cutout SHA-256 mismatch; record science_cutout_sha256")
     if str(record["science_source_uri"]) != str(exposure.source_uri):
         raise ValueError(f"{exposure.id}: science archive URI mismatch")
     if str(record["detector"]).upper().replace("D", "") != str(exposure.det):
