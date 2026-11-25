@@ -1,7 +1,7 @@
 (() => {
 "use strict";
 const $=id=>document.getElementById(id);
-const state={observations:[],analysis:null,manifest:null,apiReady:false,spectral:null,spectralSourceRows:[],selectedSpectralCell:null};
+const state={observations:[],analysis:null,manifest:null,evidenceGraph:null,apiReady:false,spectral:null,spectralSourceRows:[],selectedSpectralCell:null};
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=(v,n=3)=>Number.isFinite(Number(v))?Number(v).toFixed(n):"n/a";
 const pretty=x=>JSON.stringify(x,null,2);
@@ -255,8 +255,71 @@ async function manifest(){
 async function evidenceGraph(){
  try{needAPI();if(!state.analysis)await analyze();if(!state.analysis)throw Error("Run model comparison first.");
  const x=await call("/evidence/graph",{candidate_id:state.observations[0].candidate_id||"candidate",observations:state.observations,analysis:state.analysis,manifest:state.manifest});
+ state.evidenceGraph=x;
  $("evidence-graph-result").innerHTML='<div class="counter-row"><span>Evidence nodes</span><b>'+x.nodes.length+'</b></div><div class="counter-row"><span>Evidence links</span><b>'+x.edges.length+'</b></div><div class="counter-row"><span>Graph SHA-256</span><b>'+esc(x.graph_sha256.slice(0,18))+'…</b></div><button class="button outline" id="download-graph">Download graph JSON</button>';$("download-graph").addEventListener("click",()=>download("chronos-evidence-graph.json",x));}
  catch(e){error("evidence-graph-result",e);}
+}
+async function exportInvestigationPackage(){
+ try{
+  needAPI();
+  if(!state.analysis)await analyze();
+  if(!state.analysis)throw Error("A successful analysis response is required before export.");
+  if(!state.manifest)throw Error("Create and verify an archive manifest first.");
+  const command=$("reproduction-command").value.trim();
+  if(!command)throw Error("Enter the exact reproduction command for this investigation.");
+  const files=state.manifest.files||[];
+  if(!files.length)throw Error("The manifest contains no source-product records.");
+  const sourceFiles=files.map((f,i)=>({
+   role:f.role||f.product_type||("source_"+(i+1)),
+   archive_id:f.archive_id,
+   product_type:f.product_type,
+   release:f.release,
+   detector:f.detector,
+   native_uri:f.native_uri||f.uri,
+   sha256:f.sha256,
+   byte_count:f.bytes??f.byte_count,
+   compatibility_group:f.compatibility_group||state.manifest.calibration_group,
+   compatibility_status:f.compatibility_status
+  }));
+  for(const [i,f] of sourceFiles.entries()){
+   if(!f.native_uri||!String(f.native_uri).startsWith("https://"))throw Error("Manifest source "+(i+1)+" needs its exact HTTPS native_uri.");
+   if(!f.sha256||!f.archive_id||!f.product_type||!f.release||!f.detector)throw Error("Manifest source "+(i+1)+" is missing its archive ID, product family, release, detector or SHA-256.");
+  }
+  let graph=state.evidenceGraph;
+  if(!graph){
+   graph=await call("/evidence/graph",{
+    candidate_id:state.observations[0]?.candidate_id||"candidate",
+    observations:state.observations,
+    analysis:state.analysis,
+    manifest:state.manifest
+   });
+   state.evidenceGraph=graph;
+  }
+  const payload={
+   candidate_id:state.analysis.candidate_id||state.observations[0]?.candidate_id||"candidate",
+   analysis:state.analysis,
+   evidence_graph:graph,
+   source_files:sourceFiles,
+   reproduction_command:command,
+   code_commit:state.manifest.software?.pipeline_commit||state.manifest.software?.git_commit||null,
+   environment:state.manifest.software||{},
+   processing_configuration:state.manifest.processing_choices||{},
+   failed_checks:(state.analysis.abstention_reasons||[]).map(reason=>({check:"analysis_abstention",status:"not_passed",reason}))
+  };
+  const response=await fetch("/api/v5/evidence/package/export",{
+   method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)
+  });
+  if(!response.ok){
+   const detail=await response.json().catch(()=>({}));
+   throw Error(typeof detail.detail==="string"?detail.detail:JSON.stringify(detail.detail||"Package export failed"));
+  }
+  const blob=await response.blob();
+  const url=URL.createObjectURL(blob),link=document.createElement("a");
+  const safe=String(payload.candidate_id).replace(/[^A-Za-z0-9_-]/g,"_").slice(0,64)||"candidate";
+  link.href=url;link.download="chronos_"+safe+".zip";document.body.appendChild(link);link.click();link.remove();
+  URL.revokeObjectURL(url);
+  $("package-result").textContent="Investigation ZIP exported. This metadata-only package records exact source URIs and hashes; the original FITS bytes remain external.";
+ }catch(e){error("package-result",e);}
 }
 function download(name,data){const u=URL.createObjectURL(new Blob([pretty(data)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
 function copySchema(){
@@ -272,5 +335,5 @@ $("spectral-heatmap").addEventListener("click",inspectSpectralCell);
 $("run-plan").addEventListener("click",planner);$("run-detector").addEventListener("click",detector);
 $("run-benchmark").addEventListener("click",benchmark);$("run-baselines").addEventListener("click",baselines);
 $("run-population").addEventListener("click",population);$("create-manifest").addEventListener("click",manifest);
-$("create-evidence-graph").addEventListener("click",evidenceGraph);status();
+$("create-evidence-graph").addEventListener("click",evidenceGraph);$("export-investigation-package").addEventListener("click",exportInvestigationPackage);status();
 })();
