@@ -291,7 +291,7 @@ def test_calibration_pair_requires_checksum_verified_native_audit(tmp_path):
     from research_discovery.spherex.calibration_compatibility import compatibility_decision
     manifest, matrix, audit_path, science_meta, calibration_meta = _verified_audit_fixture(tmp_path)
     result = compatibility_decision(science_meta, calibration_meta)
-    assert result["status"] == "compatible", result
+    assert result["status"] == "compatible", {"checks": result["checks"], "audit_review_reasons": result["audit"].get("review_reasons")}
     assert result["audit"]["audit_sha256"] == hashlib.sha256(audit_path.read_bytes()).hexdigest()
     calibration_meta["detector"] = "D5"
     assert compatibility_decision(science_meta, calibration_meta)["status"] == "rejected"
