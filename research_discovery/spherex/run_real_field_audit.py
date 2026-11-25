@@ -871,8 +871,8 @@ def main():
 
     calibrated_injection = {"status": "not_run"}
     if (
-        chosen_area and
-        (audit_report.get("calibration_compatibility") or {}).get("status") == "compatible"
+        chosen_area and chosen_gain and provenance_links.get("absolute_gain")
+        and (audit_report.get("calibration_compatibility") or {}).get("status") == "compatible"
     ):
         try:
             calibrated_injection = run_calibrated_jy_injection(
