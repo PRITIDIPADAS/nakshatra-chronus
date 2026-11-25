@@ -338,6 +338,92 @@ def _select_operating_point(curve, target_metric, target):
     }
 
 
+def _paired_superiority_bootstrap(per_field, matched, *, draws: int, seed: int):
+    """Paired field-group bootstrap at each method's frozen matched-FPF threshold."""
+    operating_points = {}
+    for method in REQUIRED_METHODS:
+        selected = (matched.get(method) or {}).get("false_candidates_per_field")
+        if not selected or not selected.get("point"):
+            return {
+                "status": "not_evaluable_without_matched_false_candidate_target",
+                "superiority_supported": False,
+                "comparisons": {},
+            }
+        by_field = selected["point"].get("by_field") or []
+        operating_points[method] = {str(row["field_id"]): row for row in by_field}
+
+    grouped_ids = {}
+    for row in per_field:
+        grouped_ids.setdefault(
+            str(row.get("independence_group_id") or row["field_id"]), []
+        ).append(str(row["field_id"]))
+    group_ids = sorted(grouped_ids)
+    if len(group_ids) < 2:
+        return {
+            "status": "insufficient_independent_field_groups",
+            "superiority_supported": False,
+            "independent_group_count": len(group_ids),
+            "comparisons": {},
+        }
+
+    rng = np.random.default_rng(int(seed))
+    comparisons = {}
+    for comparator in REQUIRED_METHODS:
+        if comparator == "sky_detector_twin":
+            continue
+        delta_completeness = []
+        delta_false_candidates = []
+        for _ in range(int(draws)):
+            picked = rng.integers(0, len(group_ids), size=len(group_ids))
+            twin_rows, comparator_rows = [], []
+            for group_index in picked:
+                for field_id in grouped_ids[group_ids[int(group_index)]]:
+                    twin_rows.append(operating_points["sky_detector_twin"][field_id])
+                    comparator_rows.append(operating_points[comparator][field_id])
+            twin = _aggregate_point(twin_rows)
+            base = _aggregate_point(comparator_rows)
+            if twin["completeness"] is not None and base["completeness"] is not None:
+                delta_completeness.append(
+                    float(twin["completeness"] - base["completeness"])
+                )
+            if (twin["false_candidates_per_field"] is not None
+                    and base["false_candidates_per_field"] is not None):
+                delta_false_candidates.append(float(
+                    twin["false_candidates_per_field"] - base["false_candidates_per_field"]
+                ))
+        comparisons[comparator] = {
+            "delta_completeness_twin_minus_comparator": {
+                "mean": float(np.mean(delta_completeness)) if delta_completeness else None,
+                "paired_field_group_bootstrap_95_interval": (
+                    [float(np.percentile(delta_completeness, 2.5)),
+                     float(np.percentile(delta_completeness, 97.5))]
+                    if delta_completeness else None
+                ),
+                "bootstrap_draws_with_defined_metric": len(delta_completeness),
+            },
+            "delta_false_candidates_per_field_twin_minus_comparator": {
+                "mean": float(np.mean(delta_false_candidates)) if delta_false_candidates else None,
+                "paired_field_group_bootstrap_95_interval": (
+                    [float(np.percentile(delta_false_candidates, 2.5)),
+                     float(np.percentile(delta_false_candidates, 97.5))]
+                    if delta_false_candidates else None
+                ),
+                "bootstrap_draws_with_defined_metric": len(delta_false_candidates),
+            },
+        }
+    return {
+        "status": "paired_field_group_bootstrap_completed",
+        "independent_group_count": len(group_ids),
+        "draws": int(draws),
+        "seed": int(seed),
+        "resampling_unit": "independent sky-field group; paired same group for Twin and comparator",
+        "operating_point_policy": "each method's nearest frozen false-candidates-per-field threshold; no interpolation",
+        "comparisons": comparisons,
+        "superiority_supported": False,
+        "note": "A superiority verdict additionally requires a verified real blind protocol, a predeclared false-candidate non-inferiority margin, correction across comparator tests and all paired confidence-bound gates.",
+    }
+
+
 def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: int = 2000,
                               seed: int = 20261125,
                               verified_blind_protocol: bool = False) -> dict[str, Any]:
@@ -549,6 +635,52 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
         eligibility_reasons.append("truth_release_order_not_verified")
     if not unblind_record.get("encrypted_truth_store_sha256") or not unblind_record.get("heldout_field_tokens_processed"):
         eligibility_reasons.append("unblinding_record_incomplete")
+    paired_superiority = _paired_superiority_bootstrap(
+        per_field, matched, draws=bootstrap_draws, seed=seed + 100003
+    )
+    false_candidate_margin = blind_record.get("false_candidate_noninferiority_margin")
+    margin_valid = (
+        isinstance(false_candidate_margin, (int, float))
+        and math.isfinite(float(false_candidate_margin))
+        and float(false_candidate_margin) >= 0
+    )
+    comparator_gates = []
+    for comparator, values in paired_superiority.get("comparisons", {}).items():
+        comp_ci = (values["delta_completeness_twin_minus_comparator"]
+                   ["paired_field_group_bootstrap_95_interval"])
+        fpf_ci = (values["delta_false_candidates_per_field_twin_minus_comparator"]
+                  ["paired_field_group_bootstrap_95_interval"])
+        comparator_gates.append(bool(
+            comp_ci is not None and comp_ci[0] > 0
+            and fpf_ci is not None and margin_valid
+            and fpf_ci[1] <= float(false_candidate_margin)
+        ))
+    paired_superiority["predeclared_false_candidate_noninferiority_margin"] = (
+        float(false_candidate_margin) if margin_valid else None
+    )
+    paired_superiority["multiple_comparator_correction"] = {
+        "required": True,
+        "method": blind_record.get("multiple_comparison_correction"),
+        "verified_predeclared": bool(blind_record.get("multiple_comparison_correction")),
+        "note": "Intervals are unadjusted percentile bootstrap intervals; the final superiority gate remains closed until the specified family-wise correction is applied."
+    }
+    paired_superiority["superiority_supported"] = bool(
+        scientifically_eligible and margin_valid
+        and len(comparator_gates) == 3 and all(comparator_gates)
+        and paired_superiority.get("status") == "paired_field_group_bootstrap_completed"
+        and bool(blind_record.get("multiple_comparison_correction"))
+    )
+    if not scientifically_eligible:
+        paired_superiority["verdict_status"] = "not_scientifically_eligible"
+    elif not margin_valid:
+        paired_superiority["verdict_status"] = "missing_predeclared_false_candidate_noninferiority_margin"
+    elif not blind_record.get("multiple_comparison_correction"):
+        paired_superiority["verdict_status"] = "missing_predeclared_multiple_comparison_correction"
+    elif paired_superiority["superiority_supported"]:
+        paired_superiority["verdict_status"] = "superiority_gate_passed"
+    else:
+        paired_superiority["verdict_status"] = "superiority_not_established"
+
     return {
         "schema": "chronos-four-baseline-report/1.0",
         "benchmark_id": str(package.get("benchmark_id", "unnamed")),
@@ -560,6 +692,7 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
             "methods": matched,
             "interpretation": "Each target is matched independently using the nearest observed threshold for each method.",
         },
+        "paired_superiority": paired_superiority,
         "reproducibility": {
             "input_signature_fields": [
                 "field_id", "dataset_class", "exposure_ids", "mask_sha256",
