@@ -307,15 +307,27 @@ def plan_candidate_observations(candidates: Sequence[Mapping[str, Any]], *,
         ranked.append({**item, "rank": rank, "candidate_observation_id": cid,
             "forecast_provenance": extra.get("forecast_provenance", {}),
             "measurement_option": extra.get("measurement_option", {}),
+            "data_class": str(next(
+                (raw.get("dataset_class", raw.get("data_class",
+                    "synthetic" if raw.get("synthetic_fixture") is True else "unverified"))
+                 for raw in candidates
+                 if str(raw.get("candidate_observation_id", raw.get("id", ""))) == cid),
+                "unverified",
+            )),
             "purpose": extra.get("purpose"), "feasibility_evidence": raw_feasibility.get(cid, {})})
     verified, blocked = [], []
     for item in ranked:
         f = item.get("feasibility") or {}
         raw_f = item.get("feasibility_evidence") or {}
+        evidence_digest = str(raw_f.get("evidence_sha256", "")).lower()
+        digest_valid = (len(evidence_digest) == 64
+                        and set(evidence_digest) <= set("0123456789abcdef"))
+        query_parameters = raw_f.get("query_parameters")
         good = (f.get("status") == "verified" and f.get("feasible") is True
                 and str(f.get("source_uri", "")).startswith("https://")
                 and bool(f.get("checked_utc")) and bool(raw_f.get("calculator"))
-                and bool(raw_f.get("query_id")))
+                and bool(raw_f.get("query_id")) and digest_valid
+                and isinstance(query_parameters, Mapping) and bool(query_parameters))
         if good:
             verified.append(item)
         else:
@@ -328,6 +340,6 @@ def plan_candidate_observations(candidates: Sequence[Mapping[str, Any]], *,
         "feasible_ranked": verified, "science_only_ranked": ranked,
         "blocked_or_unverified": blocked,
         "prior_sensitivity": base.get("prior_sensitivity", {}),
-        "feasibility_policy": "A candidate is recommended only when the supplied external record is verified and contains an HTTPS source, timezone-aware check time, calculator and query ID. CHRONOS does not authenticate that service.",
+        "feasibility_policy": "A candidate is recommended only when the external record is verified and contains an HTTPS source, timezone-aware check time, calculator, query ID, exact query parameters and evidence SHA-256. CHRONOS validates fields but does not authenticate that service.",
         "limitations": base["limitations"] + ["Forecasts must come from fitted physical models.", "The planner does not schedule or command a telescope."],
     }

@@ -38,12 +38,15 @@ class SpectroTemporalRequest(BaseModel):
     calibration_group: str | None = None
     measurement_covariance: list[list[float]] | None = None
     shared_calibration_fractional_sigma: float | None = None
+    include_grid_covariance: bool = False
 
 class FeatureEvolutionRequest(BaseModel):
     epochs: list[dict[str, Any]]
     feature_interval_um: list[float]
     continuum_intervals_um: list[list[float]]
     potential_blend_intervals_um: list[list[float]] = Field(default_factory=list)
+    continuum_model: str = "linear"
+    laboratory_references: list[dict[str, Any]] = Field(default_factory=list)
 
 class IdentityRequest(BaseModel):
     candidate: dict[str, Any]
@@ -51,6 +54,7 @@ class IdentityRequest(BaseModel):
     search_radius_arcsec: float = 10.0
     background_density_per_arcsec2: float = 0.001
     prior_match_probability: float = 0.9
+    minimum_secure_probability: float = 0.8
 
 class SourceGraphRequest(BaseModel):
     candidate_id: str
@@ -83,6 +87,8 @@ class ManifestRequest(BaseModel):
     files: list[dict[str, Any]]
     software: dict[str, Any]
     processing_choices: dict[str, Any] = Field(default_factory=dict)
+    source_query: dict[str, Any] | str | None = None
+    retrieved_at: str | None = None
 
 class ManifestVerifyRequest(BaseModel):
     manifest: dict[str, Any]
@@ -170,6 +176,16 @@ class EvidenceGraphRequest(BaseModel):
     observations: list[dict[str, Any]]
     analysis: dict[str, Any]
     manifest: dict[str, Any] | None = None
+    model_runs: list[dict[str, Any]] = Field(default_factory=list)
+    counterfactuals: list[dict[str, Any]] = Field(default_factory=list)
+    failed_tests: list[dict[str, Any]] = Field(default_factory=list)
+    environment: dict[str, Any] | None = None
+    code_commit: str | None = None
+
+class YSOPopulationRateRequest(PopulationCoverageRequest):
+    preregistration_sha256: str
+    draws: int = 10000
+    seed: int = 1
 
 def guarded(fn):
     try:
@@ -206,8 +222,7 @@ def status():
             "generic pixel-level spectral forward experiments with parameter provenance",
             "forward-model Jacobian identifiability and nuisance-degeneracy analysis",
             "grouped residuals and conditional parametric-bootstrap challenges",
-            "candidate-family transient search correction when complete field candidate sets are supplied",
-            "measurement-level sky, detector and mixed counterfactual interventions",
+            "predeclared measurement-level sky, detector and mixed interventions",
             "synthetic challenge fixtures",
         ],
         "not_claimed": [
@@ -216,7 +231,6 @@ def status():
             "validated SPHEREx detector coefficients",
             "full Bayesian posterior-predictive inference",
             "real-data performance improvement",
-            "independently verified preregistration timestamps",
             "automated telescope scheduling",
         ],
     }
@@ -288,6 +302,7 @@ def spectrotemporal_reconstruct(request: SpectroTemporalRequest):
         calibration_group=request.calibration_group,
         measurement_covariance=request.measurement_covariance,
         shared_calibration_fractional_sigma=request.shared_calibration_fractional_sigma,
+        include_grid_covariance=request.include_grid_covariance,
     ))
 
 @router.post("/spectrotemporal/feature-evolution")
@@ -296,6 +311,8 @@ def spectrotemporal_feature_evolution(request: FeatureEvolutionRequest):
     return guarded(lambda: measure_feature_evolution(
         request.epochs, request.feature_interval_um, request.continuum_intervals_um,
         potential_blend_intervals_um=request.potential_blend_intervals_um,
+        continuum_model=request.continuum_model,
+        laboratory_references=request.laboratory_references,
     ))
 
 @router.post("/identity/associate")
@@ -306,6 +323,7 @@ def identity_associate(request: IdentityRequest):
         search_radius_arcsec=request.search_radius_arcsec,
         background_density_per_arcsec2=request.background_density_per_arcsec2,
         prior_match_probability=request.prior_match_probability,
+        minimum_secure_probability=request.minimum_secure_probability,
     ))
 
 @router.post("/identity/source-graph")
@@ -355,6 +373,47 @@ def population_assess_coverage(request: PopulationCoverageRequest):
     ))
 
 
+@router.post("/population/yso/rate")
+def population_yso_rate(request: YSOPopulationRateRequest):
+    """Repeat the archive coverage gate on the same real records before population estimation."""
+    import re
+    from chronos_population.coverage import assess_population_coverage
+    from chronos_population.rates import estimate_event_rate
+    digest = str(request.preregistration_sha256).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise HTTPException(status_code=422, detail="preregistration_sha256 must be a 64-character SHA-256 digest")
+
+    def run():
+        coverage = assess_population_coverage(
+            request.fields, target_class=request.target_class,
+            feature_interval_um=request.feature_interval_um,
+            blue_continuum_um=request.blue_continuum_um,
+            red_continuum_um=request.red_continuum_um,
+            minimum_independent_fields=request.minimum_independent_fields,
+            minimum_epochs_per_source=request.minimum_epochs_per_source,
+            minimum_feature_samples=request.minimum_feature_samples,
+            minimum_continuum_samples=request.minimum_continuum_samples,
+            minimum_median_snr=request.minimum_median_snr,
+            minimum_completeness=request.minimum_completeness,
+        )
+        if not coverage["eligible_for_predeclared_population_protocol"]:
+            raise HTTPException(status_code=422, detail={
+                "message": "Population analysis blocked: real-data coverage gates were not met.",
+                "coverage_audit": coverage,
+            })
+        rate = estimate_event_rate(
+            request.fields, minimum_completeness=request.minimum_completeness,
+            draws=request.draws, seed=request.seed,
+        )
+        return {
+            "scientific_status": "coverage_passed_preregistration_digest_supplied",
+            "preregistration_sha256": digest,
+            "coverage_audit": coverage,
+            "population_rate": rate,
+            "interpretation": "Conditional on the supplied predeclared selection and null-control assumptions. This is not a discovery claim.",
+        }
+    return guarded(run)
+
 @router.post("/evidence/manifest")
 def evidence_manifest(request: ManifestRequest):
     from .provenance import create_manifest
@@ -362,6 +421,8 @@ def evidence_manifest(request: ManifestRequest):
         project=request.project, calibration_group=request.calibration_group,
         files=request.files, software=request.software,
         processing_choices=request.processing_choices,
+        source_query=request.source_query,
+        retrieved_at=request.retrieved_at,
     ))
 
 @router.post("/evidence/manifest/verify")
@@ -411,6 +472,11 @@ def evidence_graph(request: EvidenceGraphRequest):
         observations=request.observations,
         analysis=request.analysis,
         manifest=request.manifest,
+        model_runs=request.model_runs,
+        counterfactuals=request.counterfactuals,
+        failed_tests=request.failed_tests,
+        environment=request.environment,
+        code_commit=request.code_commit,
     ))
 
 @router.post("/workspace/candidates")
@@ -423,7 +489,7 @@ def workspace_candidates(request: WorkspaceCandidatesRequest):
         candidate_id = str(row.get("candidate_id") or row.get("source_id") or "").strip()
         if not candidate_id:
             continue
-        data_class = str(row.get("dataset_class", row.get("data_class", "unverified"))).lower()
+        data_class = str(row.get("dataset_class", row.get("data_class", "synthetic" if row.get("synthetic_fixture") is True else "unverified"))).lower()
         if data_class not in {"real", "synthetic", "illustrative", "unverified"}:
             data_class = "unverified"
         calibration_group = str(row.get("calibration_group") or "")
@@ -478,7 +544,7 @@ def workspace_compare(request: WorkspaceCompareRequest):
         result = guarded(lambda rows=rows: investigate(
             rows, min_relative_support=request.min_relative_support,
             min_delta_bic=request.min_delta_bic))
-        classes = sorted({str(row.get("dataset_class", row.get("data_class", "unverified")))
+        classes = sorted({str(row.get("dataset_class", row.get("data_class", "synthetic" if row.get("synthetic_fixture") is True else "unverified")))
                           for row in rows})
         comparisons.append({
             "candidate_id": candidate_id,
@@ -560,8 +626,6 @@ class SpectralExposureRequest(BaseModel):
 class FalsificationRequest(BaseModel):
     observations: list[dict[str, Any]]
     challenge_specs: list[dict[str, Any]] | None = None
-    candidate_family: list[dict[str, Any]] | None = None
-    candidate_family_complete: bool = False
     flux_covariance: list[list[float]] | None = None
     challenge_plan_sha256: str | None = None
     bootstrap_draws: int = 1000
@@ -628,8 +692,6 @@ def causal_falsify(request: FalsificationRequest):
         request.observations,
         challenge_specs=request.challenge_specs,
         challenge_plan_sha256=request.challenge_plan_sha256,
-        candidate_family=request.candidate_family,
-        candidate_family_complete=request.candidate_family_complete,
         flux_covariance=request.flux_covariance,
         bootstrap_draws=request.bootstrap_draws,
         transient_draws=request.transient_draws,

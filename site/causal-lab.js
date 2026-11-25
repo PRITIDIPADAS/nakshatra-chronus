@@ -1,9 +1,9 @@
 (() => {
 "use strict";
 const $=id=>document.getElementById(id);
-const state={observations:[],analysis:null,manifest:null,evidenceGraph:null,apiReady:false,spectral:null,spectralSourceRows:[],selectedSpectralCell:null};
+const state={observations:[],analysis:null,manifest:null,evidenceGraph:null,apiReady:false,spectral:null,spectralSourceRows:[],selectedSpectralCell:null,shortlist:[],coverageAudit:null,detectorOutput:null,plannerOutput:null,identityOutput:null};
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const fmt=(v,n=3)=>Number.isFinite(Number(v))?Number(v).toFixed(n):"n/a";
+const fmt=(v,n=3)=>v===null||v===undefined||v===""||!Number.isFinite(Number(v))?"n/a":Number(v).toFixed(n);
 const pretty=x=>JSON.stringify(x,null,2);
 function error(id,e){$(id).innerHTML='<div class="empty-state">'+esc(e.message||e)+'</div>';}
 async function call(path,body){
@@ -23,10 +23,120 @@ function pair(id,label){const a=$(id).value.split(",").map(Number);if(a.length!=
 function updateRows(rows){
  state.observations=rows;$("observations-json").value=pretty(rows);
  const ok=rows.filter(x=>x.valid!==false),times=ok.map(x=>Number(x.mjd));
- $("data-class").textContent=ok.some(x=>String(x.calibration_group||"").startsWith("SYNTHETIC"))?"Synthetic fixture":"Supplied measurements";
+ const classes=[...new Set(ok.map(x=>String(x.dataset_class||x.data_class||(x.synthetic_fixture===true?"synthetic":"unverified")).toLowerCase()))];
+ $("data-class").textContent=classes.length===1?classes[0].toUpperCase():classes.length?"MIXED":"UNVERIFIED";
+ $("data-class").dataset.class=classes.join(",");
  $("observation-count").textContent=ok.length;$("time-baseline").textContent=times.length?fmt(Math.max(...times)-Math.min(...times),1)+" d":"—";
  $("wave-count").textContent=new Set(ok.map(x=>x.wavelength_um)).size;
  track("sky-chart",ok,"sky");track("detector-chart",ok,"detector");
+}
+function drawAxes(canvas){
+ const g=canvas.getContext("2d"),w=canvas.width,h=canvas.height;
+ g.clearRect(0,0,w,h);g.fillStyle="#091a25";g.fillRect(0,0,w,h);g.strokeStyle="#29424e";
+ for(let i=1;i<5;i++){g.beginPath();g.moveTo(18,i*h/5);g.lineTo(w-10,i*h/5);g.stroke();}
+ return g;
+}
+function drawSeries(canvasId,points,label,seriesIndex=0){
+ const c=$(canvasId),g=drawAxes(c),valid=points.filter(p=>Number.isFinite(p.x)&&p.y!==null&&Number.isFinite(p.y));
+ if(!valid.length){g.fillStyle="#91a8ab";g.fillText("No supported values",12,24);return;}
+ const xmin=Math.min(...valid.map(p=>p.x)),xmax=Math.max(...valid.map(p=>p.x));
+ const ymin=Math.min(...valid.map(p=>p.y)),ymax=Math.max(...valid.map(p=>p.y)),span=Math.max(ymax-ymin,1e-12);
+ const px=x=>24+(x-xmin)/Math.max(xmax-xmin,1e-12)*(c.width-42);
+ const py=y=>c.height-18-(y-ymin)/span*(c.height-38);
+ g.beginPath();valid.forEach((p,i)=>i?g.lineTo(px(p.x),py(p.y)):g.moveTo(px(p.x),py(p.y)));
+ g.strokeStyle=["#8fe0cd","#e7bd86","#d8b6e8"][seriesIndex%3];g.lineWidth=2;g.stroke();
+ valid.forEach(p=>{g.beginPath();g.arc(px(p.x),py(p.y),3,0,Math.PI*2);g.fillStyle=g.strokeStyle;g.fill();});
+ g.fillStyle="#91a8ab";g.font="10px sans-serif";g.fillText(label||"",8,12);
+}
+function renderSpectralViews(result,ti,wi){
+ drawSeries("epoch-spectrum",result.wavelength_um.map((x,i)=>({x,y:result.flux[ti][i]})),"MJD "+fmt(result.time_mjd[ti],5),0);
+ drawSeries("spectral-lightcurve",result.time_mjd.map((x,i)=>({x,y:result.flux[i][wi]})),"λ "+fmt(result.wavelength_um[wi],5)+" µm",1);
+ const c=$("spectral-uncertainty"),g=drawAxes(c),keys=["sigma_measurement","sigma_shared_calibration","sigma_total"];
+ keys.forEach((key,index)=>{
+  const arr=result[key]?.[ti]||[],finite=arr.filter(v=>v!==null&&Number.isFinite(Number(v))).map(Number);
+  if(!finite.length)return;const top=Math.max(...keys.flatMap(k=>(result[k]?.[ti]||[]).filter(v=>v!==null&&Number.isFinite(Number(v))).map(Number)),1e-12);
+  g.beginPath();let started=false;
+  arr.forEach((v,i)=>{if(v===null||!Number.isFinite(Number(v)))return;const x=22+i*(c.width-42)/Math.max(1,arr.length-1),y=c.height-18-Number(v)/top*(c.height-38);if(!started){g.moveTo(x,y);started=true;}else g.lineTo(x,y);});
+  g.strokeStyle=["#8fe0cd","#e7bd86","#d8b6e8"][index];g.setLineDash(index===1?[5,3]:[]);g.stroke();g.setLineDash([]);
+  g.fillStyle=g.strokeStyle;g.fillText(["Statistical","Shared calibration","Total"][index],10+index*130,12);
+ });
+}
+function renderTrajectoryBraid(rows){
+ const c=$("trajectory-braid"),g=drawAxes(c),valid=rows.filter(r=>["sky_x","sky_y","detector_x","detector_y"].every(k=>r[k]!==null&&r[k]!==undefined&&Number.isFinite(Number(r[k]))));
+ if(!valid.length){g.fillStyle="#91a8ab";g.fillText("Verified paired sky/detector coordinates not supplied",12,24);return;}
+ const lane=(xk,yk,top,height,color,label)=>{
+  const p=valid.map(r=>({x:Number(r[xk]),y:Number(r[yk])})),xmin=Math.min(...p.map(q=>q.x)),xmax=Math.max(...p.map(q=>q.x)),ymin=Math.min(...p.map(q=>q.y)),ymax=Math.max(...p.map(q=>q.y));
+  const px=i=>24+i*(c.width-48)/Math.max(1,p.length-1),py=q=>top+height-8-(q.y-ymin)/Math.max(ymax-ymin,1e-9)*(height-20);
+  g.beginPath();p.forEach((q,i)=>i?g.lineTo(px(i),py(q)):g.moveTo(px(i),py(q)));g.strokeStyle=color;g.stroke();
+  p.forEach((q,i)=>{g.beginPath();g.arc(px(i),py(q),3,0,Math.PI*2);g.fillStyle=color;g.fill();});
+  g.fillStyle=color;g.font="10px sans-serif";g.fillText(label,8,top+10);
+  return p.map((q,i)=>({x:px(i),y:py(q)}));
+ };
+ const sky=lane("sky_x","sky_y",8,72,"#8fe0cd","Sky coordinates"),det=lane("detector_x","detector_y",98,72,"#e7bd86","Detector coordinates");
+ sky.forEach((p,i)=>{g.beginPath();g.moveTo(p.x,p.y+4);g.lineTo(det[i].x,det[i].y-4);g.strokeStyle="#8ea9a8";g.globalAlpha=.25;g.stroke();g.globalAlpha=1;});
+ g.fillStyle="#91a8ab";g.font="9px sans-serif";g.fillText("Links pair exposure indices; they are not a WCS transform.",8,c.height-5);
+}
+function renderObservationTimeline(rows){
+ const c=$("observation-timeline"),g=drawAxes(c),times=rows.map(r=>Number(r.mjd)).filter(Number.isFinite);
+ if(!times.length){g.fillStyle="#91a8ab";g.fillText("No valid observation timestamps",12,24);return;}
+ const lo=Math.min(...times),hi=Math.max(...times),span=Math.max(hi-lo,1e-9),y=c.height/2;
+ rows.forEach((r,i)=>{const t=Number(r.mjd);if(!Number.isFinite(t))return;const x=24+(t-lo)/span*(c.width-48);
+  g.beginPath();g.arc(x,y+(i%2?14:-14),5,0,Math.PI*2);
+  const cls=String(r.dataset_class||r.data_class||(r.synthetic_fixture===true?"synthetic":"unverified"));
+  g.fillStyle=r.valid===false?"#b56f5e":cls==="real"?"#8fe0cd":cls==="synthetic"?"#e7bd86":"#96bce0";g.fill();
+ });
+ c._rows=rows;c.title="Select an observation. Dot colour is inherited data class: real, synthetic or unverified.";
+}
+function selectExposure(event){
+ const c=$("observation-timeline"),rows=c._rows||[];if(!rows.length)return;
+ const rect=c.getBoundingClientRect(),px=((event.offsetX??event.clientX-rect.left)/Math.max(rect.width,1))*c.width;
+ const valid=rows.map((r,i)=>({r,i,t:Number(r.mjd)})).filter(x=>Number.isFinite(x.t));
+ if(!valid.length)return;const lo=Math.min(...valid.map(x=>x.t)),hi=Math.max(...valid.map(x=>x.t)),target=lo+(px/c.width)*(hi-lo);
+ const chosen=valid.reduce((best,x)=>Math.abs(x.t-target)<Math.abs(best.t-target)?x:best);
+ const r=chosen.r; $("selected-exposure").textContent="Selected "+(r.observation_id||r.measurement_id||chosen.i)+" · MJD "+fmt(r.mjd,5)+" · "+fmt(r.wavelength_um,5)+" µm · "+(r.dataset_class||r.data_class||(r.synthetic_fixture===true?"synthetic":"unverified"))+" · "+(r.calibration_group||"no calibration group");
+}
+function renderIdentityNetwork(result){
+ const c=$("identity-network"),g=drawAxes(c),matches=(result.matches||[]).slice(0,7),cx=42,cy=c.height/2;
+ matches.forEach((m,i)=>{const x=c.width-88,y=20+i*(c.height-56)/Math.max(1,matches.length-1);
+  g.beginPath();g.moveTo(cx,cy);g.lineTo(x,y);g.strokeStyle="#8fe0cd";g.globalAlpha=Math.max(.12,Math.min(1,m.association_probability));g.stroke();g.globalAlpha=1;
+  g.beginPath();g.arc(x,y,5,0,Math.PI*2);g.fillStyle="#e7bd86";g.fill();g.fillStyle="#c9d8d6";g.font="10px sans-serif";g.fillText(String(m.source_id).slice(0,14)+" "+(100*m.association_probability).toFixed(1)+"%",x-72,y-8);
+ });
+ const p=Number(result.no_counterpart_probability||0),x=c.width-82,y=c.height-20;g.beginPath();g.moveTo(cx,cy);g.lineTo(x,y);g.setLineDash([4,3]);g.strokeStyle="#d5a2a2";g.stroke();g.setLineDash([]);g.beginPath();g.arc(x,y,5,0,Math.PI*2);g.fillStyle="#d5a2a2";g.fill();g.fillStyle="#d5a2a2";g.font="9px sans-serif";g.fillText("No match "+(100*p).toFixed(1)+"%",x-72,y-9);
+ g.beginPath();g.arc(cx,cy,8,0,Math.PI*2);g.fillStyle="#8fe0cd";g.fill();
+}
+function renderInformationGain(result){
+ const c=$("information-gain-landscape"),g=drawAxes(c),items=result.science_only_ranked||[];
+ if(!items.length){g.fillStyle="#91a8ab";g.fillText("No forecasts",12,24);return;}
+ const max=Math.max(...items.map(x=>x.information_gain_bits),1e-12),step=(c.height-26)/items.length;
+ items.forEach((item,i)=>{const y=10+i*step,bar=(c.width-160)*item.information_gain_bits/max;
+  g.fillStyle="#8fe0cd";g.fillRect(125,y,bar,Math.max(5,step-4));g.fillStyle="#c9d8d6";g.font="10px sans-serif";g.fillText(String(item.candidate_observation_id).slice(0,17),5,y+10);g.fillText(item.information_gain_bits.toFixed(3)+" bits",128+bar,y+10);});
+}
+function renderEvidenceGraph(graph){
+ const c=$("evidence-lineage"),g=drawAxes(c),nodes=graph.nodes||[],edges=graph.edges||[];
+ if(!nodes.length){g.fillStyle="#91a8ab";g.fillText("Evidence graph not built",12,24);return;}
+ const pos=new Map();nodes.forEach((n,i)=>pos.set(n.id,{x:24+(i%6)*(c.width-48)/5,y:20+Math.floor(i/6)*(c.height-40)/Math.max(1,Math.ceil(nodes.length/6)-1)}));
+ edges.forEach(e=>{const a=pos.get(e.source),b=pos.get(e.target);if(!a||!b)return;g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.strokeStyle="#6f9d9d";g.stroke();});
+ nodes.forEach(n=>{const p=pos.get(n.id);g.beginPath();g.arc(p.x,p.y,4,0,Math.PI*2);g.fillStyle=n.type==="candidate"?"#e7bd86":"#8fe0cd";g.fill();});
+}
+function exportJSON(name,data){
+ const blob=new Blob([pretty(data)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+ a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function loadShortlist(){
+ try{state.shortlist=[...new Set(JSON.parse(localStorage.getItem("chronosCandidateShortlist")||"[]").map(String))];}catch(_){state.shortlist=[];}
+ const params=new URLSearchParams(location.hash.slice(1)),shared=params.get("shortlist");if(shared)state.shortlist=[...new Set(shared.split(",").filter(Boolean))];
+ renderShortlist();
+}
+function saveShortlist(){
+ try{localStorage.setItem("chronosCandidateShortlist",JSON.stringify(state.shortlist));}catch(_){}
+ renderShortlist();
+}
+function renderShortlist(){
+ if(!$("shortlist-count"))return;
+ $("shortlist-count").textContent=state.shortlist.length+" candidates";
+ $("shortlist-results").innerHTML=state.shortlist.map(id=>'<div class="counter-row"><span>'+esc(id)+'</span><button class="button text-button" data-remove-shortlist="'+esc(id)+'">Remove</button></div>').join("")||'<div class="empty-state">No candidates saved.</div>';
+ $("shortlist-results").querySelectorAll("[data-remove-shortlist]").forEach(b=>b.addEventListener("click",()=>{state.shortlist=state.shortlist.filter(x=>x!==b.dataset.removeShortlist);saveShortlist();}));
+ ["compare-a","compare-b"].forEach((id,i)=>{const el=$(id),old=el.value;el.innerHTML='<option value="">'+(i?"Second":"First")+' candidate</option>';state.shortlist.forEach(v=>{const op=document.createElement("option");op.value=v;op.textContent=v;el.append(op);});if(state.shortlist.includes(old))el.value=old;});
 }
 function track(id,rows,prefix){
  const c=$(id),g=c.getContext("2d"),w=c.width,h=c.height;g.clearRect(0,0,w,h);g.fillStyle="#091a25";g.fillRect(0,0,w,h);if(!rows.length)return;
@@ -40,11 +150,11 @@ function track(id,rows,prefix){
 function heat(id,matrix,options={}){
  const c=$(id),g=c.getContext("2d"),h=matrix.length,w=matrix[0]?.length||0;
  g.clearRect(0,0,c.width,c.height);g.fillStyle="#071721";g.fillRect(0,0,c.width,c.height);
- const a=matrix.flat().map(Number).filter(Number.isFinite);
+ const a=matrix.flat().filter(v=>v!==null&&v!==undefined).map(Number).filter(Number.isFinite);
  if(!a.length||!w){g.fillStyle="#91a8ab";g.fillText("No supported measurements",18,30);return;}
  const lo=Math.min(...a),span=Math.max(Math.max(...a)-lo,1e-12),cw=c.width/w,ch=c.height/h;
  matrix.forEach((row,y)=>row.forEach((v,x)=>{
-  const supported=options.valid?options.valid[y]?.[x]===true:Number.isFinite(Number(v));
+  const supported=options.valid?options.valid[y]?.[x]===true:(v!==null&&v!==undefined&&Number.isFinite(Number(v)));
   if(!supported||!Number.isFinite(Number(v))){
    g.fillStyle="#10232d";g.fillRect(x*cw,y*ch,cw+.4,ch+.4);
    g.save();g.beginPath();g.rect(x*cw,y*ch,cw,ch);g.clip();g.strokeStyle="rgba(137,164,169,.35)";g.lineWidth=1;
@@ -91,86 +201,119 @@ async function counterfactual(){
 async function spectral(){
  try{
   needAPI();
-  const rows=state.observations.filter(r=>r.valid!==false);
-  if(rows.length<3)throw Error("Load observations first.");
-  const w=rows.map(r=>Number(r.wavelength_um)),t=rows.map(r=>Number(r.mjd));
-  if(w.some(v=>!Number.isFinite(v)||v<=0)||t.some(v=>!Number.isFinite(v)))throw Error("Observation wavelengths and epochs must be finite.");
-  const a=Math.min(...w),b=Math.max(...w),timeMin=Math.min(...t),timeMax=Math.max(...t);
-  if(!(b>a)||!(timeMax>timeMin))throw Error("Reconstruction needs a wavelength range and more than one epoch.");
-  const groups=[...new Set(rows.map(r=>r.calibration_group))];
-  if(groups.length!==1||!groups[0])throw Error("Use one calibration group per reconstruction.");
+  const allRows=state.observations;
+  const valid=allRows.filter(r=>r.valid!==false);
+  if(valid.length<3)throw Error("Load at least three valid source-specific measurements.");
+  const w=valid.map(r=>Number(r.wavelength_um)),t=valid.map(r=>Number(r.mjd));
+  if(w.some(v=>!Number.isFinite(v)||v<=0)||t.some(v=>!Number.isFinite(v)))throw Error("Wavelengths and timestamps must be finite.");
+  const groups=[...new Set(valid.map(r=>r.calibration_group))];
+  if(groups.length!==1||!groups[0])throw Error("Reconstruct one explicitly compatible calibration group at a time.");
+  const waveMin=Math.min(...w),waveMax=Math.max(...w),timeMin=Math.min(...t),timeMax=Math.max(...t);
+  if(!(waveMax>waveMin)||!(timeMax>timeMin))throw Error("Reconstruction requires a sampled wavelength range and more than one epoch.");
+  const covariance=$("measurement-covariance").value.trim()?parse("measurement-covariance","Observation covariance"):null;
   const x=await call("/spectrotemporal/reconstruct",{
-   samples:rows,
-   wavelength_grid_um:Array.from({length:36},(_,i)=>a+(b-a)*i/35),
+   samples:allRows,
+   wavelength_grid_um:Array.from({length:36},(_,i)=>waveMin+(waveMax-waveMin)*i/35),
    time_grid_mjd:Array.from({length:20},(_,i)=>timeMin+(timeMax-timeMin)*i/19),
    wavelength_bandwidth_um:Number($("wave-bandwidth").value),
    time_bandwidth_days:Number($("time-bandwidth").value),
    min_neighbors:2,
    calibration_group:groups[0],
-   shared_calibration_fractional_sigma:Number($("shared-calibration-fraction").value)
+   shared_calibration_fractional_sigma:Number($("shared-calibration-fraction").value),
+   measurement_covariance:covariance,
+   include_grid_covariance:$("include-grid-covariance").checked
   });
-  state.spectral=x;state.spectralSourceRows=rows;state.selectedSpectralCell=null;
+  state.spectral=x;state.spectralSourceRows=allRows;state.selectedSpectralCell=null;
   heat("spectral-heatmap",x.flux,{valid:x.valid});
   const count=x.valid.flat().filter(Boolean).length;
-  $("spectrum-summary").textContent=count+" supported grid cells in calibration group "+groups[0]+". "+x.missing_data_policy;
-  $("spectral-provenance").innerHTML='<div class="panel-note">Select any supported heatmap cell to inspect its source rows, generalized least-squares coefficients and separated uncertainty components. Diagonally hatched cells are unsupported.</div>';
+  $("spectrum-summary").textContent=count+" supported cells · "+(x.data_class||"unverified")+" · group "+groups[0]+". "+x.missing_data_policy;
+  $("spectral-provenance").innerHTML='<div class="panel-note">Select a grid cell to inspect source rows, GLS coefficients and statistical/shared-calibration uncertainty. Hatching marks unsupported cells. Native sampled wavelengths: '+(x.native_wavelength_samples_um||[]).length+'; native epochs: '+(x.native_observation_times_mjd||[]).length+'.</div>';
+  drawSeries("epoch-spectrum",x.wavelength_um.map((v,i)=>({x:v,y:x.flux[0][i]})),"Earliest supported epoch");
+  exportJSON("chronos-spectrotemporal-reconstruction.json",x);
  }catch(e){$("spectrum-summary").textContent=e.message||String(e);error("spectral-provenance",e);}
 }
-function inspectSpectralCell(event){
- const result=state.spectral,canvas=$("spectral-heatmap");
- if(!result||!canvas)return;
- const rect=canvas.getBoundingClientRect(),x=(event.clientX-rect.left)*canvas.width/rect.width,y=(event.clientY-rect.top)*canvas.height/rect.height;
+
+function showSpectralCell(timeIndex,wavelengthIndex){
+ const result=state.spectral;if(!result)return;
  const nTime=result.time_mjd.length,nWave=result.wavelength_um.length;
- if(!nTime||!nWave)return;
- const timeIndex=Math.max(0,Math.min(nTime-1,Math.floor(y/(canvas.height/nTime))));
- const wavelengthIndex=Math.max(0,Math.min(nWave-1,Math.floor(x/(canvas.width/nWave))));
+ timeIndex=Math.max(0,Math.min(nTime-1,timeIndex));wavelengthIndex=Math.max(0,Math.min(nWave-1,wavelengthIndex));
  state.selectedSpectralCell={timeIndex,wavelengthIndex};
  heat("spectral-heatmap",result.flux,{valid:result.valid,selected:state.selectedSpectralCell});
+ renderSpectralViews(result,timeIndex,wavelengthIndex);
  const panel=$("spectral-provenance"),supported=result.valid?.[timeIndex]?.[wavelengthIndex]===true;
  const wave=result.wavelength_um[wavelengthIndex],mjd=result.time_mjd[timeIndex];
  if(!supported){
-  panel.innerHTML='<div class="spectral-cell-heading"><b>Unsupported cell</b><span>MJD '+fmt(mjd,5)+' · '+fmt(wave,5)+' µm</span></div><p>This location has insufficient local temporal/spectral support. It remains missing; no measurement or extrapolated value is presented.</p><div class="counter-row"><span>Available neighbors</span><b>'+esc(result.n_samples?.[timeIndex]?.[wavelengthIndex]??0)+'</b></div>';
+  panel.innerHTML='<div class="spectral-cell-heading"><b>Unsupported region</b><span>MJD '+fmt(mjd,5)+' · '+fmt(wave,5)+' µm</span></div><p>Insufficient local support. This remains missing; no measured value or extrapolation is presented.</p>';
   return;
  }
- const get=key=>result[key]?.[timeIndex]?.[wavelengthIndex];
- const src=result.source_indices?.[timeIndex]?.[wavelengthIndex]||[];
- const weights=result.linear_weights?.[timeIndex]?.[wavelengthIndex]||[];
- const provenance=weights.map(row=>{
-  const sourceIndex=Number(row.source_index);
-  const source=state.spectralSourceRows.find((r,i)=>Number(r.source_index??i)===sourceIndex)||state.spectralSourceRows[sourceIndex];
-  const id=source?.observation_id??("input row "+sourceIndex);
-  return '<div class="spectral-source-row"><span>'+esc(id)+'<small>row '+sourceIndex+'</small></span><b>'+fmt(row.coefficient,5)+'</b></div>';
+ const sources=result.linear_weights?.[timeIndex]?.[wavelengthIndex]||[];
+ const provenance=sources.map(row=>{
+  const index=Number(row.input_index??row.source_index);
+  const source=state.spectralSourceRows[index]||{};
+  const observation=source.observation_id||source.measurement_id||("input row "+index);
+  return '<div class="spectral-source-row"><span>'+esc(observation)+'<small>source row '+esc(row.source_index)+'</small></span><b>'+fmt(row.coefficient,5)+'</b></div>';
  }).join("");
+ const get=key=>result[key]?.[timeIndex]?.[wavelengthIndex];
  panel.innerHTML=
-  '<div class="spectral-cell-heading"><b>Selected reconstruction cell</b><span>MJD '+fmt(mjd,5)+' · '+fmt(wave,5)+' µm</span></div>'+
+  '<div class="spectral-cell-heading"><b>'+esc(result.cell_class?.[timeIndex]?.[wavelengthIndex]||"inferred")+'</b><span>MJD '+fmt(mjd,5)+' · '+fmt(wave,5)+' µm</span></div>'+
   '<div class="spectral-cell-metrics">'+
-   '<div><small>Flux estimate</small><b>'+fmt(get("flux"),5)+'</b></div>'+
-   '<div><small>Measurement σ</small><b>'+fmt(get("sigma_measurement"),5)+'</b></div>'+
+   '<div><small>Flux</small><b>'+fmt(get("flux"),5)+'</b></div>'+
+   '<div><small>Statistical σ</small><b>'+fmt(get("sigma_measurement"),5)+'</b></div>'+
    '<div><small>Shared calibration σ</small><b>'+fmt(get("sigma_shared_calibration"),5)+'</b></div>'+
    '<div><small>Total σ</small><b>'+fmt(get("sigma_total"),5)+'</b></div>'+
-   '<div><small>Samples</small><b>'+esc(get("n_samples"))+'</b></div>'+
+   '<div><small>Neighbors</small><b>'+esc(get("n_samples"))+'</b></div>'+
    '<div><small>Effective N</small><b>'+fmt(get("effective_n"),3)+'</b></div>'+
-  '</div>'+
-  '<details open><summary>Source observations and GLS coefficients ('+src.length+')</summary>'+
-  (provenance||'<p>No source-row coefficient record was returned.</p>')+
-  '</details>'+
-  '<p class="panel-note">These coefficients identify which supplied rows form this local estimate. Shared calibration uncertainty is an explicit group-level approximation; it is not independent noise per row.</p>';
+  '</div><details open><summary>Contributing input rows ('+sources.length+')</summary>'+(provenance||"<p>No row-level weights returned.</p>")+'</details>'+
+  '<p class="panel-note">An inferred cell is a model-based local estimate, not an additional measurement. The full source rows are retained in the response.</p>';
 }
+function inspectSpectralCell(event){
+ const result=state.spectral,canvas=$("spectral-heatmap");if(!result||!canvas)return;
+ if(event.key){
+  const current=state.selectedSpectralCell||{timeIndex:0,wavelengthIndex:0};
+  let t=current.timeIndex,w=current.wavelengthIndex;
+  if(event.key==="ArrowLeft")w--;else if(event.key==="ArrowRight")w++;
+  else if(event.key==="ArrowUp")t--;else if(event.key==="ArrowDown")t++;
+  else if(event.key!=="Enter"&&event.key!==" "){return;}
+  event.preventDefault();showSpectralCell(t,w);return;
+ }
+ const rect=canvas.getBoundingClientRect();
+ const px=((event.offsetX??event.clientX-rect.left)/Math.max(rect.width,1))*canvas.width;
+ const py=((event.offsetY??event.clientY-rect.top)/Math.max(rect.height,1))*canvas.height;
+ const t=Math.floor(py/(canvas.height/result.time_mjd.length));
+ const w=Math.floor(px/(canvas.width/result.wavelength_um.length));
+ showSpectralCell(t,w);
+}
+
 async function featureEvolution(){
  try{
   needAPI();
-  const epochs=parse("feature-epochs","Epoch spectra"),feature=pair("feature-interval","Feature interval"),blue=pair("feature-blue","Blue continuum"),red=pair("feature-red","Red continuum");
-  const x=await call("/spectrotemporal/feature-evolution",{epochs,feature_interval_um:feature,continuum_intervals_um:[blue,red]});
-  $("feature-evolution-result").innerHTML=x.epochs.map(r=>{
-   const resolution=r.resolution_diagnostics||{},blend=r.blend_diagnostics||{};
-   const lsf=resolution.lsf_fwhm_um==null?"not supplied":fmt(resolution.lsf_fwhm_um,5)+" µm";
-   const sampling=resolution.samples_per_fwhm==null?"unknown":fmt(resolution.samples_per_fwhm,2)+" pixels/FWHM";
-   return '<div class="counter-row"><span>'+esc(r.epoch_id)+' · MJD '+fmt(r.mjd,5)+'</span><b>EW '+fmt(r.equivalent_width_um,5)+' µm</b></div>'+
-    '<div class="spectral-source-row"><span>Resolution · '+esc(lsf)+'<small>'+esc(sampling)+'</small></span><b>'+esc(resolution.sampling_status||"not assessed")+'</b></div>'+
-    '<div class="spectral-source-row"><span>Blend screen</span><b>'+esc(blend.status||"not assessed")+'</b></div>';
-  }).join("")+'<p class="panel-note">'+esc(x.warning)+' A possible-blend flag is a screening result, not molecular identification or deblending.</p>';
+  const epochs=parse("feature-epochs","Epoch spectra"),feature=pair("feature-interval","Feature interval");
+  const blue=pair("feature-blue","Blue continuum"),red=pair("feature-red","Red continuum");
+  const blends=parse("feature-blends","Potential blend intervals");
+  const labs=parse("feature-lab-references","Laboratory reference spectra");
+  const x=await call("/spectrotemporal/feature-evolution",{
+   epochs,feature_interval_um:feature,continuum_intervals_um:[blue,red],
+   potential_blend_intervals_um:blends,
+   spectral_resolution_R:$("feature-resolution").value?Number($("feature-resolution").value):null,
+   lsf_fwhm_um:$("feature-lsf").value?Number($("feature-lsf").value):null,
+   continuum_model:$("feature-continuum-model").value,
+   laboratory_references:labs
+  });
+  $("feature-evolution-result").innerHTML=x.epochs.map(row=>{
+   const resolution=row.resolution_diagnostics||{},blend=row.blend_diagnostics||{};
+   const labs=(row.laboratory_reference_comparisons||[]).map(result=>'<div class="spectral-source-row"><span>'+esc(result.reference_id)+'<small>'+esc(result.status)+'</small></span><b>RMS '+fmt(result.normalized_shape_rms,4)+'</b></div>').join("");
+   return '<div class="counter-row"><span>'+esc(row.epoch_id)+' · MJD '+fmt(row.mjd,5)+'</span><b>EW '+fmt(row.equivalent_width_um,5)+' ± '+fmt(row.equivalent_width_sigma_um,5)+' µm</b></div>'+
+   '<div class="spectral-cell-metrics"><div><small>Depth</small><b>'+fmt(row.feature_depth,4)+' ± '+fmt(row.feature_depth_sigma,4)+'</b></div>'+
+   '<div><small>Continuum ΔEW</small><b>'+fmt(row.continuum_model_EW_difference_um,5)+'</b></div>'+
+   '<div><small>LSF FWHM</small><b>'+fmt(resolution.lsf_fwhm_um,5)+' µm</b></div>'+
+   '<div><small>Sampling</small><b>'+esc(resolution.sampling_status||"unknown")+'</b></div>'+
+   '<div><small>Blending</small><b>'+esc(blend.status||"not assessed")+'</b></div></div>'+
+   '<p class="panel-note">'+esc((row.limitations||[]).join(" "))+'</p>'+labs;
+  }).join("")+'<p class="panel-note">'+esc(x.warning)+'</p>';
+  exportJSON("chronos-feature-evolution.json",x);
  }catch(e){error("feature-evolution-result",e);}
 }
+
 async function identity(){
  try{
   needAPI();
@@ -179,8 +322,10 @@ async function identity(){
    catalogue_rows:parse("identity-catalogue","Catalogue"),
    search_radius_arcsec:10,
    background_density_per_arcsec2:.001,
-   prior_match_probability:.9
+   prior_match_probability:.9,
+   minimum_secure_probability:.8
   });
+  state.identityOutput=x;renderIdentityNetwork(x);
   const cards=x.matches.map(m=>{
    const motion=m.proper_motion_and_parallax||{},survey=m.survey_metadata||{};
    const baseline=motion.proper_motion_interval_years==null?"":fmt(motion.proper_motion_interval_years,2)+" yr epoch baseline";
@@ -209,39 +354,71 @@ async function identity(){
 async function planner(){
  try{
   needAPI();
-  const priorText=$("plan-alternative-priors").value.trim();
-  const alternatives=priorText?parse("plan-alternative-priors","Alternative prior sets"):{};
-  const x=await call("/observations/plan",{
-   candidates:parse("plan-json","Observation forecasts"),
-   measurement_sigma:Number($("plan-noise").value),
-   alternative_priors:alternatives
+  const candidates=parse("plan-json","Candidate observation forecasts");
+  const alternatives=$("plan-alternative-priors").value.trim()?parse("plan-alternative-priors","Alternative prior sets"):{};
+  const x=await call("/observations/plan-candidate",{
+   candidates,measurement_sigma:Number($("plan-noise").value),prior_sets:alternatives
   });
-  const rows=x.ranked.map((m,i)=>{
-   const feasibility=m.feasibility||{},verified=feasibility.status==="verified"&&feasibility.feasible===true;
-   const source=verified?'<small>Verified by <a href="'+esc(feasibility.source_uri)+'" target="_blank" rel="noopener">external source</a> · checked '+esc(feasibility.checked_utc)+'</small>':'<small>Feasibility unverified · forecast ranking only</small>';
-   const window=verified&&feasibility.window?'<small>Window '+esc(feasibility.window.start_utc)+' to '+esc(feasibility.window.end_utc)+'</small>':"";
-   const measurement=m.measurement||{};
-   const detail=[measurement.wavelength_um==null?null:fmt(measurement.wavelength_um,4)+" µm",measurement.detector_id,measurement.measurement_type].filter(Boolean).join(" · ");
-   return '<article class="planner-candidate"><div class="counter-row"><span>'+(i+1)+'. '+esc(m.time||"Unnamed")+'</span><b>'+fmt(m.information_gain,3)+' bits</b></div>'+
-    (detail?'<small>'+esc(detail)+'</small>':"")+'<small class="planner-feasibility">'+(verified?"FEASIBILITY VERIFIED":"FEASIBILITY NOT VERIFIED")+'</small>'+source+window+'</article>';
+  state.plannerOutput=x;renderInformationGain(x);
+  const recommended=x.recommended;
+  const rows=(x.science_only_ranked||[]).map((item,i)=>{
+   const f=item.feasibility||{},rec=f.record||{};
+   const verified=f.state==="externally_verified_available";
+   return '<article class="planner-candidate"><div class="counter-row"><span>'+(i+1)+'. '+esc(item.candidate_observation_id)+' · '+esc(item.time||"time unspecified")+'</span><b>'+fmt(item.information_gain_bits,3)+' bits</b></div>'+
+   '<small>'+(verified?"EXTERNAL FEASIBILITY RECORD VERIFIED":"SCIENCE-ONLY RANKING · FEASIBILITY NOT VERIFIED")+'</small>'+
+   (item.measurement_option&&item.measurement_option.wavelength_um!=null?'<small>'+fmt(item.measurement_option.wavelength_um,4)+' µm</small>':"")+
+   (rec.source_uri?'<small><a href="'+esc(rec.source_uri)+'" target="_blank" rel="noopener">External source</a> · '+esc(rec.checked_utc||"")+'</small>':"")+
+   '<small>Forecast models: '+esc(Object.keys(item.forecast_provenance||{}).join(", "))+'</small></article>';
   }).join("");
-  const sensitivity=Object.entries(x.prior_sensitivity||{}).map(([label,result])=>
-   '<div class="counter-row"><span>'+esc(label)+'<small>Top-ranked: '+esc(result.top_ranked_time||"n/a")+'</small></span><b>'+result.ranked_candidates.length+' candidates</b></div>'
-  ).join("");
-  const rejected=(x.rejected||[]).map(row=>'<div class="spectral-source-row"><span>'+esc(row.time||"Unnamed candidate")+'<small>'+esc(row.reason||"Filtered by declared constraints")+'</small></span><b>Not ranked</b></div>').join("");
-  $("plan-result").innerHTML='<div class="counter-row"><span>Recommendation status</span><b>'+esc(x.recommendation_status)+'</b></div>'+
-   '<div class="planner-ranked-list">'+rows+'</div>'+
-   (sensitivity?'<div class="planner-sensitivity"><b>Prior sensitivity</b>'+sensitivity+'</div>':"")+
-   (rejected?'<div class="planner-sensitivity"><b>Excluded candidates</b>'+rejected+'</div>':"")+
-   '<p class="panel-note">'+esc(x.limitations.join(" "))+'</p>';
+  const blocked=(x.blocked_or_unverified||[]).map(row=>'<div class="spectral-source-row"><span>'+esc(row.candidate_observation_id)+'</span><b>'+esc(row.reason)+'</b></div>').join("");
+  const sensitivity=Object.entries(x.prior_sensitivity||{}).map(([name,value])=>{
+   const ranks=Array.isArray(value)?value.map(v=>v.candidate_observation_id):value.ranked_candidates||[];
+   return '<div class="counter-row"><span>'+esc(name)+'</span><small>'+esc(ranks.join(" → ")||"No ranking")+'</small></div>';
+  }).join("");
+  $("plan-result").innerHTML=(recommended?'<div class="counter-row"><span>Recommended next measurement</span><b>'+esc(recommended.candidate_observation_id)+'</b></div>':'<div class="empty-state">No recommendation. A science ranking is visible, but no complete verified feasible record passed the gate.</div>')+
+   '<h4>Science ranking</h4>'+rows+
+   (blocked?'<h4>Feasibility gaps</h4>'+blocked:"")+
+   (sensitivity?'<h4>Prior sensitivity</h4>'+sensitivity:"")+
+   '<p class="panel-note">'+esc(x.feasibility_policy)+' '+esc((x.limitations||[]).join(" "))+'</p>';
+  exportJSON("chronos-observation-plan.json",x);
  }catch(e){error("plan-result",e);}
 }
+
 async function detector(){
- try{needAPI();const psf=[[.003,.015,.025,.015,.003],[.015,.075,.11,.075,.015],[.025,.11,.24,.11,.025],[.015,.075,.11,.075,.015],[.003,.015,.025,.015,.003]];
- const x=await call("/detector/simulate",{shape:[40,40],sources:[{x:20.3,y:18.7,expected_electrons:Number($("detector-flux").value)}],psf_kernel:psf,background_electrons:Number($("detector-background").value),dark_current_electrons:1.5,read_noise_electrons:Number($("detector-read").value),hot_pixel_electrons:0,persistence_electrons:0,nonlinearity_per_electron:.00001,crosstalk_fraction:.005,crosstalk_axis:1,seed:9});
- heat("detector-heatmap",x.measured_electrons);$("detector-summary").textContent=x.noise_model;}
- catch(e){$("detector-summary").textContent=e.message||String(e);}
+ try{
+  needAPI();
+  const psf=[[.003,.015,.025,.015,.003],[.015,.075,.11,.075,.015],[.025,.11,.24,.11,.025],[.015,.075,.11,.075,.015],[.003,.015,.025,.015,.003]];
+  const size=40,response=[Array.from({length:size},()=>Array(size).fill(1))];
+  const x=await call("/causal/forward-exposure",{
+   shape:[size,size],mjd:60000,exposure_time_s:1,
+   wavelengths_um:[4.5],bandwidths_um:[1.0],wavelength_response:response,
+   sources:[{source_id:"SYNTHETIC-CONTROLLED-SOURCE",x:20.3,y:18.7,
+     reference_mjd:60000,flux_density_electrons_per_s_um:[Number($("detector-flux").value)]}],
+   psf_kernel:psf,background_rate_electrons_per_s:Number($("detector-background").value),
+   dark_current_rate_electrons_per_s:1.5,read_noise_electrons:Number($("detector-read").value),
+   parameter_provenance:{
+    source_spectra:{status:"illustrative",notes:"UI-controlled synthetic source rate"},
+    psf:{status:"illustrative",notes:"Generic symmetric example PSF"},
+    wavelength_response:{status:"illustrative",notes:"Unity throughput demonstration"},
+    background_rate_electrons_per_s:{status:"illustrative"},
+    dark_current_rate_electrons_per_s:{status:"illustrative"},
+    read_noise_electrons:{status:"illustrative"},
+    flat_field:{status:"illustrative"},
+    detector_fixed_electrons:{status:"illustrative"}
+   },
+   seed:9
+  });
+  state.detectorOutput=x;
+  const component=$("decomposition-view").value;
+  heat("detector-heatmap",x.components[component]);
+  const mean=arr=>{const v=arr.flat().filter(z=>z!==null&&Number.isFinite(Number(z))).map(Number);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+  $("measurement-decomposition").innerHTML=["source_electrons","background_electrons","dark_current_electrons","detector_fixed_electrons","expected_total_electrons","measured_electrons","unexplained_residual_electrons"].map(key=>
+   '<div class="counter-row"><span>'+esc(key.replaceAll("_"," "))+'</span><b>'+fmt(mean(x.components[key]),2)+' e⁻/pixel</b></div>'
+  ).join("")+'<p class="panel-note">'+esc(x.data_class)+' · calibration ready: '+esc(x.calibration_ready)+'. '+esc(x.limitations.join(" "))+'</p>';
+  $("detector-summary").textContent=x.data_class+" · "+component+" · electron-domain synthetic forward model";
+ }catch(e){$("detector-summary").textContent=e.message||String(e);}
 }
+
 async function benchmark(){
  const kinds=["static_source","achromatic_variable","chromatic_variable","transient","moving_source","instrumental_artifact","mixed_sky_detector"],decisions=[];
  try{needAPI();$("run-benchmark").disabled=true;$("benchmark-status").textContent="Running cases…";
@@ -258,20 +435,90 @@ async function baselines(){
  $("baseline-result").innerHTML=Object.entries(x.matched_comparison).map(([name,m])=>'<div class="counter-row"><span>'+esc(name)+'</span><b>Completeness '+fmt(m.completeness)+' · FP '+fmt(m.false_candidates_per_field,2)+'</b></div>').join("")+'<p class="panel-note">'+esc(x.limitations.join(" "))+'</p>';}
  catch(e){error("baseline-result",e);}
 }
+async function assessPopulationCoverage(){
+ try{
+  needAPI();
+  const fields=parse("population-coverage-json","Real archive field records");
+  const payload={
+   fields,target_class:"young_stellar_object",
+   feature_interval_um:pair("population-feature","Feature interval"),
+   blue_continuum_um:pair("population-blue","Blue continuum"),
+   red_continuum_um:pair("population-red","Red continuum"),
+   minimum_independent_fields:5,minimum_epochs_per_source:3,
+   minimum_feature_samples:3,minimum_continuum_samples:4,
+   minimum_median_snr:5,minimum_completeness:.5
+  };
+  const x=await call("/population/assess-coverage",payload);
+  state.coverageAudit=x;
+  $("population-coverage-result").innerHTML='<div class="counter-row"><span>Coverage status</span><b>'+esc(x.status)+'</b></div>'+
+   '<div class="counter-row"><span>Eligible fields</span><b>'+x.eligible_field_count+' / '+x.field_count+'</b></div>'+
+   '<div class="counter-row"><span>Eligible source records</span><b>'+x.eligible_sources.length+'</b></div>'+
+   '<p class="panel-note">'+esc(x.next_step)+' '+esc(x.limitations.join(" "))+'</p>';
+  exportJSON("chronos-population-coverage-audit.json",x);
+ }catch(e){state.coverageAudit=null;error("population-coverage-result",e);}
+}
 async function population(){
- try{needAPI();const x=await call("/population/rate",{fields:parse("population-json","Field measurements"),minimum_completeness:.1,draws:10000,seed:4}),r=x.event_rate_per_sqdeg_day;
- $("population-result").innerHTML='<div class="counter-row"><span>Median rate</span><b>'+fmt(r.median,5)+'</b></div><div class="counter-row"><span>68% interval</span><b>'+fmt(r.lower_68,5)+' – '+fmt(r.upper_68,5)+'</b></div><div class="counter-row"><span>95% interval</span><b>'+fmt(r.lower_95,5)+' – '+fmt(r.upper_95,5)+'</b></div><div class="counter-row"><span>Included fields</span><b>'+x.field_count+'</b></div><div class="counter-row"><span>Skipped fields</span><b>'+x.skipped_fields.length+'</b></div>';}
- catch(e){error("population-result",e);}
+ try{
+  needAPI();
+  const fields=parse("population-coverage-json","Real archive field records");
+  const digest=$("population-preregistration").value.trim();
+  if(!state.coverageAudit?.eligible_for_predeclared_population_protocol){
+   await assessPopulationCoverage();
+   if(!state.coverageAudit?.eligible_for_predeclared_population_protocol)
+    throw Error("Population rate blocked: the archive coverage audit did not pass.");
+  }
+  const x=await call("/population/yso/rate",{
+   fields,preregistration_sha256:digest,target_class:"young_stellar_object",
+   feature_interval_um:pair("population-feature","Feature interval"),
+   blue_continuum_um:pair("population-blue","Blue continuum"),
+   red_continuum_um:pair("population-red","Red continuum"),
+   minimum_independent_fields:5,minimum_epochs_per_source:3,
+   minimum_feature_samples:3,minimum_continuum_samples:4,
+   minimum_median_snr:5,minimum_completeness:.5,draws:10000,seed:4
+  });
+  const r=x.population_rate.event_rate_per_sqdeg_day;
+  $("population-result").innerHTML='<div class="counter-row"><span>Median event rate</span><b>'+fmt(r.median,6)+'</b></div>'+
+   '<div class="counter-row"><span>68% interval</span><b>'+fmt(r.lower_68,6)+' – '+fmt(r.upper_68,6)+'</b></div>'+
+   '<div class="counter-row"><span>95% interval</span><b>'+fmt(r.lower_95,6)+' – '+fmt(r.upper_95,6)+'</b></div>'+
+   '<div class="counter-row"><span>Eligible independent fields</span><b>'+x.coverage_audit.eligible_field_count+'</b></div>'+
+   '<p class="panel-note">Protocol digest '+esc(x.preregistration_sha256)+' · '+esc(x.interpretation)+'</p>';
+  exportJSON("chronos-yso-population-rate.json",x);
+ }catch(e){error("population-result",e);}
 }
+
 async function manifest(){
- try{needAPI();const x=await call("/evidence/manifest",parse("manifest-json","Archive manifest"));const v=await call("/evidence/manifest/verify",{manifest:x});state.manifest=x;
- $("manifest-result").innerHTML='<div class="counter-row"><span>Manifest verification</span><b>'+(v.valid?"VALID":"INVALID")+'</b></div><div class="counter-row"><span>Input files</span><b>'+x.files.length+'</b></div><pre class="raw-output">'+esc(x.manifest_sha256)+'</pre><button class="button outline" id="download-manifest">Download JSON</button>';$("download-manifest").addEventListener("click",()=>download("chronos-manifest.json",x));}
- catch(e){error("manifest-result",e);}
+ try{
+  needAPI();
+  const payload=parse("manifest-json","Archive manifest");
+  const x=await call("/evidence/manifest",payload),v=await call("/evidence/manifest/verify",{manifest:x});
+  state.manifest=x;
+  $("manifest-result").innerHTML=
+   '<div class="counter-row"><span>Manifest integrity</span><b>'+(v.valid?"VALID":"INVALID")+'</b></div>'+
+   '<div class="counter-row"><span>Complete for reproduction</span><b>'+(v.complete_for_reproduction?"YES":"NO")+'</b></div>'+
+   '<div class="counter-row"><span>Input products</span><b>'+x.files.length+'</b></div>'+
+   '<pre class="raw-output">'+esc(x.manifest_sha256)+'</pre>'+
+   '<p class="panel-note">'+esc((v.completeness_issues||[]).join(", ")||"Required provenance fields are present.")+'</p>'+
+   '<button class="button outline" id="download-manifest">Download JSON</button>';
+  $("download-manifest").addEventListener("click",()=>download("chronos-manifest.json",x));
+ }catch(e){error("manifest-result",e);}
 }
+
 async function evidenceGraph(){
  try{needAPI();if(!state.analysis)await analyze();if(!state.analysis)throw Error("Run model comparison first.");
- const x=await call("/evidence/graph",{candidate_id:state.observations[0].candidate_id||"candidate",observations:state.observations,analysis:state.analysis,manifest:state.manifest});
- state.evidenceGraph=x;
+ const modelRuns=(state.analysis.relative_model_support||[]).map((m,i)=>({
+  run_id:"model-"+i,model:m.name,score:m.bic,score_type:"BIC",
+  observation_ids:state.observations.map((row,j)=>String(row.observation_id||row.measurement_id||j))
+ }));
+ const failedTests=(state.analysis.rejected_models||[]).map(row=>({name:row.model,status:"rejected",reason:row.reason}))
+  .concat((state.analysis.abstention_reasons||[]).map(reason=>({name:"abstention",status:"not_passed",reason})));
+ const x=await call("/evidence/graph",{
+  candidate_id:state.observations[0].candidate_id||"candidate",
+  observations:state.observations,analysis:state.analysis,manifest:state.manifest,
+  model_runs:modelRuns,counterfactuals:[],failed_tests:failedTests,
+  environment:state.manifest?.software||{},
+  code_commit:state.manifest?.software?.pipeline_commit||null
+ });
+ state.evidenceGraph=x;renderEvidenceGraph(x);
  $("evidence-graph-result").innerHTML='<div class="counter-row"><span>Evidence nodes</span><b>'+x.nodes.length+'</b></div><div class="counter-row"><span>Evidence links</span><b>'+x.edges.length+'</b></div><div class="counter-row"><span>Graph SHA-256</span><b>'+esc(x.graph_sha256.slice(0,18))+'…</b></div><button class="button outline" id="download-graph">Download graph JSON</button>';$("download-graph").addEventListener("click",()=>download("chronos-evidence-graph.json",x));}
  catch(e){error("evidence-graph-result",e);}
 }
@@ -348,8 +595,84 @@ $("copy-schema").addEventListener("click",copySchema);$("run-identifiability").a
 $("run-counterfactual").addEventListener("click",counterfactual);$("reconstruct-spectrum").addEventListener("click",spectral);
 $("measure-feature-evolution").addEventListener("click",featureEvolution);$("run-identity").addEventListener("click",identity);
 $("spectral-heatmap").addEventListener("click",inspectSpectralCell);
+$("spectral-heatmap").addEventListener("keydown",inspectSpectralCell);
+$("spectral-heatmap").setAttribute("tabindex","0");
 $("run-plan").addEventListener("click",planner);$("run-detector").addEventListener("click",detector);
 $("run-benchmark").addEventListener("click",benchmark);$("run-baselines").addEventListener("click",baselines);
 $("run-population").addEventListener("click",population);$("create-manifest").addEventListener("click",manifest);
-$("create-evidence-graph").addEventListener("click",evidenceGraph);$("export-investigation-package").addEventListener("click",exportInvestigationPackage);status();
+$("create-evidence-graph").addEventListener("click",evidenceGraph);$("export-investigation-package").addEventListener("click",exportInvestigationPackage);
+async function searchCandidates(){
+ try{
+  needAPI();
+  const result=await call("/workspace/candidates",{
+   observations:state.observations,query:$("candidate-query").value,
+   dataset_class:$("candidate-class-filter").value||null,
+   calibration_group:$("candidate-cal-filter").value||null
+  });
+  $("candidate-search-results").innerHTML=result.candidates.map(row=>
+   '<div class="counter-row"><span><b>'+esc(row.candidate_id)+'</b><small>'+esc(row.data_class)+' · '+row.observation_count+' rows · '+row.wavelength_count+' wavelengths</small></span><button class="button outline" data-save-candidate="'+esc(row.candidate_id)+'">Save</button></div>'
+  ).join("")||'<div class="empty-state">No matching candidates in the loaded observation rows.</div>';
+  $("candidate-search-results").querySelectorAll("[data-save-candidate]").forEach(button=>button.addEventListener("click",()=>{
+   const id=button.dataset.saveCandidate;if(!state.shortlist.includes(id))state.shortlist.push(id);saveShortlist();
+  }));
+ }catch(e){error("candidate-search-results",e);}
+}
+async function compareCandidates(){
+ try{
+  needAPI();const ids=[$("compare-a").value,$("compare-b").value];
+  if(!ids[0]||!ids[1])throw Error("Select two shortlisted candidate IDs.");
+  const result=await call("/workspace/compare",{candidate_ids:ids,observations:state.observations});
+  $("candidate-compare-results").innerHTML=result.comparisons.map(row=>
+   '<div class="counter-row"><span>'+esc(row.candidate_id)+' · '+esc(row.data_class)+' · '+row.observation_count+' rows</span><b>'+esc(row.analysis.verdict||"unknown")+'</b></div>'
+  ).join("")+'<p class="panel-note">'+esc(result.warning||"Independent candidate analyses.")+'</p>';
+  exportJSON("chronos-two-candidate-comparison.json",result);
+ }catch(e){error("candidate-compare-results",e);}
+}
+function shareShortlist(){
+ const params=new URLSearchParams(location.hash.slice(1));
+ params.set("shortlist",state.shortlist.join(","));
+ const url=location.origin+location.pathname+"#"+params.toString();
+ if(navigator.clipboard&&navigator.clipboard.writeText){
+  navigator.clipboard.writeText(url).then(
+   ()=>$("run-status").textContent="Shareable shortlist URL copied",
+   ()=>$("run-status").textContent="Clipboard unavailable; copy the address-bar URL"
+  );
+ }else{$("run-status").textContent="Clipboard unavailable; copy the address-bar URL";}
+}
+function exportObservationsCsv(){
+ const rows=state.observations;if(!rows.length)return;
+ const keys=[...new Set(rows.flatMap(row=>Object.keys(row)))];
+ const quote=value=>'"'+String(value===null||value===undefined?"":value).replace(/"/g,'""')+'"';
+ const csv=[keys.map(quote).join(","),...rows.map(row=>keys.map(key=>
+  quote(row[key]&&typeof row[key]==="object"?JSON.stringify(row[key]):row[key])
+ ).join(","))].join("\n");
+ const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"})),a=document.createElement("a");
+ a.href=url;a.download="chronos-observations.csv";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function exportHeatmapFigure(){
+ if(!state.spectral){$("spectrum-summary").textContent="Run spectral reconstruction before exporting a figure.";return;}
+ const a=document.createElement("a");a.href=$("spectral-heatmap").toDataURL("image/png");a.download="chronos-spectral-time-wavelength.png";a.click();
+}
+function loadShortlistOnStartup(){loadShortlist();}
+$("search-candidates").addEventListener("click",searchCandidates);
+$("compare-candidates").addEventListener("click",compareCandidates);
+$("share-shortlist").addEventListener("click",shareShortlist);
+$("clear-shortlist").addEventListener("click",()=>{state.shortlist=[];saveShortlist();});
+$("export-observations-json").addEventListener("click",()=>exportJSON("chronos-observations.json",state.observations));
+$("export-observations-csv").addEventListener("click",exportObservationsCsv);
+$("export-heatmap-figure").addEventListener("click",exportHeatmapFigure);
+$("assess-population-coverage").addEventListener("click",assessPopulationCoverage);
+$("decomposition-view").addEventListener("change",()=>{
+ if(state.detectorOutput)heat("detector-heatmap",state.detectorOutput.components[$("decomposition-view").value]);
+});
+$("observation-timeline").addEventListener("click",selectExposure);
+$("observation-timeline").addEventListener("keydown",event=>{
+ if(event.key==="Enter"||event.key===" "){
+  event.preventDefault();const rect=$("observation-timeline").getBoundingClientRect();
+  selectExposure({clientX:rect.left+rect.width/2});
+ }
+});
+
+loadShortlistOnStartup();
+status();
 })();

@@ -309,22 +309,35 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         missing = sorted(expected_tokens - seen)
         extra = sorted(seen - expected_tokens)
         raise ValueError(f"blind run must contain every held-out field exactly once; missing={missing}, extra={extra}")
+    unblinding_record = {
+        "action": "unblind_and_evaluate",
+        "encrypted_truth_store_sha256": public_manifest["truth_store_sha256"],
+        "key_fingerprint": public_manifest["key_fingerprint"],
+        "heldout_field_tokens_processed": sorted(seen),
+    }
+    frozen_config = dict(frozen_configuration.get("configuration") or {})
     package = {
         "schema": BENCHMARK_SCHEMA,
         "benchmark_id": str(detection_run.get("benchmark_id", "blind-run")),
         "fields": packages,
         "score_thresholds": detection_run.get("score_thresholds"),
         "matched_target": detection_run.get("matched_target"),
+        "blind_evaluation": {
+            "preregistration_sha256": frozen_config.get("preregistration_sha256"),
+            "configuration_freeze_verified": bool(frozen_check["valid"]),
+            "truth_released_after_run_freeze": True,
+            "unblinding_record": unblinding_record,
+            "source_commit": frozen_configuration["source_commit"],
+            "dataset_digest": frozen_configuration["dataset_digest"],
+        },
     }
-    report = compare_benchmark_package(package, bootstrap_draws=bootstrap_draws, seed=seed)
+    report = compare_benchmark_package(
+        package, bootstrap_draws=bootstrap_draws, seed=seed,
+        verified_blind_protocol=True,
+    )
     report["blind_protocol"] = {
         "unblinded_utc": _utc_now(),
-        "truth_access_record": {
-            "action": "unblind_and_evaluate",
-            "encrypted_truth_store_sha256": public_manifest["truth_store_sha256"],
-            "key_fingerprint": public_manifest["key_fingerprint"],
-            "heldout_field_tokens_processed": sorted(seen),
-        },
+        "truth_access_record": unblinding_record,
         "public_manifest_truth_sha256_verified": True,
         "configuration_freeze_verified": frozen_check,
         "source_commit": frozen_configuration["source_commit"],

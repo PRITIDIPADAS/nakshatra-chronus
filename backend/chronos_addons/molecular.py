@@ -127,6 +127,7 @@ def measure_equivalent_width(
     *,
     resolution: Mapping[str, Any] | None = None,
     potential_blend_intervals_um: Sequence[Sequence[float]] | None = None,
+    continuum_model: str = "linear",
 ) -> dict[str, Any]:
     """Measure equivalent width and report resolution/blend limitations."""
     if len(feature_interval_um) != 2 or len(continuum_intervals_um) != 2 or any(len(x) != 2 for x in continuum_intervals_um):
@@ -136,6 +137,8 @@ def measure_equivalent_width(
     if not flo < fhi or any(not a < b for a, b in sides) or not (sides[0][1] < flo and fhi < sides[1][0]):
         raise ValueError("continuum sidebands must bracket and not overlap the feature")
 
+    if continuum_model not in {"linear", "constant"}:
+        raise ValueError("continuum_model must be 'linear' or 'constant'")
     s = spectrum.normalized()
     resolution_report = _resolution_diagnostics(
         s, (flo, fhi), resolution, potential_blend_intervals_um
@@ -152,14 +155,16 @@ def measure_equivalent_width(
     xs = xs_wave - x0
     xf_wave = s.wavelength_um[feature_mask]
     xf = xf_wave - x0
-    design = np.column_stack([np.ones(xs.size), xs])
+    design = (np.column_stack([np.ones(xs.size), xs])
+              if continuum_model == "linear" else np.ones((xs.size, 1)))
     weights = 1 / s.sigma[side_mask] ** 2 if s.sigma is not None else np.ones(xs.size)
     normal = design.T @ (weights[:, None] * design)
     if np.linalg.cond(normal) > 1e12:
         raise ValueError("continuum sidebands do not constrain stable linear fit")
     covariance = np.linalg.inv(normal)
     beta = covariance @ (design.T @ (weights * s.flux[side_mask]))
-    feature_design = np.column_stack([np.ones(xf.size), xf])
+    feature_design = (np.column_stack([np.ones(xf.size), xf])
+                      if continuum_model == "linear" else np.ones((xf.size, 1)))
     continuum = feature_design @ beta
     if np.any(continuum <= 0) or np.any(~np.isfinite(continuum)):
         raise ValueError("continuum must be finite and positive")
@@ -187,17 +192,39 @@ def measure_equivalent_width(
         ew_sigma = float(np.sqrt(max(0, variance)))
         significance = equivalent_width / ew_sigma if ew_sigma > 0 else None
 
+    feature_depth = float(1.0 - np.min(flux / continuum))
+    deepest_index = int(np.argmin(flux / continuum))
+    deepest_wavelength = float(xf_wave[deepest_index])
+    continuum_uncertainty = np.sqrt(np.maximum(
+        np.einsum("ij,jk,ik->i", feature_design, covariance, feature_design), 0.0
+    ))
+    depth_sigma = None
+    if s.sigma is not None:
+        cmin = float(continuum[deepest_index])
+        fmin = float(flux[deepest_index])
+        cmin_sigma = float(continuum_uncertainty[deepest_index])
+        depth_sigma = float(math.sqrt(
+            (float(s.sigma[feature_mask][deepest_index]) / cmin) ** 2
+            + (fmin * cmin_sigma / cmin ** 2) ** 2
+        ))
+
     return {
         "feature_interval_um": [flo, fhi],
         "continuum_intervals_um": [list(x) for x in sides],
         "equivalent_width_um": equivalent_width,
         "equivalent_width_sigma_um": ew_sigma,
         "equivalent_width_significance": significance,
+        "feature_depth": feature_depth,
+        "feature_depth_sigma": depth_sigma,
+        "feature_depth_minimum_wavelength_um": deepest_wavelength,
+        "continuum_uncertainty_mean": float(np.mean(continuum_uncertainty)),
         "continuum_model": {
-            "type": "weighted_linear",
+            "type": "weighted_" + continuum_model,
+            "coefficients": [float(value) for value in beta],
             "intercept": float(beta[0]),
-            "slope_per_um": float(beta[1]),
+            "slope_per_um": float(beta[1]) if continuum_model == "linear" else 0.0,
             "reference_wavelength_um": x0,
+            "coefficient_covariance": covariance.tolist(),
             "n_samples": int(side_mask.sum()),
         },
         "n_feature_samples": int(feature_mask.sum()),
@@ -208,7 +235,8 @@ def measure_equivalent_width(
             "Feature interval is user supplied; no molecule is identified.",
             "A resolution value is only as valid as the supplied product, detector, wavelength and calibration provenance.",
             "Potential blend intervals are screening flags; no deblending or line-spread-function fit is performed.",
-            "Continuum model must be inspected against the source spectrum.",
+            "Continuum model must be inspected against the source spectrum; compare alternative models before interpretation.",
+            "Feature depth is the minimum continuum-normalized pixel value, not an intrinsic deconvolved depth.",
             "Uncertainty uses first-order propagation and an independent-sample assumption.",
         ],
     }

@@ -196,3 +196,16 @@ No  Assistance from AI in any ways.No image, video or audio in the project is SI
 ## Cite and license
 
 Citation metadata: [CITATION.cff](CITATION.cff). Code: Apache License 2.0 ([LICENSE](LICENSE)). Font: EB Garamond, SIL Open Font License ([frontend/fonts/OFL.txt](frontend/fonts/OFL.txt)).
+
+## CHRONOS 5.0 Sessions 12–20
+
+Implementation details for covariance-aware spectrotemporal reconstruction, resolution-aware feature evolution, epoch-aware source association, candidate-specific follow-up planning, evidence packages, four linked research workspaces, blind benchmark controls and the YSO population coverage gate are documented in [CHRONOS 5 Sessions 12–20](docs/CHRONOS_5_SESSIONS_12_20_IMPLEMENTATION.md).
+
+Blind evaluation is custodian-controlled. Keep the Fernet key and encrypted truth store away from the analysis runner and never commit either to this repository. The setup, freeze and unblind commands are in the implementation guide. Verify an exported investigation ZIP with:
+
+\`\`\`bash
+PYTHONPATH=backend python -m chronos_causal.package_cli verify chronos-investigation-package.zip
+\`\`\`
+
+Software tests and synthetic examples do not establish real-data performance. The scientific release gate remains closed until a compatible real archive sample and sealed held-out truth fields have been evaluated and independently reproduced.
+

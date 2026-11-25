@@ -58,6 +58,11 @@ def truth_catalogue_digest(rows: Sequence[Mapping[str, Any]]) -> str:
         if not math.isfinite(x) or not math.isfinite(y):
             raise ValueError(f"truth row {index} coordinates must be finite")
         item = {k: v for k, v in row.items()}
+        for key in ("flux", "flux_sigma"):
+            if item.get(key) is not None:
+                item[key] = float(item[key])
+                if not math.isfinite(item[key]) or (key == "flux_sigma" and item[key] <= 0):
+                    raise ValueError(f"truth row {index} has invalid {key}")
         item["truth_id"] = truth_id
         item["x"], item["y"] = x, y
         normal.append(item)
@@ -126,6 +131,13 @@ def _normalise_detections(method: str, rows: Sequence[Mapping[str, Any]]) -> lis
         if not isinstance(provenance, Mapping) or not provenance:
             raise ValueError(f"{method} detection {index} needs non-empty provenance")
         item = dict(row)
+        for key in ("flux", "flux_sigma", "flux_uncertainty"):
+            if item.get(key) is not None:
+                item[key] = float(item[key])
+                if not math.isfinite(item[key]) or (key in {"flux_sigma", "flux_uncertainty"} and item[key] <= 0):
+                    raise ValueError(f"{method} detection {index} has invalid {key}")
+        if item.get("flux_sigma") is not None and item.get("flux_uncertainty") is not None:
+            raise ValueError(f"{method} detection {index} must use only one flux uncertainty field")
         item.update(detection_id=detection_id, x=x, y=y, score=score,
                     provenance=dict(provenance))
         out.append(item)
@@ -143,6 +155,24 @@ def _summarise_astrometry(matches: list[dict[str, Any]]) -> dict[str, Any]:
         "p95": float(np.percentile(arr, 95)),
         "rmse": float(np.sqrt(np.mean(arr ** 2))),
         "unit": "input coordinate unit",
+    }
+
+
+def _summarise_flux(matches: list[dict[str, Any]]) -> dict[str, Any]:
+    paired = [row for row in matches if row.get("flux_bias") is not None]
+    bias = np.asarray([float(row["flux_bias"]) for row in paired], dtype=float)
+    fractional = np.asarray([float(row["fractional_flux_bias"]) for row in paired
+                             if row.get("fractional_flux_bias") is not None], dtype=float)
+    pulls = np.asarray([float(row["flux_pull"]) for row in paired
+                        if row.get("flux_pull") is not None], dtype=float)
+    return {
+        "n_flux_matches": int(len(paired)),
+        "median_flux_bias": float(np.median(bias)) if bias.size else None,
+        "median_fractional_flux_bias": float(np.median(fractional)) if fractional.size else None,
+        "flux_pull_rms": float(np.sqrt(np.mean(pulls ** 2))) if pulls.size else None,
+        "uncertainty_coverage_68": float(np.mean(np.abs(pulls) <= 1.0)) if pulls.size else None,
+        "uncertainty_coverage_95": float(np.mean(np.abs(pulls) <= 1.959963984540054)) if pulls.size else None,
+        "warning": "Flux bias and uncertainty coverage are reported only where truth flux and detection uncertainty were provided.",
     }
 
 
@@ -164,13 +194,26 @@ def _evaluate_field_method(truth_rows, detections, thresholds, match_radius):
             truth = truth_rows[ti]
             used_truth.add(ti)
             used_detection.add(di)
-            matched.append({
+            matched_row = {
                 "truth_id": truth_ids[ti],
                 "detection_id": det["detection_id"],
                 "separation": float(pair["separation"]),
                 "score": det["score"],
                 "provenance": det["provenance"],
-            })
+            }
+            truth_flux = truth.get("flux")
+            detected_flux = det.get("flux")
+            flux_sigma = det.get("flux_sigma", det.get("flux_uncertainty"))
+            if truth_flux is not None and detected_flux is not None:
+                bias = float(detected_flux) - float(truth_flux)
+                matched_row["truth_flux"] = float(truth_flux)
+                matched_row["detected_flux"] = float(detected_flux)
+                matched_row["flux_bias"] = bias
+                matched_row["fractional_flux_bias"] = bias / float(truth_flux) if float(truth_flux) != 0 else None
+                matched_row["reported_flux_sigma"] = flux_sigma
+                if flux_sigma is not None:
+                    matched_row["flux_pull"] = bias / float(flux_sigma)
+            matched.append(matched_row)
         unmatched = [
             {"detection_id": row["detection_id"], "x": row["x"], "y": row["y"],
              "score": row["score"], "provenance": row["provenance"]}
@@ -190,6 +233,7 @@ def _evaluate_field_method(truth_rows, detections, thresholds, match_radius):
             "precision_wilson_95": metric["precision_wilson_95"],
             "completeness_wilson_95": metric["recall_wilson_95"],
             "astrometric_residuals": residuals,
+            "flux_metrics": _summarise_flux(matched),
             "matched": matched,
             "unmatched_detections": unmatched,
             "non_detections": missed,
@@ -223,6 +267,9 @@ def _aggregate_point(field_points: Sequence[Mapping[str, Any]]) -> dict[str, Any
             "p95": float(np.percentile(residual_array, 95)) if residual_array.size else None,
             "rmse": float(np.sqrt(np.mean(residual_array ** 2))) if residual_array.size else None,
         },
+        "flux_metrics": _summarise_flux([
+            match for field in field_points for match in field.get("matched", [])
+        ]),
     }
 
 
@@ -470,10 +517,37 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
             for metric, target_value in target_values.items()
         }
 
-    scientifically_eligible = (
+    blind_record = package.get("blind_evaluation") or {}
+    preregistration_sha = str(blind_record.get("preregistration_sha256", "")).lower()
+    preregistration_valid = (
+        len(preregistration_sha) == 64
+        and set(preregistration_sha) <= _SHA256
+    )
+    real_heldout = (
         dataset_classes == {"real"}
         and all(row["split"] in {"blind_test", "held_out"} for row in per_field)
     )
+    unblind_record = blind_record.get("unblinding_record") or {}
+    scientifically_eligible = bool(
+        verified_blind_protocol and real_heldout and preregistration_valid
+        and blind_record.get("configuration_freeze_verified") is True
+        and blind_record.get("truth_released_after_run_freeze") is True
+        and bool(unblind_record.get("encrypted_truth_store_sha256"))
+        and bool(unblind_record.get("heldout_field_tokens_processed"))
+    )
+    eligibility_reasons = []
+    if not verified_blind_protocol:
+        eligibility_reasons.append("blind_unblinding_not_verified_by_custodian_path")
+    if not real_heldout:
+        eligibility_reasons.append("requires_only_real_heldout_fields")
+    if not preregistration_valid:
+        eligibility_reasons.append("preregistration_sha256_missing_or_invalid")
+    if blind_record.get("configuration_freeze_verified") is not True:
+        eligibility_reasons.append("frozen_configuration_not_verified")
+    if blind_record.get("truth_released_after_run_freeze") is not True:
+        eligibility_reasons.append("truth_release_order_not_verified")
+    if not unblind_record.get("encrypted_truth_store_sha256") or not unblind_record.get("heldout_field_tokens_processed"):
+        eligibility_reasons.append("unblinding_record_incomplete")
     return {
         "schema": "chronos-four-baseline-report/1.0",
         "benchmark_id": str(package.get("benchmark_id", "unnamed")),
@@ -500,6 +574,24 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
             "same_input_enforced_for_all_methods": True,
         },
         "scientific_claim_eligible": scientifically_eligible,
+        "scientific_eligibility_reasons": eligibility_reasons,
+        "blind_evaluation": blind_record,
+        "ood_reporting": {
+            "field_labels_present": all(row.get("ood_status", "not_labelled") != "not_labelled" for row in per_field),
+            "status_by_field": {row["field_id"]: row.get("ood_status", "not_labelled") for row in per_field},
+            "note": "OOD labels are supplied field strata; no OOD detector is inferred by this evaluator.",
+        },
+        "evaluation_strata": {
+            label: {
+                method: _aggregate_point([
+                    next(point for point in field["method_curves"][method]
+                         if point["threshold"] == threshold_map[method][0])
+                    for field in per_field if str(field.get("evaluation_stratum", "unspecified")) == label
+                ])
+                for method in REQUIRED_METHODS
+            }
+            for label in sorted({str(field.get("evaluation_stratum", "unspecified")) for field in per_field})
+        },
         "interpretation": (
             "All four methods were evaluated on the same declared field inputs and truth catalogues. "
             "This report does not establish a performance advantage unless it is based on independent, "
@@ -511,5 +603,8 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
             "Field bootstrap intervals require independent fields and do not correct selection bias.",
             "For sky-coordinate arcsecond comparisons, the same validated WCS transform and coordinate convention must be used for truth and detections.",
             "No winner is declared by this report.",
+            "Scientific eligibility requires the verified blind-unblinding path, a preregistration digest and a custodian unblinding record.",
+            "Flux metrics are available only when truth flux and reported detection uncertainty are supplied.",
+            "OOD stratification is descriptive and depends on externally predeclared field labels.",
         ],
     }

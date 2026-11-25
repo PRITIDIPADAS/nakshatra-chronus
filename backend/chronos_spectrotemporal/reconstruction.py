@@ -89,6 +89,20 @@ def _matrix_sha256(matrix: np.ndarray) -> str:
     return hashlib.sha256(arr.tobytes()).hexdigest()
 
 
+def _json_safe(value):
+    if isinstance(value, np.ndarray):
+        return _json_safe(value.tolist())
+    if isinstance(value, np.generic):
+        return _json_safe(value.item())
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 def reconstruct(
     samples: Sequence[Mapping[str, Any]],
     wavelength_grid_um: Sequence[float],
@@ -100,6 +114,7 @@ def reconstruct(
     calibration_group: str | None = None,
     measurement_covariance: Sequence[Sequence[float]] | None = None,
     shared_calibration_fractional_sigma: float = 0.0,
+    include_grid_covariance: bool = False,
 ) -> dict[str, Any]:
     """Reconstruct a local F(lambda,t) grid with covariance propagation.
 
@@ -151,6 +166,9 @@ def reconstruct(
     n_eff = np.zeros(shape, dtype=float)
     source_indices = [[[] for _ in wave_grid] for _ in time_grid]
     linear_weights = [[[] for _ in wave_grid] for _ in time_grid]
+    coefficient_vectors: list[list[np.ndarray | None]] = [
+        [None for _ in wave_grid] for _ in time_grid
+    ]
 
     for ti, target_t in enumerate(time_grid):
         for wi, target_w in enumerate(wave_grid):
@@ -202,26 +220,193 @@ def reconstruct(
             counts[ti, wi] = int(idx.size)
             n_eff[ti, wi] = effective
             source_indices[ti][wi] = [rows[j]["source_index"] for j in idx]
+            coefficient_vectors[ti][wi] = np.zeros(len(rows), dtype=float)
+            coefficient_vectors[ti][wi][idx] = alpha
             linear_weights[ti][wi] = [
-                {"source_index": rows[j]["source_index"], "coefficient": float(alpha[k])}
+                {"source_index": rows[j]["source_index"],
+                 "input_index": int(input_indices[j]),
+                 "observation_id": rows[j].get("observation_id", rows[j].get("measurement_id")),
+                 "coefficient": float(alpha[k])}
                 for k, j in enumerate(idx)
             ]
 
     valid = np.isfinite(out_flux) & np.isfinite(out_sigma_measurement) & np.isfinite(out_sigma_total)
-    return {
+    measured = np.zeros(shape, dtype=bool)
+    for ti, target_t in enumerate(time_grid):
+        for wi, target_w in enumerate(wave_grid):
+            if valid[ti, wi]:
+                measured[ti, wi] = bool(np.any(
+                    np.isclose(time, target_t, rtol=0.0, atol=1e-8)
+                    & np.isclose(wave, target_w, rtol=0.0, atol=1e-10)
+                ))
+    cell_class = [
+        ["measured" if measured[i, j] else "inferred" if valid[i, j] else "unsupported"
+         for j in range(len(wave_grid))]
+        for i in range(len(time_grid))
+    ]
+
+    temporal_covariance = []
+    for wi in range(len(wave_grid)):
+        matrix = np.full((len(time_grid), len(time_grid)), np.nan)
+        for i in range(len(time_grid)):
+            left = coefficient_vectors[i][wi]
+            if left is None:
+                continue
+            for j in range(len(time_grid)):
+                right = coefficient_vectors[j][wi]
+                if right is not None:
+                    matrix[i, j] = float(left @ c_total @ right)
+        temporal_covariance.append(matrix.tolist())
+
+    grid_covariance = None
+    supported_cells = [(i, j) for i in range(len(time_grid))
+                       for j in range(len(wave_grid)) if valid[i, j]]
+    if include_grid_covariance:
+        if len(supported_cells) > 400:
+            raise ValueError("include_grid_covariance is limited to 400 supported cells")
+        matrix = np.zeros((len(supported_cells), len(supported_cells)), dtype=float)
+        for i, (ti, wi) in enumerate(supported_cells):
+            left = coefficient_vectors[ti][wi]
+            for j in range(i, len(supported_cells)):
+                tj, wj = supported_cells[j]
+                right = coefficient_vectors[tj][wj]
+                matrix[i, j] = matrix[j, i] = float(left @ c_total @ right)
+        grid_covariance = {
+            "cell_order_time_then_wavelength": [list(item) for item in supported_cells],
+            "matrix": matrix.tolist(),
+            "unit": "flux_unit squared",
+        }
+
+    # Descriptive achromatic/chromatic decomposition over wavelengths jointly
+    # supported at the reference epoch and each comparison epoch.
+    decomposition = {"status": "unsupported", "reason": "insufficient common wavelength support"}
+    epochs = [i for i in range(len(time_grid)) if np.any(valid[i])]
+    if epochs:
+        reference = epochs[0]
+        epoch_changes = []
+        for ti in epochs[1:]:
+            common = [wi for wi in range(len(wave_grid))
+                      if valid[reference, wi] and valid[ti, wi]
+                      and abs(float(out_flux[reference, wi])) > 1e-15]
+            if len(common) < 2:
+                epoch_changes.append({"time_mjd": float(time_grid[ti]),
+                    "status": "insufficient_common_wavelengths", "common_channels": len(common)})
+                continue
+            ratios = np.asarray([
+                out_flux[ti, wi] / out_flux[reference, wi] - 1.0 for wi in common
+            ], dtype=float)
+            variances = np.asarray([
+                (out_sigma_total[ti, wi] / out_flux[reference, wi]) ** 2
+                + (out_flux[ti, wi] * out_sigma_total[reference, wi]
+                   / out_flux[reference, wi] ** 2) ** 2
+                for wi in common
+            ], dtype=float)
+            weights = 1.0 / np.maximum(variances, 1e-15)
+            weights /= np.sum(weights)
+            achromatic = float(weights @ ratios)
+            epoch_changes.append({
+                "time_mjd": float(time_grid[ti]),
+                "status": "descriptive_estimate",
+                "reference_time_mjd": float(time_grid[reference]),
+                "common_channels": len(common),
+                "achromatic_fractional_change": achromatic,
+                "achromatic_fractional_change_sigma": float(math.sqrt(1.0 / np.sum(1.0 / np.maximum(variances, 1e-15)))),
+                "chromatic_residuals": [
+                    {"wavelength_um": float(wave_grid[wi]),
+                     "fractional_change": float(ratios[k]),
+                     "fractional_change_sigma": float(math.sqrt(variances[k])),
+                     "chromatic_residual": float(ratios[k] - achromatic)}
+                    for k, wi in enumerate(common)
+                ],
+                "uncertainty_note": "Diagonal delta-method approximation for the ratio; cross-wavelength and reference-epoch covariance are not fully propagated in this descriptive decomposition.",
+            })
+        decomposition = {
+            "status": "descriptive_estimate",
+            "reference_time_mjd": float(time_grid[reference]),
+            "epochs": epoch_changes,
+            "limitations": [
+                "The achromatic term is an inverse-variance summary over common supported wavelengths.",
+                "Chromatic residuals are descriptive and are not molecular or causal identifications.",
+                "Time-wavelength cadence can make intrinsic chromatic variability non-identifiable.",
+            ],
+        }
+
+    selected_rows = [samples[i] for i in input_indices]
+    provenance_rows = []
+    for row, input_index in zip(rows, input_indices):
+        provenance_rows.append({
+            "input_index": int(input_index),
+            "source_index": row["source_index"],
+            "observation_id": row.get("observation_id", row.get("measurement_id")),
+            "source_id": row.get("source_id"),
+            "mjd": float(row["mjd"]),
+            "wavelength_um": float(row["wavelength_um"]),
+            "flux": float(row["flux"]),
+            "sigma": float(row["sigma"]),
+            "flux_unit": row.get("flux_unit"),
+            "calibration_group": group,
+            "calibration_product_id": row.get("calibration_product_id"),
+            "detector_id": row.get("detector_id", row.get("detector")),
+            "wavelength_source": row.get("wavelength_source"),
+            "status": "valid_measurement",
+        })
+    excluded_rows = [
+        {
+            "input_index": i,
+            "source_index": row.get("source_index", i),
+            "observation_id": row.get("observation_id", row.get("measurement_id")),
+            "mjd": row.get("mjd"),
+            "wavelength_um": row.get("wavelength_um"),
+            "calibration_group": row.get("calibration_group"),
+            "status": "invalid_or_missing" if row.get("valid", True) is False else "excluded_calibration_group",
+            "reason": row.get("invalid_reason", "row is not part of the selected valid calibration group"),
+        }
+        for i, row in enumerate(samples)
+        if i not in set(input_indices)
+    ]
+    native_rows = [row for row in samples
+                   if str(row.get("calibration_group", "")) == group]
+    native_wavelength = sorted({
+        float(row["wavelength_um"]) for row in native_rows
+        if row.get("wavelength_um") is not None
+        and math.isfinite(float(row["wavelength_um"])) and float(row["wavelength_um"]) > 0
+    })
+    native_times = sorted({
+        float(row["mjd"]) for row in native_rows
+        if row.get("mjd") is not None and math.isfinite(float(row["mjd"]))
+    })
+    data_classes = sorted({
+        str(row.get("dataset_class", row.get("data_class",
+            "synthetic" if row.get("synthetic_fixture") is True else "unverified"))).lower()
+        for row in selected_rows
+    })
+    data_class = data_classes[0] if len(data_classes) == 1 else "mixed"
+
+    return _json_safe({
         "calibration_group": group,
         "wavelength_um": wave_grid.tolist(),
         "time_mjd": time_grid.tolist(),
+        "native_wavelength_samples_um": native_wavelength,
+        "native_observation_times_mjd": native_times,
         "flux": out_flux.tolist(),
         "sigma_measurement": out_sigma_measurement.tolist(),
         "sigma_shared_calibration": out_sigma_calibration.tolist(),
         "sigma_total": out_sigma_total.tolist(),
         "local_scatter": scatter.tolist(),
         "valid": valid.tolist(),
+        "measured": measured.tolist(),
+        "cell_class": cell_class,
+        "data_class": data_class,
+        "input_data_classes": data_classes,
         "n_samples": counts.tolist(),
         "effective_n": n_eff.tolist(),
         "source_indices": source_indices,
         "linear_weights": linear_weights,
+        "measurement_provenance": provenance_rows,
+        "excluded_rows": excluded_rows,
+        "temporal_covariance_by_wavelength": temporal_covariance,
+        "grid_covariance": grid_covariance,
+        "variability_decomposition": decomposition,
         "covariance_model": {
             "measurement_covariance_supplied": supplied_covariance,
             "measurement_covariance_sha256": _matrix_sha256(c_stat),
@@ -233,7 +418,7 @@ def reconstruct(
             "covariance_note": "Matrix checksums bind the exact matrices used; covariance is aligned to the original input row order before invalid rows are removed.",
         },
         "method": "two-dimensional local Gaussian-kernel generalized least squares",
-        "missing_data_policy": "Cells without local support remain NaN; no extrapolation beyond the sampled wavelength/time envelope.",
+        "missing_data_policy": "Cells without local support are null in JSON and remain unsupported. Native wavelength samples and timestamps are retained. No extrapolation beyond the sampled wavelength/time envelope.",
         "limitations": [
             "The estimate is a local smoother, not a physical source model or Gaussian-process posterior.",
             "Shared calibration uncertainty is a fully correlated multiplicative approximation unless a full statistical covariance is supplied.",
@@ -242,4 +427,6 @@ def reconstruct(
             "Wavelength/time confounding from observing cadence can make spectral evolution non-identifiable.",
             "Only observations in one explicitly compatible calibration group are combined.",
         ],
-    }
+    })
+
+
