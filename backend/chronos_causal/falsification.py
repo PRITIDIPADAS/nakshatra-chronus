@@ -57,7 +57,7 @@ def _residual_records(rows, prediction, sigma, groups):
     ]
 
 
-def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *
+def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
                             challenge_specs: Sequence[Mapping[str, Any]] | None = None,
                             challenge_plan_sha256: str | None = None,
                             flux_covariance=None,
