@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import secrets
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
@@ -81,6 +82,14 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
             raise ValueError(f"{field_id}: input_signature.field_id must equal field_id")
         token = token_by_id[field_id]
         role = "blind_test" if field_id in test_ids else "development"
+        match_radius = float(raw.get("match_radius", 0.0))
+        if not math.isfinite(match_radius) or match_radius <= 0:
+            raise ValueError(f"{field_id}: positive match_radius is required for preregistered matching")
+        field_area = raw.get("field_area_deg2")
+        if field_area is not None and (
+            not math.isfinite(float(field_area)) or float(field_area) <= 0
+        ):
+            raise ValueError(f"{field_id}: field_area_deg2 must be positive when supplied")
         exposure_tokens = [
             "exposure_" + hashlib.sha256((token + "|" + str(value)).encode()).hexdigest()[:20]
             for value in signature.get("exposure_ids", [])
@@ -92,6 +101,8 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
             "blind_field_token": token,
             "split_role": role,
             "dataset_class": signature.get("dataset_class"),
+            "match_radius": match_radius,
+            "field_area_deg2": float(field_area) if field_area is not None else None,
             "input_signature": public_signature,
             "data_locator_token": token,
         })
@@ -116,6 +127,10 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
     }
     encrypted = _fernet(key).encrypt(canonical_json(private_payload))
     ciphertext_sha = hashlib.sha256(encrypted).hexdigest()
+    run_manifest = {
+        "schema": BLIND_SCHEMA,
+        "fields": sorted(public_fields, key=lambda row: row["blind_field_token"]),
+    }
     public_manifest = {
         "schema": BLIND_SCHEMA,
         "created_utc": private_payload["created_utc"],
@@ -124,16 +139,14 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
         "development_tokens": sorted(token_by_id[item] for item in development_ids),
         "holdout_policy": "whole-field holdout with optional shared split_group_id to keep related periods together",
         "truth_store_sha256": ciphertext_sha,
+        "run_manifest_sha256": sha256_json(run_manifest),
         "truth_store_is_encrypted": True,
         "key_fingerprint": hashlib.sha256(key).hexdigest()[:16],
         "warning": "Do not place the Fernet key or decrypted truth store in the analysis environment.",
     }
     return {
         "public_manifest": public_manifest,
-        "run_manifest": {
-            "schema": BLIND_SCHEMA,
-            "fields": sorted(public_fields, key=lambda row: row["blind_field_token"]),
-        },
+        "run_manifest": run_manifest,
         "encrypted_truth_store": encrypted,
         "private_split_manifest": {
             "train_field_count": len(development_ids),
@@ -146,8 +159,14 @@ def freeze_configuration(configuration: Mapping[str, Any], *, source_commit: str
                          dataset_digest: str) -> dict[str, Any]:
     """Seal all thresholds and processing choices before a blind run is unblinded."""
     commit = str(source_commit).strip()
-    if not commit:
-        raise ValueError("source_commit is required")
+    if len(commit) not in {40, 64} or any(ch not in "0123456789abcdefABCDEF" for ch in commit):
+        raise ValueError("source_commit must be a full 40- or 64-character hexadecimal commit ID")
+    required_configuration = ("score_thresholds", "matched_target", "matching_radii_by_field")
+    missing_configuration = [name for name in required_configuration if name not in configuration]
+    if missing_configuration:
+        raise ValueError(
+            "blind configuration must freeze score_thresholds, matched_target and matching_radii_by_field"
+        )
     digest = str(dataset_digest).lower()
     if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
         raise ValueError("dataset_digest must be a SHA-256 hex digest")
@@ -189,6 +208,21 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         raise ValueError("encrypted truth store checksum does not match public manifest")
     if hashlib.sha256(key).hexdigest()[:16] != public_manifest.get("key_fingerprint"):
         raise ValueError("blind key fingerprint does not match public manifest")
+    public_fields = detection_run.get("public_fields")
+    if not isinstance(public_fields, list):
+        raise ValueError("detection_run.public_fields must contain the issued public run manifest fields")
+    canonical_run_manifest = {
+        "schema": BLIND_SCHEMA,
+        "fields": sorted(public_fields, key=lambda row: row.get("blind_field_token", "")),
+    }
+    computed_dataset_digest = sha256_json({
+        "public_manifest": dict(public_manifest),
+        "run_manifest": canonical_run_manifest,
+    })
+    if computed_dataset_digest != frozen_configuration.get("dataset_digest"):
+        raise ValueError("public run manifest does not match the frozen dataset digest")
+    if sha256_json(canonical_run_manifest) != public_manifest.get("run_manifest_sha256"):
+        raise ValueError("public run manifest checksum does not match public manifest")
     if detection_run.get("dataset_digest") != frozen_configuration.get("dataset_digest"):
         raise ValueError("detection run dataset digest differs from the frozen dataset")
     if detection_run.get("frozen_configuration_sha256") != frozen_configuration.get("configuration_sha256"):
@@ -199,6 +233,19 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
     frozen_config = frozen_configuration.get("configuration")
     if not isinstance(run_configuration, Mapping) or canonical_json(run_configuration) != canonical_json(frozen_config):
         raise ValueError("detection run configuration differs from the frozen thresholds and processing choices")
+    if canonical_json(detection_run.get("score_thresholds")) != canonical_json(frozen_config.get("score_thresholds")):
+        raise ValueError("detection run score thresholds differ from the frozen configuration")
+    if canonical_json(detection_run.get("matched_target")) != canonical_json(frozen_config.get("matched_target")):
+        raise ValueError("detection run matched operating-point target differs from the frozen configuration")
+    frozen_radii = frozen_config.get("matching_radii_by_field")
+    public_radii = {
+        row["blind_field_token"]: float(row["match_radius"])
+        for row in public_fields
+    }
+    if canonical_json(frozen_radii) != canonical_json(public_radii):
+        raise ValueError("frozen matching radii do not match the public field manifest")
+    if canonical_json(detection_run.get("matching_radii_by_field")) != canonical_json(frozen_radii):
+        raise ValueError("detection run matching radii differ from the frozen configuration")
 
     try:
         private = json.loads(_fernet(key).decrypt(encrypted_truth_store).decode("utf-8"))
