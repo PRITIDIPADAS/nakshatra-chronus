@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -85,6 +86,7 @@ def region_predicate(region: dict, ra_col: str = "ra", dec_col: str = "dec") -> 
 
 CATALOGUE_ROW_LIMIT = 50000
 COVERAGE_ROW_LIMIT = 20000
+SOURCE_EPOCH_ROW_LIMIT = 200000
 
 
 def build_region_queries(region: dict) -> dict[str, str]:
@@ -140,12 +142,162 @@ def build_region_queries(region: dict) -> dict[str, str]:
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
         + ")) ORDER BY p.time_bounds_lower"
     )
+    # Optional source-to-exposure coverage: the only spatial predicate is
+    # the supported POINT-in-exposure-POLYGON test. A conservative RA/Dec
+    # bounding box limits candidate rows to this region; exact great-circle
+    # cone membership is checked locally after TAP returns.
+    centre_dec_rad = math.radians(float(region["dec_deg"]))
+    radius_rad = math.radians(float(region["radius_deg"]))
+    ra_half_width = math.degrees(
+        math.asin(min(1.0, math.sin(radius_rad) / max(math.cos(centre_dec_rad), 1e-12)))
+    )
+    ra_min = float(region["ra_deg"]) - ra_half_width
+    ra_max = float(region["ra_deg"]) + ra_half_width
+    if ra_min < 0:
+        ra_condition = f"(s.ra >= {ra_min + 360.0:.8f} OR s.ra <= {ra_max:.8f})"
+    elif ra_max >= 360:
+        ra_condition = f"(s.ra >= {ra_min:.8f} OR s.ra <= {ra_max - 360.0:.8f})"
+    else:
+        ra_condition = f"s.ra BETWEEN {ra_min:.8f} AND {ra_max:.8f}"
+    dec_min = max(-90.0, float(region["dec_deg"]) - float(region["radius_deg"]))
+    dec_max = min(90.0, float(region["dec_deg"]) + float(region["radius_deg"]))
+    source_epoch_sql = (
+        f"SELECT TOP {SOURCE_EPOCH_ROW_LIMIT} s.source_id, s.designation, s.ra, s.dec, "
+        "s.yso_pub, s.class_1, s.stype_ml, p.planeid, p.obsid, a.uri, "
+        "p.energy_bandpassname, p.time_bounds_lower, p.time_bounds_upper "
+        "FROM spherex.splices s, spherex.artifact a, spherex.plane p "
+        "WHERE a.planeid = p.planeid "
+        f"AND {ra_condition} "
+        f"AND s.dec BETWEEN {dec_min:.8f} AND {dec_max:.8f} "
+        "AND CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1 "
+        "AND (s.yso_pub IS NOT NULL OR UPPER(s.class_1) LIKE '%YSO%' "
+        "OR UPPER(s.stype_ml) LIKE '%YSO%') "
+        "AND LOWER(a.uri) LIKE '%/dr1/level2/%' "
+        "AND p.energy_bandpassname IN ("
+        + ", ".join(f"'{band}'" for band in DR1_BANDS)
+        + ") ORDER BY s.source_id, p.time_bounds_lower"
+    )
     return {
         "catalogue_sources": catalogue_sql,
         "candidate_sources": candidate_sql,
         "dr1_level2_exposures": exposure_sql,
         "dr1_level2_exposures_full_region": full_region_exposure_sql,
+        "candidate_source_exposure_matches": source_epoch_sql,
     }
+
+
+def great_circle_separation_deg(ra1: float, dec1: float,
+                                ra2: float, dec2: float) -> float:
+    """Exact spherical separation in degrees, with RA wrap handled."""
+    r1, d1, r2, d2 = map(math.radians, (ra1, dec1, ra2, dec2))
+    cosine = (
+        math.sin(d1) * math.sin(d2)
+        + math.cos(d1) * math.cos(d2) * math.cos(r1 - r2)
+    )
+    return math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+
+
+def summarize_candidate_source_epochs(
+    region: dict, candidate_rows: list[dict], match_rows: list[dict],
+) -> tuple[list[dict], list[dict], dict]:
+    """Filter the conservative TAP bounding box and summarise exact source-plane matches."""
+    candidate_by_id = {
+        str(row.get("source_id")).strip(): row
+        for row in candidate_rows if row.get("source_id") not in (None, "")
+    }
+    matched_by_source = {}
+    seen_pairs = set()
+    accepted_rows = []
+    centre_ra = float(region["ra_deg"])
+    centre_dec = float(region["dec_deg"])
+    radius = float(region["radius_deg"])
+    for row in match_rows:
+        source_id = str(row.get("source_id") or "").strip()
+        plane_id = str(row.get("planeid") or "").strip()
+        ra, dec = row.get("ra"), row.get("dec")
+        try:
+            separation = great_circle_separation_deg(
+                float(ra), float(dec), centre_ra, centre_dec
+            )
+        except (TypeError, ValueError):
+            continue
+        if not source_id or not plane_id or separation > radius:
+            continue
+        pair = (source_id, plane_id)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        candidate = candidate_by_id.get(source_id, {})
+        accepted = {
+            **row,
+            "angular_separation_from_region_centre_deg": separation,
+            "within_predeclared_region_radius": True,
+            "candidate_row_present_in_bounded_query": source_id in candidate_by_id,
+            "region": region["name"],
+            "region_role": region["role"],
+        }
+        accepted_rows.append(accepted)
+        matched_by_source.setdefault(source_id, []).append(accepted)
+
+    summaries = []
+    for source_id, observations in sorted(matched_by_source.items()):
+        first_times = []
+        last_times = []
+        for row in observations:
+            for key, bucket in (
+                ("time_bounds_lower", first_times),
+                ("time_bounds_upper", last_times),
+            ):
+                try:
+                    value = float(row.get(key))
+                    if math.isfinite(value):
+                        bucket.append(value)
+                except (TypeError, ValueError):
+                    pass
+        exemplar = candidate_by_id.get(source_id) or observations[0]
+        summaries.append({
+            "source_id": source_id,
+            "designation": exemplar.get("designation"),
+            "ra": exemplar.get("ra"),
+            "dec": exemplar.get("dec"),
+            "yso_pub": exemplar.get("yso_pub"),
+            "class_1": exemplar.get("class_1"),
+            "stype_ml": exemplar.get("stype_ml"),
+            "region": region["name"],
+            "region_role": region["role"],
+            "unique_level2_plane_count": len({row["planeid"] for row in observations}),
+            "unique_observation_count": len({
+                str(row.get("obsid") or "").strip() for row in observations
+                if row.get("obsid") not in (None, "")
+            }),
+            "unique_band_count": len({
+                str(row.get("energy_bandpassname") or "") for row in observations
+            }),
+            "bands": ";".join(sorted({
+                str(row.get("energy_bandpassname") or "") for row in observations
+            })),
+            "first_mjd": min(first_times) if first_times else None,
+            "last_mjd": max(last_times) if last_times else None,
+            "exposure_plane_ids": ";".join(sorted({row["planeid"] for row in observations})),
+        })
+    candidate_ids = set(candidate_by_id)
+    matched_ids = set(matched_by_source)
+    report = {
+        "candidate_source_id_count": len(candidate_ids),
+        "candidate_source_ids_with_level2_footprint_match": len(matched_ids),
+        "candidate_source_ids_without_level2_footprint_match": len(candidate_ids - matched_ids),
+        "source_exposure_pair_rows_after_cone_filter_and_plane_dedup": len(accepted_rows),
+        "source_epoch_query_row_count_before_cone_filter": len(match_rows),
+        "source_epoch_query_row_cap": SOURCE_EPOCH_ROW_LIMIT,
+        "source_epoch_query_at_cap": len(match_rows) >= SOURCE_EPOCH_ROW_LIMIT,
+        "candidate_query_complete": len(candidate_rows) < CANDIDATE_LIMIT,
+        "interpretation": (
+            "A match means the catalogue source coordinate lies inside a returned DR1 Level-2 exposure polygon. "
+            "It is a geometric archive-coverage match, not proof of valid extracted flux, spectrum quality, "
+            "usable epoch cadence, or an astrophysical classification."
+        ),
+    }
+    return accepted_rows, summaries, report
 
 
 def _is_yso_like(row: dict) -> bool:
