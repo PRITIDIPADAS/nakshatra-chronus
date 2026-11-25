@@ -193,9 +193,15 @@ def test_field_summary_requires_real_poisson_variance_diagnostics_for_all_flux_b
 
 def test_field_summary_rejects_gain_link_without_live_archive_md5():
     summary = _summary()
-    summary["calibrated_jy_injection_evaluation"]["source_photon_noise"][
-        "calibration_record"
-    ]["provenance_link"]["artifact_md5_status"] = "not_checked"
+    # The gate cross-checks the separately retained electron-derivation and
+    # photon-noise records; invalidate both copies to test an absent archive MD5.
+    injection = summary["calibrated_jy_injection_evaluation"]
+    injection["source_photon_noise"]["calibration_record"][
+        "provenance_link"
+    ]["artifact_md5_status"] = "not_checked"
+    injection["electron_calibration_derivation"]["record"]["provenance_link"][
+        "artifact_md5_status"
+    ] = "not_checked"
     record = summarize_field_record(
         FIELDS[0], summary, return_code=0, log_path="field.log"
     )
