@@ -333,3 +333,69 @@ def build_benchmark_field_record(state: Mapping[str, Any], input_signature: Mapp
         "methods": records["methods"],
         "baseline_contract": records["baseline_contract"],
     }
+
+
+
+def build_blind_detection_field_record(
+    state: Mapping[str, Any],
+    public_field: Mapping[str, Any],
+    *,
+    sky_detector_twin_detections: Sequence[Mapping[str, Any]] | None,
+    score_thresholds: Mapping[str, Sequence[float]],
+    snr_threshold: float | None = None,
+    forensics_thresholds: Mapping[str, float] | None = None,
+) -> dict[str, Any]:
+    """Build method detections from a public blind field without accessing truth.
+
+    The custodian must issue public_input_signature with opaque exposure IDs and
+    a mask checksum computed from the same prepared state after those IDs are
+    substituted. The ordinary baseline adapter then verifies exposure IDs,
+    mask bytes and WCS against this public signature before emitting detections.
+    """
+    token = str(public_field.get("blind_field_token", "")).strip()
+    role = str(public_field.get("split_role", ""))
+    if not token or role != "blind_test":
+        raise ValueError("blind detection requires one public blind_test field token")
+    if str(public_field.get("data_locator_token", "")) != token:
+        raise ValueError("public data locator must be the opaque blind field token")
+    signature = public_field.get("input_signature")
+    if not isinstance(signature, Mapping) or signature.get("field_id") != token:
+        raise ValueError("public input_signature.field_id must equal the opaque blind field token")
+    exposure_ids = signature.get("exposure_ids")
+    if (
+        not isinstance(exposure_ids, list) or not exposure_ids
+        or any(not isinstance(value, str) or not value.startswith("exposure_") for value in exposure_ids)
+        or len(set(exposure_ids)) != len(exposure_ids)
+    ):
+        raise ValueError("blind input_signature must contain unique opaque exposure tokens")
+    try:
+        radius = float(public_field.get("match_radius"))
+    except (TypeError, ValueError):
+        raise ValueError("public blind field must provide a positive match_radius") from None
+    if not math.isfinite(radius) or radius <= 0:
+        raise ValueError("public blind field match_radius must be finite and positive")
+
+    records = build_four_baseline_records(
+        state,
+        signature,
+        sky_detector_twin_detections=sky_detector_twin_detections,
+        score_thresholds=score_thresholds,
+        snr_threshold=snr_threshold,
+        forensics_thresholds=forensics_thresholds,
+    )
+    if records["baseline_contract"]["verified_exposure_ids"] != sorted(exposure_ids):
+        raise ValueError("prepared state exposure IDs do not match the public opaque exposure tokens")
+    if records["baseline_contract"]["verified_mask_sha256"] != str(signature["mask_sha256"]).lower():
+        raise ValueError("prepared state mask checksum does not match the public blind mask commitment")
+    if records["baseline_contract"]["verified_pixel_wcs_sha256"] != str(signature.get("pixel_wcs_sha256", "")).lower():
+        raise ValueError("prepared state WCS checksum does not match the public blind signature")
+
+    # The output schema intentionally has no original field ID, truth catalogue,
+    # private split group, or source identity. Only the blind token is retained.
+    return {
+        "blind_field_token": token,
+        "input_signature": dict(signature),
+        "match_radius": radius,
+        "methods": records["methods"],
+        "baseline_contract": records["baseline_contract"],
+    }
