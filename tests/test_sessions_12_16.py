@@ -807,3 +807,38 @@ def test_population_rate_does_not_truncate_negative_control_fluctuations_per_fie
     )
     assert signed_total.item() == pytest.approx(12.0)
     assert np.maximum(signed_total, 0.0).item() == pytest.approx(12.0)
+
+
+def test_observation_planner_rejects_time_outside_verified_external_window():
+    from chronos_addons.planner import plan_observations
+
+    candidate = {
+        "time": "2027-02-01T00:45:00Z",
+        "predictions": {"h1": {"mean": 0.0, "sigma": 0.1},
+                        "h2": {"mean": 4.0, "sigma": 0.1}},
+        "feasibility": {
+            "status": "verified", "feasible": True,
+            "source_uri": "https://example.org/visibility-report/123",
+            "checked_utc": "2026-11-25T10:00:00Z",
+            "window_start_utc": "2027-02-01T00:00:00Z",
+            "window_end_utc": "2027-02-01T00:30:00Z",
+        },
+    }
+    with pytest.raises(ValueError, match="outside the externally verified feasibility window"):
+        plan_observations([candidate])
+
+
+def test_observation_planner_rejects_verified_feasibility_without_a_bounded_window():
+    from chronos_addons.planner import plan_observations
+
+    candidate = {
+        "time": "2027-02-01T00:10:00Z",
+        "predictions": {"h1": {"mean": 0.0}, "h2": {"mean": 4.0}},
+        "feasibility": {
+            "status": "verified", "feasible": True,
+            "source_uri": "https://example.org/visibility-report/123",
+            "checked_utc": "2026-11-25T10:00:00Z",
+        },
+    }
+    with pytest.raises(ValueError, match="requires both window_start_utc and window_end_utc"):
+        plan_observations([candidate])
