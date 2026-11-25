@@ -140,10 +140,19 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
         primary = science[0].header
         release = str(primary.get("RELEASE", "")).lower()
         if not release:
-            path_lower = str(science_path).lower()
-            release = "dr1" if "/dr1/" in path_lower else "qr3" if "/qr3/" in path_lower else "unknown"
+            # Prefer the original archive URI; local CI artifact paths do not
+            # encode the data release and must not determine science metadata.
+            release_basis = str(science_uri or science_path).lower()
+            release = "dr1" if "/dr1/" in release_basis else "qr3" if "/qr3/" in release_basis else "unknown"
+        filename_match = __import__("re").search(
+            r"-v[0-9.]+-(20[0-9]{2}-[0-9]{3})\\.fits$",
+            science_path.name, __import__("re").I)
+        science_processing_date = str(
+            image_hdu.header.get("PROCDATE", primary.get("PROCDATE", ""))).strip() or (
+                filename_match.group(1) if filename_match else None)
         expected_psf = "EPSF" if release in {"dr1", "qr3"} else "PSF" if release == "qr2" else None
         report["release"] = release
+        report["science_processing_date"] = science_processing_date
         report["checks"]["release_psf_family"] = {
             "status": "pass" if expected_psf and expected_psf in names else "review_required",
             "expected_hdu": expected_psf,
@@ -173,6 +182,19 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
                     "unique_values_sample": np.unique(array)[:32].tolist(),
                     "raw_mp_header_cards": mp_cards,
                     "header_flag_dictionary_present": bool(mp_cards)}
+                # Some DR1 files omit MP_* cards. The repository's named
+                # flag policy is transcribed from the official supplement's
+                # flag-bit table and is recorded separately from the header.
+                try:
+                    from research_discovery.spherex.flag_policy import FLAG_BITS
+                    report["flags"]["documented_flag_dictionary_present"] = bool(FLAG_BITS)
+                    report["flags"]["documented_flag_dictionary"] = {
+                        "source": "SPHEREx Explanatory Supplement, Level-2 flag definitions",
+                        "module": "research_discovery.spherex.flag_policy",
+                        "bit_positions": FLAG_BITS,
+                    }
+                except Exception:
+                    report["flags"]["documented_flag_dictionary_present"] = False
                 report["checks"]["flags_integer_type"] = {
                     "status": "pass" if array.dtype.kind in "ui" else "fail"}
 
@@ -212,11 +234,14 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
         cwave_hdu = calibration["CWAVE"] if "CWAVE" in cal_names else calibration[0]
         cal_header = cwave_hdu.header
         cal_primary = calibration[0].header
+        cal_uri_lower = str(spectral_wcs_uri or spectral_wcs_path).lower()
+        cal_release = "dr1" if "/dr1/" in cal_uri_lower else "qr3" if "/qr3/" in cal_uri_lower else None
+        cal_date_match = __import__("re").search(r"-(20[0-9]{2}-[0-9]{3})/", cal_uri_lower)
         report["spectral_wcs_metadata"] = {
-            "release": str(cal_primary.get("RELEASE", cal_header.get("RELEASE", ""))).strip() or None,
+            "release": str(cal_primary.get("RELEASE", cal_header.get("RELEASE", ""))).strip() or cal_release,
             "detector": str(cal_header.get("DETECTOR", cal_primary.get("DETECTOR", ""))).strip() or None,
             "pipeline_version": str(cal_header.get("VERSION", cal_primary.get("VERSION", ""))).strip() or None,
-            "processing_date": str(cal_header.get("PROCDATE", cal_primary.get("PROCDATE", ""))).strip() or None,
+            "processing_date": str(cal_header.get("PROCDATE", cal_primary.get("PROCDATE", ""))).strip() or (cal_date_match.group(1) if cal_date_match else None),
             "coordinate_frame": "native_detector" if (
                 cal_names.count("CWAVE") == 1 and cal_names.count("CBAND") == 1 and
                 calibration["CWAVE"].data is not None and calibration["CBAND"].data is not None and
