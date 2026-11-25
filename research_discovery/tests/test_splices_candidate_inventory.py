@@ -76,13 +76,29 @@ def _fixture(root):
              "time_bounds_lower": "60001.0", "time_bounds_upper": "60001.1"},
         ],
     }
+    full_region_exposures = {
+        "Taurus_Auriga": [
+            {"planeid": "plane-1", "uri": "ibe/one.fits", "energy_bandpassname": "SPHEREx-D2",
+             "time_bounds_lower": "60000.0", "time_bounds_upper": "60000.1"},
+            {"planeid": "plane-2", "uri": "ibe/two.fits", "energy_bandpassname": "SPHEREx-D1",
+             "time_bounds_lower": "60001.0", "time_bounds_upper": "60001.1"},
+        ],
+        "Perseus_NGC1333": [
+            {"planeid": "plane-1", "uri": "ibe/one.fits", "energy_bandpassname": "SPHEREx-D2",
+             "time_bounds_lower": "60000.0", "time_bounds_upper": "60000.1"},
+            {"planeid": "plane-2", "uri": "ibe/two.fits", "energy_bandpassname": "SPHEREx-D1",
+             "time_bounds_lower": "60001.0", "time_bounds_upper": "60001.1"},
+        ],
+    }
     region_results = []
     for region in regions:
         name = region["name"]
         _write_csv(root / name / "dr1_level2_exposures.csv", exposures[name])
+        _write_csv(root / name / "dr1_level2_exposures_full_region.csv", full_region_exposures[name])
         region_results.append({
             "region": region,
             "counts": {"catalogue_rows_returned": 10},
+            "optional_query_errors": {},
         })
 
     report = {
@@ -129,6 +145,13 @@ def test_inventory_report_counts_label_patterns_duplicate_ids_and_region_exposur
     assert overlap["unique_plane_ids_across_regions"] == 2
     assert overlap["plane_ids_in_multiple_region_queries"] == 1
     assert overlap["plane_id_region_memberships"]["plane-1"] == ["Perseus_NGC1333", "Taurus_Auriga"]
+
+    full_overlap = report["cross_region_full_region_exposure_overlap"]
+    assert full_overlap["exposure_rows_across_regions"] == 4
+    assert full_overlap["unique_plane_ids_across_regions"] == 2
+    assert full_overlap["plane_ids_in_multiple_region_queries"] == 2
+    assert full_overlap["query_semantics"] == "region_circle_intersects_exposure_polygon"
+    assert full_overlap["plane_id_region_memberships"]["plane-2"] == ["Perseus_NGC1333", "Taurus_Auriga"]
 
 
 def test_input_report_hash_and_candidate_row_count_are_fail_closed(tmp_path):
