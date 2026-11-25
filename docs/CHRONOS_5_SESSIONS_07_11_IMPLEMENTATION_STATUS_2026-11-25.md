@@ -84,9 +84,17 @@ Workflow [#17 / run 45637115746](https://github.com/PRITIDIPADAS/nakshatra-chron
 
 This completes the exploratory six-field injection/recovery workflow only. Gain-to-electron conversion still requires independent instrument/calibration review, and the Session 07/08 four-baseline blind benchmark remains unsatisfied. Lupus III is retained as a critical adverse result: 0/20 recoveries at each of 105.579, 211.158 and 422.317 µJy, including twice its local nominal 5σ reference. Investigate local background, masks, ePSF/matched-filter response and detection behaviour before drawing a sensitivity conclusion.
 
-## Current repair-branch CI — 25 November 2026
+## Latest completed CI and real-field evidence — 25 November 2026
 
-Workflow [#888 / run 45641583358](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45641583358) passed **314 tests with 7 warnings**, including both JavaScript syntax checks. Its M101 real-field job also completed archive retrieval, native compatibility audit, machine-readable evidence validation and artifact upload. This validates code and evidence handling, not human calibration review or blind scientific acceptance.
+The latest fully completed combined test/M101 workflow recorded for this branch is [run 45652295910](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45652295910), commit `f9f315bf35fcb0a46a69cc30b7c4a434ed165e1d`. The test job passed **316 tests with 7 warnings**; both JavaScript syntax checks passed. Its M101 real-field job completed archive retrieval, native compatibility validation, machine-readable evidence validation and artifact upload. Artifact 15041901578 is 91,213,914 bytes with ZIP SHA-256 `7f0451a82e979d1abd3c77e9a433f44fefd3e51a09470fd18a99a8f0e7b20e4f`. The companion PR run [45652301839](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45652301839) passed **316 tests with 12 warnings** and both JavaScript checks.
+
+The M101 record confirms the science-file hash and byte count, exact spectral-WCS and absolute-gain provenance, a compatible native-MEF audit and three 20-source Jy injection bins. The source-Poisson/electron conversion remains pending independent human instrument-calibration review.
+
+## Strict six-region calibrated-Jy execution — 25 November 2026
+
+The latest strict six-region run is [workflow #19 / run 45639895735](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45639895735). The runner's final aggregate gate reports six requested, six returned, six completed and zero incomplete fields. The field names/roles, per-field eligibility checks, summary/science SHA-256 values, unique observation IDs and unique native science hashes passed. The recomputed aggregate report digest is `26e237fec2b0e1f5571dd5e527c009a5a2d3de44186c4a240bf63ac4b9bb64e6`. Artifact 15036382990 has ZIP SHA-256 `09978b42c6d626f65fe385d7d004c4a5d120ac7302ae06d8831f231e3dc65a35`.
+
+This is a fresh exploratory six-field run, stronger than the earlier post-hoc revalidation distinction. It remains non-blind, one D2 exposure per region and not a four-method comparison. Lupus III's 0/20 recovery in all three bins remains an adverse anomaly. All six gain-to-electron derivations still require independent calibration review.
 
 ## Six-region archive-footprint evidence — 25 November 2026
 
