@@ -214,9 +214,11 @@ async function planner(){
   const sensitivity=Object.entries(x.prior_sensitivity||{}).map(([label,result])=>
    '<div class="counter-row"><span>'+esc(label)+'<small>Top-ranked: '+esc(result.top_ranked_time||"n/a")+'</small></span><b>'+result.ranked_candidates.length+' candidates</b></div>'
   ).join("");
+  const rejected=(x.rejected||[]).map(row=>'<div class="spectral-source-row"><span>'+esc(row.time||"Unnamed candidate")+'<small>'+esc(row.reason||"Filtered by declared constraints")+'</small></span><b>Not ranked</b></div>').join("");
   $("plan-result").innerHTML='<div class="counter-row"><span>Recommendation status</span><b>'+esc(x.recommendation_status)+'</b></div>'+
    '<div class="planner-ranked-list">'+rows+'</div>'+
    (sensitivity?'<div class="planner-sensitivity"><b>Prior sensitivity</b>'+sensitivity+'</div>':"")+
+   (rejected?'<div class="planner-sensitivity"><b>Excluded candidates</b>'+rejected+'</div>':"")+
    '<p class="panel-note">'+esc(x.limitations.join(" "))+'</p>';
  }catch(e){error("plan-result",e);}
 }
