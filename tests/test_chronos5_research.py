@@ -322,6 +322,16 @@ def test_blind_split_can_keep_related_observation_periods_together():
     }
     assert roles["FIELD-A-EARLY"] == roles["FIELD-A-LATE"]
     assert sum(value == "blind_test" for value in roles.values()) >= 1
+    public_by_token = {
+        row["blind_field_token"]: row
+        for row in blind["run_manifest"]["fields"]
+    }
+    private_by_id = {row["field"]["field_id"]: row for row in private["fields"]}
+    group_token_a1 = public_by_token[private_by_id["FIELD-A-EARLY"]["blind_field_token"]]["independence_group_token"]
+    group_token_a2 = public_by_token[private_by_id["FIELD-A-LATE"]["blind_field_token"]]["independence_group_token"]
+    group_token_b = public_by_token[private_by_id["FIELD-B-EARLY"]["blind_field_token"]]["independence_group_token"]
+    assert group_token_a1 == group_token_a2
+    assert group_token_a1 != group_token_b
 
 
 def test_pixel_forward_marks_channel_components_and_preserves_source_peak():
@@ -582,3 +592,65 @@ def test_snr_adapter_collects_below_five_sigma_when_requested_thresholds_include
     )
     assert scores == [12.0, 3.0]
     assert records["baseline_contract"]["snr_detection_floor"] == 1.0
+
+
+
+def test_field_bootstrap_resamples_related_periods_as_one_independent_group():
+    from chronos_benchmark.runner import compare_benchmark_package
+    package = _package()
+    for field in package["fields"]:
+        field["independence_group_id"] = "SAME-SKY-FIELD"
+    report = compare_benchmark_package(package, bootstrap_draws=100, seed=71)
+    bootstrap = report["aggregate"]["snr_only"]["field_bootstrap_by_threshold"]["5.0"]
+    assert bootstrap["independent_group_count"] == 1
+    assert bootstrap["draws"] == 0
+    assert bootstrap["intervals_95"] is None
+
+
+def test_benchmark_field_record_assembles_truth_split_and_four_methods():
+    from types import SimpleNamespace
+    from chronos_benchmark.adapters import (
+        build_benchmark_field_record, field_mask_sha256, reference_wcs_sha256,
+    )
+    from chronos_benchmark.runner import truth_catalogue_digest
+
+    class Header:
+        def tostring(self, **kwargs):
+            return "FIELD-RECORD-WCS"
+
+    class ReferenceWCS:
+        def to_header(self, relax=True):
+            return Header()
+
+    truth = [{"truth_id": "TRUTH-1", "x": 7.0, "y": 7.0}]
+    state = {
+        "exps": [SimpleNamespace(id="X1", det=2), SimpleNamespace(id="X2", det=2)],
+        "ref": ReferenceWCS(),
+        "DEEPS": np.pad(np.array([[9.0]]), ((7, 7), (7, 7))),
+        "RB": np.zeros((2, 15, 15), dtype=bool),
+        "IN": np.ones((2, 15, 15), dtype=bool),
+        "R": np.zeros((2, 15, 15), dtype=float),
+        "MAP": [],
+        "cands": [],
+    }
+    signature = {
+        "field_id": "FIELD-RECORD",
+        "dataset_class": "synthetic",
+        "exposure_ids": ["X1", "X2"],
+        "mask_sha256": field_mask_sha256(state),
+        "truth_catalogue_sha256": truth_catalogue_digest(truth),
+        "coordinate_frame": "sky",
+        "coordinate_unit": "pixel",
+        "pixel_wcs_sha256": reference_wcs_sha256(state["ref"]),
+    }
+    thresholds = {name: [5.0, 1.0] for name in (
+        "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
+    )}
+    field = build_benchmark_field_record(
+        state, signature, truth, split="blind_test", match_radius=1.5,
+        score_thresholds=thresholds, sky_detector_twin_detections=[],
+    )
+    assert field["split"] == "blind_test"
+    assert field["match_radius"] == 1.5
+    assert field["truth_catalogue"] == truth
+    assert set(field["methods"]) == set(thresholds)
