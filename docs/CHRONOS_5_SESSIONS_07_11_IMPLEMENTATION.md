@@ -183,7 +183,7 @@ The public manifest includes a checksum of the encrypted truth store and a key f
 
 ### Freeze the exact run configuration
 
-Create a JSON configuration containing all method thresholds, matching radii, source and calibration choices, noise assumptions, model version, seeds, control recipes and exclusions. Do not tune on held-out fields. Freeze it against the exact public manifests and source commit:
+Create a JSON configuration containing all four method threshold arrays, the matched operating-point target, matching radii keyed by opaque field token, source and calibration choices, noise assumptions, model version, seeds, control recipes and exclusions. The three benchmark policy fields are mandatory: score_thresholds, matched_target and matching_radii_by_field. Do not tune on held-out fields. Freeze it against the exact public manifests and source commit:
 
 ~~~bash
 python scripts/chronos_benchmark.py freeze \
@@ -194,7 +194,7 @@ python scripts/chronos_benchmark.py freeze \
   --output benchmark/blind_public/frozen_configuration.json
 ~~~
 
-The returned configuration checksum is the run seal. The detector-run JSON must carry the same configuration object, its checksum, dataset digest, source commit, public field tokens, exact method threshold lists, matched targets, and the four method records for every held-out token. It must contain each held-out token once and no development tokens. Every method must carry the exact public signature used by that field.
+The returned configuration checksum is the run seal. The detector-run JSON must carry the same configuration object, its checksum, dataset digest, source commit, full public run manifest, exact method threshold lists, matched targets, matching_radii_by_field and the four method records for every held-out token. Unblinding recomputes the public-manifest digest and verifies that the separately reported thresholds, matched target and radii equal the frozen configuration. It must contain each held-out token once and no development tokens. Every method must carry the exact public signature used by that field.
 
 ### Unblind only after sealing
 
@@ -229,7 +229,7 @@ One call models a small synthetic exposure. It needs a 2-D image shape, MJD, exp
 
 The result returns inspectable maps for source electrons by wavelength, total source electrons, background, dark current, fixed detector contribution, expected total, Poisson realization, read-noise realization, measured electrons, variance, missing-pixel mask, effective wavelength and unexplained residual. It also returns PSF, wavelength response, flat field, noise maps, nuisance settings and parameter provenance.
 
-All transformations state their units. Source motion is evaluated at the exposure MJD. The PSF kernel is normalized and shifted at sub-pixel positions with no wraparound. Source, background and dark-current photon counts enter the Poisson draw; read noise is drawn separately as Gaussian noise. Flag bits and an explicit missing-pixel mask are excluded from measurements. Input arrays are not mutated.
+All transformations state their units. Source motion is evaluated at the exposure MJD. The PSF kernel is normalized and shifted at sub-pixel positions with no wraparound. Source, background and dark-current photon counts enter the Poisson draw; the fixed detector term is added deterministically and does not receive photon shot noise; read noise is drawn separately as Gaussian noise. The reported variance includes photon-generated counts and read-noise variance, not the deterministic fixed term. Flag bits and an explicit missing-pixel mask are excluded from measurements. Input arrays are not mutated.
 
 Parameter provenance supports measured, calibrated, assumed, illustrative and placeholder. A measured parameter requires a source URI; a calibrated parameter requires a calibration ID. If any component remains assumed or placeholder, calibration_ready is false. This is a hard warning, not a cosmetic label.
 
