@@ -45,3 +45,16 @@ main{max-width:1480px;margin:0 auto;padding:0 5vw}.hero{min-height:490px;padding
 .spectral-source-row small{display:block;color:var(--dim);font-size:9px;margin-top:2px}
 .spectral-source-row b{font-variant-numeric:tabular-nums;color:var(--gold)}
 @media(max-width:480px){.spectral-cell-metrics{grid-template-columns:1fr 1fr}.spectral-cell-heading{align-items:flex-start;flex-direction:column}}
+
+.planner-candidate{padding:9px 0;border-bottom:1px solid rgba(126,159,167,.18)}
+.planner-candidate>small{display:block;color:var(--muted);font-size:9px;margin:5px 2px}
+.planner-candidate .planner-feasibility{font-weight:700;letter-spacing:.08em;color:var(--gold)}
+.planner-candidate .planner-feasibility:has(+small a){color:var(--mint)}
+.planner-candidate a{color:var(--mint);text-decoration:underline;text-underline-offset:2px}
+.planner-sensitivity{margin-top:15px;padding-top:12px;border-top:1px solid var(--line)}
+.planner-sensitivity>b{display:block;color:var(--mint);font-size:10px;letter-spacing:.1em;margin-bottom:7px}
+.identity-match{padding:8px 0 10px;border-bottom:1px solid rgba(126,159,167,.2)}
+.identity-match>p{font-size:9px;color:var(--muted);margin:4px 0}
+.identity-match>small{font-size:9px;color:var(--dim)}
+#export-investigation-package{margin-top:8px}
+#reproduction-command{min-height:74px}
