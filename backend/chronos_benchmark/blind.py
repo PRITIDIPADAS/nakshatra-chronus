@@ -393,7 +393,7 @@ def build_blind_detection_run(
             raise ValueError("blind field records must be objects")
         leaked_paths = _private_handoff_paths(record)
         if leaked_paths:
-            raise ValueError("blind field record contains nested private fields: " + ", ".join(leaked_paths[:8]))
+            raise ValueError("blind field record contains nested private fields; forbidden private fields: " + ", ".join(leaked_paths[:8]))
         token = str(record.get("blind_field_token", "")).strip()
         if token not in blind_tokens:
             raise ValueError(f"unknown or non-holdout blind field token: {token}")
