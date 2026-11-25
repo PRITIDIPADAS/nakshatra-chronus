@@ -147,3 +147,17 @@ The run-#38 archive report contains 6,214 SIAv2 Level-2 image products: 4,432 DR
 ## DR1 All-Sky Cube metadata inventory
 
 Workflow #38 queried spherex_dr1_cube separately for each of the six predeclared POS-circle regions. It returned 32 distinct archive product metadata records: 8 Taurus/Auriga, 4 Perseus, 6 Orion A, 4 Rho Ophiuchi, 4 Lupus III and 6 high-latitude control. Each region query completed below its 20,000-row cap. This is a complete metadata result for those six cones, not a complete all-sky inventory. The product has a nominal 102 channels over 0.75–5.0 μm. Native cube data were not downloaded and the records are not temporal exposures.
+
+
+## Population-gate hardening — 25 November 2026
+
+The Session 19 coverage/rate path has additional fail-closed checks on the current feature branch:
+
+- A YSO candidate must have validated CWAVE/CBAND provenance for each accepted measurement, explicit measurement IDs and flux units, and no duplicate observation/wavelength/calibration-group rows.
+- Feature samples and both continuum sidebands must be present in the same repeated epochs. Aggregate feature counts from one epoch and continuum counts from other epochs can no longer satisfy the cadence gate.
+- Reusing one source identity across different fields marks those field/source records ineligible; a repeated catalogue source is not counted twice as an independent population member.
+- A population rate cannot subtract raw null-control counts from a science-field count without an explicit positive `null_control_to_science_exposure_ratio`. The rate estimator scales the control exposure using a Gamma–Poisson predictive draw and records the ratio and expected control count on the science exposure.
+- The rate estimator, when called directly, skips records not labelled real or not explicitly marked as independent, as well as fields without a null-control ID and exposure ratio.
+
+These checks are tested using synthetic fixtures with synthetic archive/provenance URLs and fake hashes. They are software regressions, not real measurements or custodian attestations. The ratio still has to be derived from documented control/science solid-angle and time coverage, and the scalar completeness model still does not replace a multidimensional selection function. The new population-gate CI for current head `63b800601a3a24372bf9426099d094eeba24bda9` was pending at the moment this note was edited.
+
