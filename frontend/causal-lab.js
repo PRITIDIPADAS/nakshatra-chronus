@@ -1,7 +1,8 @@
 (() => {
 "use strict";
 const $=id=>document.getElementById(id);
-const state={observations:[],analysis:null,manifest:null,evidenceGraph:null,apiReady:false,spectral:null,spectralSourceRows:[],selectedSpectralCell:null};
+const state={observations:[],analysis:null,manifest:null,evidenceGraph:null,apiReady:false,spectral:null,spectralSourceRows:[],selectedSpectralCell:null,selectedObservationIndex:0};
+const shortlistKey="chronosCandidateShortlist:v1";
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=(v,n=3)=>Number.isFinite(Number(v))?Number(v).toFixed(n):"n/a";
 const pretty=x=>JSON.stringify(x,null,2);
@@ -20,22 +21,130 @@ async function status(){
 }
 function parse(id,label){try{return JSON.parse($(id).value);}catch(e){throw new Error(label+" JSON: "+e.message);}}
 function pair(id,label){const a=$(id).value.split(",").map(Number);if(a.length!==2||a.some(x=>!Number.isFinite(x))||a[0]>=a[1])throw new Error(label+" needs two increasing values.");return a;}
+function validObservationRows(){return state.observations.filter(row=>row.valid!==false);}
 function updateRows(rows){
- state.observations=rows;$("observations-json").value=pretty(rows);
- const ok=rows.filter(x=>x.valid!==false),times=ok.map(x=>Number(x.mjd));
- $("data-class").textContent=ok.some(x=>String(x.calibration_group||"").startsWith("SYNTHETIC"))?"Synthetic fixture":"Supplied measurements";
- $("observation-count").textContent=ok.length;$("time-baseline").textContent=times.length?fmt(Math.max(...times)-Math.min(...times),1)+" d":"—";
- $("wave-count").textContent=new Set(ok.map(x=>x.wavelength_um)).size;
+ state.observations=Array.isArray(rows)?rows:[];
+ $("observations-json").value=pretty(state.observations);
+ const ok=validObservationRows(),times=ok.map(row=>Number(row.mjd)).filter(Number.isFinite);
+ $("data-class").textContent=ok.some(row=>String(row.calibration_group||"").startsWith("SYNTHETIC"))?"Synthetic fixture":"Supplied measurements";
+ $("observation-count").textContent=ok.length;
+ $("time-baseline").textContent=times.length?fmt(Math.max(...times)-Math.min(...times),1)+" d":"—";
+ $("wave-count").textContent=new Set(ok.map(row=>row.wavelength_um)).size;
+ const sharedId=new URLSearchParams(window.location.search).get("obs");
+ const sharedIndex=sharedId?ok.findIndex(row=>String(row.observation_id??row.candidate_id??"")===sharedId):-1;
+ if(sharedIndex>=0)state.selectedObservationIndex=sharedIndex;
+ else if(state.selectedObservationIndex>=ok.length)state.selectedObservationIndex=Math.max(0,ok.length-1);
  track("sky-chart",ok,"sky");track("detector-chart",ok,"detector");
+ drawTimeline(ok);renderSelectedObservation(ok);renderShortlist();
 }
 function track(id,rows,prefix){
- const c=$(id),g=c.getContext("2d"),w=c.width,h=c.height;g.clearRect(0,0,w,h);g.fillStyle="#091a25";g.fillRect(0,0,w,h);if(!rows.length)return;
- const xs=rows.map(r=>Number(r[prefix+"_x"])),ys=rows.map(r=>Number(r[prefix+"_y"]));
+ const canvas=$(id),g=canvas.getContext("2d"),w=canvas.width,h=canvas.height;
+ g.clearRect(0,0,w,h);g.fillStyle="#091a25";g.fillRect(0,0,w,h);
+ const pts=rows.map((row,index)=>({index,x:Number(row[prefix+"_x"]),y:Number(row[prefix+"_y"])}))
+  .filter(point=>Number.isFinite(point.x)&&Number.isFinite(point.y));
+ if(!pts.length){g.fillStyle="#91a8ab";g.font="11px sans-serif";g.fillText("No valid "+prefix+" coordinates supplied",18,28);return;}
+ const xs=pts.map(point=>point.x),ys=pts.map(point=>point.y);
  const ax=Math.min(...xs),bx=Math.max(...xs),ay=Math.min(...ys),by=Math.max(...ys);
  const sx=Math.max(bx-ax,1e-8),sy=Math.max(by-ay,1e-8);
- const pts=rows.map(r=>({x:22+(r[prefix+"_x"]-ax)/sx*(w-42),y:h-22-(r[prefix+"_y"]-ay)/sy*(h-40)}));
- g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y));g.strokeStyle=prefix==="sky"?"#8fe0cd":"#e7bd86";g.stroke();
- pts.forEach(p=>{g.beginPath();g.arc(p.x,p.y,3.3,0,Math.PI*2);g.fillStyle=prefix==="sky"?"#8fe0cd":"#e7bd86";g.fill();});
+ const mapped=pts.map(point=>({...point,px:22+(point.x-ax)/sx*(w-42),py:h-22-(point.y-ay)/sy*(h-40)}));
+ g.beginPath();mapped.forEach((point,i)=>i?g.lineTo(point.px,point.py):g.moveTo(point.px,point.py));
+ g.strokeStyle=prefix==="sky"?"#8fe0cd":"#e7bd86";g.lineWidth=1.4;g.stroke();
+ mapped.forEach(point=>{
+  const selected=point.index===state.selectedObservationIndex;
+  g.beginPath();g.arc(point.px,point.py,selected?7:3.3,0,Math.PI*2);
+  g.fillStyle=prefix==="sky"?"#8fe0cd":"#e7bd86";g.fill();
+  if(selected){g.beginPath();g.arc(point.px,point.py,10,0,Math.PI*2);g.strokeStyle="#f1d7a6";g.lineWidth=1.5;g.stroke();}
+ });
+}
+function drawTimeline(rows){
+ const canvas=$("observation-timeline"),g=canvas.getContext("2d"),w=canvas.width,h=canvas.height;
+ g.clearRect(0,0,w,h);g.fillStyle="#081923";g.fillRect(0,0,w,h);
+ if(!rows.length){g.fillStyle="#91a8ab";g.font="11px sans-serif";g.fillText("No valid observations to plot",18,34);return;}
+ const times=rows.map(row=>Number(row.mjd)),lo=Math.min(...times),hi=Math.max(...times),span=Math.max(hi-lo,1e-9);
+ const left=28,right=w-28,base=43;
+ g.strokeStyle="rgba(143,224,205,.35)";g.lineWidth=1;g.beginPath();g.moveTo(left,base);g.lineTo(right,base);g.stroke();
+ rows.forEach((row,index)=>{
+  const x=left+(Number(row.mjd)-lo)/span*(right-left),selected=index===state.selectedObservationIndex;
+  const synthetic=String(row.calibration_group||"").startsWith("SYNTHETIC");
+  g.strokeStyle=selected?"#f1d7a6":synthetic?"#e7bd86":"#8fe0cd";
+  g.lineWidth=selected?2:1;g.beginPath();g.moveTo(x,base-7);g.lineTo(x,base+7);g.stroke();
+  g.beginPath();g.arc(x,base,selected?6:3.5,0,Math.PI*2);g.fillStyle=g.strokeStyle;g.fill();
+  if(selected){g.fillStyle="#f1d7a6";g.font="10px sans-serif";g.fillText(String(row.observation_id??("row "+index)).slice(0,24),Math.min(Math.max(left,x-24),right-110),16);}
+ });
+ g.fillStyle="#728d93";g.font="9px sans-serif";g.fillText(fmt(lo,4)+" MJD",left,h-8);
+ const rightLabel=fmt(hi,4)+" MJD";g.fillText(rightLabel,Math.max(left,right-g.measureText(rightLabel).width),h-8);
+}
+function renderSelectedObservation(rows){
+ const panel=$("selected-observation-details");
+ if(!rows.length){panel.innerHTML='<div class="empty-state">No valid observation is selected.</div>';return;}
+ const index=Math.max(0,Math.min(state.selectedObservationIndex,rows.length-1)),row=rows[index];
+ const cell=(label,value)=>'<div><small>'+esc(label)+'</small><b>'+esc(value??"n/a")+'</b></div>';
+ panel.innerHTML=
+  '<div class="selected-observation-heading"><b>Selected exposure '+(index+1)+' / '+rows.length+'</b><span>'+esc(row.observation_id??row.candidate_id??("input row "+index))+'</span></div>'+
+  '<div class="selected-observation-grid">'+
+  cell("Epoch MJD",fmt(row.mjd,5))+cell("Wavelength",fmt(row.wavelength_um,5)+" µm")+
+  cell("Flux",fmt(row.flux,5))+cell("Uncertainty",fmt(row.sigma,5))+
+  cell("Detector",row.detector_id)+cell("Calibration group",row.calibration_group)+
+  cell("Sky position",fmt(row.sky_x,3)+", "+fmt(row.sky_y,3))+
+  cell("Detector position",fmt(row.detector_x,3)+", "+fmt(row.detector_y,3))+
+  '</div><p class="panel-note">The same exposure is highlighted in both coordinate plots and on the time axis. Coordinate values must remain traceable to the supplied measurement pipeline.</p>';
+}
+function selectObservation(index){
+ const rows=validObservationRows();
+ if(!rows.length)return;
+ state.selectedObservationIndex=Math.max(0,Math.min(rows.length-1,index));
+ drawTimeline(rows);track("sky-chart",rows,"sky");track("detector-chart",rows,"detector");renderSelectedObservation(rows);
+}
+function readShortlist(){
+ try{const rows=JSON.parse(localStorage.getItem(shortlistKey)||"[]");return Array.isArray(rows)?rows:[];}
+ catch(_){return [];}
+}
+function writeShortlist(rows){
+ try{localStorage.setItem(shortlistKey,JSON.stringify(rows));}
+ catch(_){$("shortlist-list").textContent="Local storage is unavailable in this browser.";}
+}
+function renderShortlist(){
+ const panel=$("shortlist-list");
+ if(!panel)return;
+ const items=readShortlist();
+ panel.innerHTML=items.length?items.map(item=>
+  '<div class="shortlist-item"><button class="shortlist-select" type="button" data-shortlist-id="'+esc(item.observation_id)+'">'+esc(item.observation_id)+'</button><small>MJD '+fmt(item.mjd,4)+' · '+fmt(item.wavelength_um,4)+' µm · '+esc(item.detector_id||"detector n/a")+'</small><button class="shortlist-remove" type="button" data-remove-id="'+esc(item.observation_id)+'" aria-label="Remove '+esc(item.observation_id)+' from shortlist">×</button></div>'
+ ).join(""):'<p class="panel-note">Your saved exposure shortlist is stored locally in this browser.</p>';
+}
+function saveSelectedObservation(){
+ const rows=validObservationRows(),row=rows[state.selectedObservationIndex];
+ if(!row){$("shortlist-status").textContent="No valid observation is selected.";return;}
+ const id=String(row.observation_id??row.candidate_id??("row-"+state.selectedObservationIndex));
+ const items=readShortlist();
+ if(items.some(item=>String(item.observation_id)===id)){$("shortlist-status").textContent="This observation is already saved.";return;}
+ items.push({observation_id:id,candidate_id:row.candidate_id??null,mjd:row.mjd,wavelength_um:row.wavelength_um,detector_id:row.detector_id,calibration_group:row.calibration_group});
+ writeShortlist(items);renderShortlist();$("shortlist-status").textContent="Saved locally to shortlist.";
+}
+async function shareSelectedObservation(){
+ const rows=validObservationRows(),row=rows[state.selectedObservationIndex];
+ if(!row){$("shortlist-status").textContent="No valid observation is selected.";return;}
+ const id=String(row.observation_id??row.candidate_id??"");
+ if(!id){$("shortlist-status").textContent="This observation has no stable ID to share.";return;}
+ const url=new URL(window.location.href);url.searchParams.set("obs",id);
+ history.replaceState(null,"",url.toString());
+ try{await navigator.clipboard.writeText(url.toString());$("shortlist-status").textContent="Share link copied. The link selects this observation when the same data set is loaded.";}
+ catch(_){$("shortlist-status").textContent="Share URL updated in the address bar; clipboard permission was unavailable.";}
+}
+function downloadObservationCsv(){
+ const rows=validObservationRows();if(!rows.length)return;
+ const columns=[...new Set(rows.flatMap(row=>Object.keys(row)))];
+ const quote=value=>'"'+String(typeof value==="object"?JSON.stringify(value):value??"").replace(/"/g,'""')+'"';
+ const csv=[columns.map(quote).join(","),...rows.map(row=>columns.map(key=>quote(row[key])).join(","))].join("\n");
+ const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+ const link=document.createElement("a");link.href=url;link.download="chronos-observations.csv";link.click();URL.revokeObjectURL(url);
+}
+function downloadCoordinatePlot(id,name){
+ const canvas=$(id);if(!canvas)return;
+ canvas.toBlob(blob=>{
+  if(!blob)return;
+  const url=URL.createObjectURL(blob),link=document.createElement("a");
+  link.href=url;link.download=name;link.click();URL.revokeObjectURL(url);
+ },"image/png");
 }
 function heat(id,matrix,options={}){
  const c=$(id),g=c.getContext("2d"),h=matrix.length,w=matrix[0]?.length||0;
@@ -348,6 +457,29 @@ $("copy-schema").addEventListener("click",copySchema);$("run-identifiability").a
 $("run-counterfactual").addEventListener("click",counterfactual);$("reconstruct-spectrum").addEventListener("click",spectral);
 $("measure-feature-evolution").addEventListener("click",featureEvolution);$("run-identity").addEventListener("click",identity);
 $("spectral-heatmap").addEventListener("click",inspectSpectralCell);
+$("observation-timeline").addEventListener("click",event=>{
+ const canvas=$("observation-timeline"),rect=canvas.getBoundingClientRect(),rows=validObservationRows();
+ if(!rows.length)return;
+ const clickX=(event.clientX-rect.left)*canvas.width/rect.width,left=28,right=canvas.width-28;
+ const times=rows.map(row=>Number(row.mjd)),lo=Math.min(...times),hi=Math.max(...times),span=Math.max(hi-lo,1e-9);
+ const target=lo+Math.max(0,Math.min(1,(clickX-left)/(right-left)))*span;
+ let nearest=0,distance=Infinity;times.forEach((time,index)=>{const d=Math.abs(time-target);if(d<distance){distance=d;nearest=index;}});
+ selectObservation(nearest);
+});
+$("observation-timeline").addEventListener("keydown",event=>{
+ if(event.key==="ArrowLeft"||event.key==="ArrowRight"){event.preventDefault();selectObservation(state.selectedObservationIndex+(event.key==="ArrowRight"?1:-1));}
+});
+$("save-selected-observation").addEventListener("click",saveSelectedObservation);
+$("share-selected-observation").addEventListener("click",shareSelectedObservation);
+$("export-observations-json").addEventListener("click",()=>download("chronos-observations.json",validObservationRows()));
+$("export-observations-csv").addEventListener("click",downloadObservationCsv);
+$("export-sky-plot").addEventListener("click",()=>downloadCoordinatePlot("sky-chart","chronos-sky-coordinates.png"));
+$("export-detector-plot").addEventListener("click",()=>downloadCoordinatePlot("detector-chart","chronos-detector-coordinates.png"));
+$("shortlist-list").addEventListener("click",event=>{
+ const select=event.target.closest("[data-shortlist-id]"),remove=event.target.closest("[data-remove-id]"),items=readShortlist();
+ if(select){const index=validObservationRows().findIndex(row=>String(row.observation_id??row.candidate_id??"")===select.dataset.shortlistId);if(index>=0)selectObservation(index);else $("shortlist-status").textContent="Saved item is not in the currently loaded observation set.";}
+ if(remove){writeShortlist(items.filter(item=>String(item.observation_id)!==remove.dataset.removeId));renderShortlist();}
+});
 $("run-plan").addEventListener("click",planner);$("run-detector").addEventListener("click",detector);
 $("run-benchmark").addEventListener("click",benchmark);$("run-baselines").addEventListener("click",baselines);
 $("run-population").addEventListener("click",population);$("create-manifest").addEventListener("click",manifest);
