@@ -17,11 +17,15 @@ from urllib.parse import urlparse
 
 import numpy as np
 from astropy.io import fits
+from astroquery.ipac.irsa import Irsa
 
 from research_discovery.spherex.fetch_native_mefs import Field, run as fetch_native
 from research_discovery.spherex.discover_calibrations import find_products
 from research_discovery.spherex.fetch_calibration import download_calibration
 from research_discovery.spherex.native_mef_audit import audit as audit_native_mef
+from research_discovery.spherex.extract_epsf_stamp import extract as extract_epsf
+from research_discovery.spherex.flag_policy import policy_mask
+from research_discovery.validation.injection_recovery import run_injection_recovery
 
 
 def sha256(path: Path) -> str:
@@ -118,6 +122,208 @@ def science_record(path: Path, uri: str):
             "image_bunit": clean(h.get("BUNIT")),
             "science_hdus": names,
         }
+
+
+def normalise_irsa_uri(value: str) -> str:
+    value = str(value).strip()
+    if value.startswith("https://"):
+        return value
+    return "https://irsa.ipac.caltech.edu/" + value.lstrip("/")
+
+
+def tap_rows(query: str) -> list[dict]:
+    result = Irsa.query_tap(query)
+    table = result.to_table() if hasattr(result, "to_table") else result
+    rows = []
+    for row in table:
+        item = {}
+        for name in table.colnames:
+            value = row[name]
+            if getattr(value, "mask", False):
+                value = None
+            elif hasattr(value, "item"):
+                try:
+                    value = value.item()
+                except Exception:
+                    value = str(value)
+            else:
+                value = str(value)
+            item[name] = value
+        rows.append(item)
+    return rows
+
+
+def resolve_archive_provenance(science_uri: str) -> dict:
+    """Resolve exact input calibration artifacts through IRSA's foreign-key table."""
+    uri_value = urlparse(science_uri).path.lstrip("/").replace("'", "''")
+    q1 = (
+        "SELECT a.uri, a.planeid, a.producttype, a.contentchecksum, "
+        "p.provenance_version, p.provenance_name, p.time_exposure, "
+        "p.energy_bandpassname, p.position_dimension_naxis1, p.position_dimension_naxis2 "
+        "FROM spherex.artifact a JOIN spherex.plane p ON p.planeid = a.planeid "
+        f"WHERE a.uri = '{uri_value}'"
+    )
+    science_rows = tap_rows(q1)
+    if len(science_rows) != 1:
+        raise RuntimeError(
+            f"Expected exactly one science artifact metadata row for {science_uri}; got {len(science_rows)}"
+        )
+    science_row = science_rows[0]
+    science_planeid = str(science_row["planeid"])
+    q2 = (
+        "SELECT inputid, outputid FROM spherex.provenance_input "
+        f"WHERE outputid = '{science_planeid}'"
+    )
+    relations = tap_rows(q2)
+    artifacts = []
+    queries = [{"query": q1, "rows": science_rows}, {"query": q2, "rows": relations}]
+    for relation in relations:
+        input_id = str(relation["inputid"])
+        q3 = (
+            "SELECT planeid, artifactid, uri, producttype, releasetype, "
+            "contenttype, contentlength, contentchecksum "
+            "FROM spherex.artifact "
+            f"WHERE planeid = '{input_id}'"
+        )
+        rows = tap_rows(q3)
+        queries.append({"query": q3, "rows": rows})
+        artifacts.extend(rows)
+    query_digest = hashlib.sha256(
+        json.dumps(queries, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    return {
+        "science": science_row,
+        "science_planeid": science_planeid,
+        "input_relations": relations,
+        "calibration_artifacts": artifacts,
+        "query_records": queries,
+        "query_sha256": query_digest,
+        "source": "NASA/IPAC IRSA TAP: spherex.provenance_input",
+        "status": "resolved" if relations and artifacts else "no_linked_calibration_inputs",
+    }
+
+
+def provenance_link_for_uri(provenance: dict, science_uri: str, calibration_uri: str) -> dict | None:
+    target = normalise_irsa_uri(calibration_uri)
+    matches = [
+        item for item in provenance.get("calibration_artifacts", [])
+        if normalise_irsa_uri(item.get("uri", "")) == target
+        and str(item.get("producttype", "")).lower() == "calibration"
+    ]
+    if len(matches) != 1:
+        return None
+    artifact = matches[0]
+    plane_id = str(artifact.get("planeid") or "")
+    relations = [
+        row for row in provenance.get("input_relations", [])
+        if str(row.get("inputid")) == plane_id
+        and str(row.get("outputid")) == str(provenance.get("science_planeid"))
+    ]
+    if len(relations) != 1:
+        return None
+    relation = relations[0]
+    return {
+        "input_table": "spherex.provenance_input",
+        "science_planeid": str(provenance["science_planeid"]),
+        "calibration_planeid": plane_id,
+        "inputid": str(relation["inputid"]),
+        "outputid": str(relation["outputid"]),
+        "artifact_planeid": str(artifact.get("planeid")),
+        "science_native_uri": science_uri,
+        "calibration_native_uri": normalise_irsa_uri(calibration_uri),
+        "calibration_producttype": artifact.get("producttype"),
+        "calibration_contentchecksum": artifact.get("contentchecksum"),
+        "query_sha256": provenance["query_sha256"],
+        "status": "verified_from_live_irsa_foreign_key_query",
+    }
+
+
+def run_calibrated_jy_injection(science_path: Path, science_uri: str,
+                                area_path: Path, area_uri: str,
+                                science_sha: str, area_sha: str,
+                                out_dir: Path) -> dict:
+    """Run deterministic Jy injections on one real DR1 MEF using native ePSF and pixel solid angle."""
+    x_ref, y_ref = 1020.25, 1019.75
+    stamp_path = out_dir / "native_epsf_stamp.fits"
+    epsf_meta = extract_epsf(
+        science_path, x=x_ref, y=y_ref, out=stamp_path, stamp_size=11
+    )
+    with fits.open(science_path, memmap=True) as science, fits.open(stamp_path) as psf_file, fits.open(area_path, memmap=True) as area_file:
+        image = np.asarray(science["IMAGE"].data, dtype=float)
+        variance = np.asarray(science["VARIANCE"].data, dtype=float)
+        flags = np.asarray(science["FLAGS"].data)
+        background = np.asarray(science["ZODI"].data, dtype=float)
+        psf = np.asarray(psf_file[0].data, dtype=float)
+        area_hdu = next(h for h in area_file if h.data is not None and np.asarray(h.data).ndim == 2)
+        area_arcsec2 = np.asarray(area_hdu.data, dtype=float)
+        area_unit = str(area_hdu.header.get("BUNIT", "")).strip().lower().replace(" ", "")
+        if area_unit not in {"arcsec2", "arcsec**2", "arcsec^2"}:
+            raise ValueError(f"Solid-angle calibration must be in arcsec^2; received {area_hdu.header.get('BUNIT')!r}")
+        if image.shape != variance.shape or image.shape != flags.shape or image.shape != area_arcsec2.shape:
+            raise ValueError("IMAGE, VARIANCE, FLAGS and solid-angle map must be pixel-aligned")
+        # 1 arcsec = pi/(180*3600) radians; square for pixel solid angle.
+        omega_sr = area_arcsec2 * (np.pi / (180.0 * 3600.0)) ** 2
+
+    flag_bits, flag_names = policy_mask("conservative-photometry")
+    half = psf.shape[0] // 2
+    x0, y0 = int(np.floor(x_ref)) - half, int(np.floor(y_ref)) - half
+    sl = (slice(y0, y0 + psf.shape[0]), slice(x0, x0 + psf.shape[1]))
+    local_var = variance[sl]
+    local_omega = omega_sr[sl]
+    local_flags = flags[sl].astype(np.uint64)
+    good = (
+        np.isfinite(local_var) & (local_var > 0)
+        & np.isfinite(local_omega) & (local_omega > 0)
+        & ((local_flags & np.uint64(flag_bits)) == 0)
+    )
+    if not good.all():
+        raise ValueError("Reference PSF footprint touches invalid variance, solid-angle or flagged pixels")
+    invvar = 1.0 / local_var
+    numerator = float(np.sum((psf ** 2) * invvar / local_omega))
+    denominator = float(np.sqrt(np.sum((psf ** 2) * invvar)))
+    if not np.isfinite(numerator) or numerator <= 0 or not np.isfinite(denominator):
+        raise ValueError("Could not derive local matched-filter flux sensitivity from the calibrated maps")
+    five_sigma_jy = 5.0 * denominator / (1e-6 * numerator)
+    levels_jy = [0.5 * five_sigma_jy, five_sigma_jy, 2.0 * five_sigma_jy]
+    result = run_injection_recovery(
+        image, variance, flags, psf,
+        flux_levels=levels_jy, n_per_level=20, snr_threshold=5.0,
+        excluded_flag_bits=flag_bits, seed=20261125,
+        min_injection_separation=16, source_exclusion_radius=7,
+        solid_angle_sr_map=omega_sr, flux_unit="Jy",
+        psf_reference_xy=(x_ref, y_ref), psf_region_radius=100.0,
+        background=background,
+    )
+    result["evaluation_type"] = "calibration-compatible real-data single-exposure injection recovery"
+    result["calibrated_flux_definition"] = "Integrated source flux density in Jy; IMAGE is MJy/sr and pixel solid angle is converted from arcsec^2 to sr."
+    result["local_reference_5sigma_sensitivity_jy"] = five_sigma_jy
+    result["injection_flux_levels_jy"] = levels_jy
+    result["science_provenance"] = {
+        "science_native_uri": science_uri, "science_sha256": science_sha,
+        "solid_angle_native_uri": area_uri, "solid_angle_sha256": area_sha,
+        "epsf_extraction": epsf_meta,
+    }
+    result["flag_policy"] = {"name": "conservative-photometry", "excluded_flag_names": list(flag_names), "excluded_flag_mask": int(flag_bits)}
+    result["limits"] = [
+        "One real M101 D2 DR1 exposure; this is not a multi-field or time-domain benchmark.",
+        "Deterministic injected source signals are added to the measured real image; source Poisson noise is not added because an independently signed electron-conversion record is absent.",
+        "The injected sources are visible to this evaluation and the seed is not held by an independent custodian; this is not a blind benchmark.",
+        "Sensitivity is computed locally from the observed VARIANCE, native ePSF and detector pixel solid-angle map.",
+        "This run evaluates the matched-filter SNR baseline only, not the complete four-baseline CHRONOS comparison.",
+    ]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output = out_dir / "calibrated_jy_injection_recovery.json"
+    output.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
+    return {
+        "status": "completed", "output": str(output),
+        "five_sigma_sensitivity_jy": five_sigma_jy,
+        "flux_levels_jy": levels_jy,
+        "flux_summary": result.get("flux_summary"),
+        "new_unmatched_peak_summary": result.get("new_unmatched_peak_summary"),
+        "n_baseline_detections": result.get("n_baseline_detections"),
+        "psf_sha256": epsf_meta.get("output_sha256"),
+        "limitations": result["limits"],
+    }
 
 
 def candidate_sort_key(uri: str, wanted_date: str | None):
