@@ -196,15 +196,18 @@ def bayesian_linear_model_comparison(
     y = np.asarray(observed, dtype=float).reshape(-1)
     for name in names:
         spec = coefficient_priors[name]
-        result = gaussian_linear_posterior_predictive(
-            y, models[name], covariance, spec["mean"], spec["covariance"],
-            draws=500, seed=1,
+        design = np.asarray(models[name], dtype=float)
+        yv, xv, cv, lc, logdet_c, m0, s0, ls0, logdet_s0 = _inputs(
+            y, design, covariance, spec["mean"], spec["covariance"]
         )
-        log_weight = math.log(float(prior_weights[names.index(name)])) + result["log_marginal_likelihood"]
+        log_evidence = _log_marginal_likelihood(
+            yv, xv, cv, lc, logdet_c, m0, s0, logdet_s0
+        )
+        log_weight = math.log(float(prior_weights[names.index(name)])) + log_evidence
         log_weights.append(log_weight)
         reports.append({
             "model": name,
-            "log_marginal_likelihood": result["log_marginal_likelihood"],
+            "log_marginal_likelihood": log_evidence,
             "prior_model_probability": float(prior_weights[names.index(name)]),
         })
     log_weights = np.asarray(log_weights, dtype=float)
