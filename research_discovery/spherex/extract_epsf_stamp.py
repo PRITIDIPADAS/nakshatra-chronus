@@ -65,8 +65,65 @@ def select_epsf_row(table, parent_x: float, parent_y: float) -> tuple[int, dict]
     return row, meta
 
 
+def sanitize_native_psf(
+    stamp: np.ndarray, *, maximum_negative_flux_fraction: float = 1e-3,
+) -> tuple[np.ndarray, dict]:
+    """Enforce a nonnegative PSF while allowing only tiny interpolation undershoot.
+
+    Photutils ImagePSF can produce a very small negative interpolation lobe
+    even though the underlying ePSF is a nonnegative intensity distribution.
+    Only negative integrated mass below the explicit tolerance is clipped.
+    Larger excursions are rejected. All clipping and renormalization is
+    returned as diagnostics; no masking or interpolation is applied to science
+    image, variance, or detector calibration data.
+    """
+    values = np.asarray(stamp, dtype=float).copy()
+    if values.ndim != 2 or not np.isfinite(values).all():
+        raise ValueError("rendered PSF must be a finite 2D array")
+    if not np.isfinite(maximum_negative_flux_fraction) or not (
+        0.0 <= maximum_negative_flux_fraction < 0.01
+    ):
+        raise ValueError("maximum_negative_flux_fraction must be in [0, 0.01)")
+    absolute_sum = float(np.sum(np.abs(values)))
+    if not np.isfinite(absolute_sum) or absolute_sum <= 0:
+        raise ValueError("rendered PSF must have positive finite absolute flux")
+    negative = values < 0
+    negative_count = int(np.count_nonzero(negative))
+    negative_flux = float(-np.sum(values[negative])) if negative_count else 0.0
+    negative_fraction = negative_flux / absolute_sum
+    if negative_fraction > maximum_negative_flux_fraction:
+        raise ValueError(
+            "rendered PSF has material negative interpolation flux "
+            f"({negative_fraction:.6g} > {maximum_negative_flux_fraction:.6g}); refusing to clip"
+        )
+    raw_sum = float(np.sum(values))
+    if negative_count:
+        values[negative] = 0.0
+    clipped_sum = float(np.sum(values))
+    if not np.isfinite(clipped_sum) or clipped_sum <= 0:
+        raise ValueError("nonnegative rendered PSF has nonpositive total flux")
+    values /= clipped_sum
+    diagnostics = {
+        "negative_pixel_count_clipped": negative_count,
+        "negative_flux_fraction_of_absolute_sum": negative_fraction,
+        "maximum_negative_excursion_before_clip": (
+            float(-np.min(stamp)) if negative_count else 0.0
+        ),
+        "raw_stamp_sum_before_clip": raw_sum,
+        "sum_after_clip_before_renormalization": clipped_sum,
+        "maximum_allowed_negative_flux_fraction": maximum_negative_flux_fraction,
+        "policy": (
+            "clip negative ImagePSF interpolation undershoot only when its "
+            "integrated absolute-flux fraction is <= the declared tolerance, "
+            "then renormalize to unit sum"
+        ),
+    }
+    return values, diagnostics
+
+
 def render_native_stamp(epsf_data: np.ndarray, *, oversampling: tuple[int, int],
-                        x0: float, y0: float, stamp_size: int = 11) -> tuple[np.ndarray, int, int]:
+                        x0: float, y0: float, stamp_size: int = 11,
+                        return_diagnostics: bool = False):
     """Evaluate oversampled ePSF at exact subpixel phase on native pixels.
 
     The operation uses Photutils ImagePSF rather than averaging/cropping the
@@ -93,10 +150,9 @@ def render_native_stamp(epsf_data: np.ndarray, *, oversampling: tuple[int, int],
     stamp = np.asarray(model.evaluate(X, Y, flux=1.0, x_0=float(x0), y_0=float(y0)), dtype=float)
     if stamp.shape != (stamp_size, stamp_size) or not np.isfinite(stamp).all():
         raise ValueError("Photutils returned an invalid rendered PSF stamp")
-    total = float(stamp.sum())
-    if total <= 0:
-        raise ValueError("rendered native-pixel PSF has nonpositive total")
-    stamp /= total
+    stamp, diagnostics = sanitize_native_psf(stamp)
+    if return_diagnostics:
+        return stamp, x_ll, y_ll, diagnostics
     return stamp, x_ll, y_ll
 
 
@@ -136,8 +192,10 @@ def extract(science_mef: Path, *, x: float, y: float, out: Path,
         if ovx < 1 or ovy < 1:
             raise ValueError("EPSF header must provide positive OVSMPX and OVSMPY")
         epsf_data = np.asarray(table["EPSF"][row], dtype=float)
-        stamp, x_ll, y_ll = render_native_stamp(epsf_data, oversampling=(ovy, ovx),
-            x0=x, y0=y, stamp_size=stamp_size)
+        stamp, x_ll, y_ll, psf_diagnostics = render_native_stamp(
+            epsf_data, oversampling=(ovy, ovx),
+            x0=x, y0=y, stamp_size=stamp_size, return_diagnostics=True
+        )
         out.parent.mkdir(parents=True, exist_ok=True)
         header = fits.Header()
         header["DETECTOR"] = detector or "UNKNOWN"
@@ -150,6 +208,8 @@ def extract(science_mef: Path, *, x: float, y: float, out: Path,
         header["OVSMPY"] = int(ovy)
         header["PSFNORM"] = float(stamp.sum())
         header["BUNIT"] = "fractional flux per native pixel"
+        header["PSFCLIPN"] = int(psf_diagnostics["negative_pixel_count_clipped"])
+        header["PSFNEGFR"] = float(psf_diagnostics["negative_flux_fraction_of_absolute_sum"])
         fits.PrimaryHDU(stamp.astype(np.float32), header=header).writeto(out, overwrite=True)
         metadata = {
             "science_mef": str(science_mef), "science_mef_sha256": file_sha256(science_mef),
@@ -160,6 +220,7 @@ def extract(science_mef: Path, *, x: float, y: float, out: Path,
             "zone": zone_meta, "epsf_oversampling_xy": [ovx, ovy],
             "stamp_size_native_pixels": stamp_size, "stamp_lower_left_cutout_pixel_0based": [x_ll, y_ll],
             "normalization_sum": float(stamp.sum()),
+            "nonnegative_psf_diagnostics": psf_diagnostics,
             "method": "Photutils ImagePSF evaluation at source sub-pixel phase followed by native-pixel evaluation and unit-sum normalization",
             "source_note": "Followed IRSA SPHEREx ePSF tutorial; this stamp is position/phase-specific and should not be reused at other detector positions or subpixel phases."
         }
