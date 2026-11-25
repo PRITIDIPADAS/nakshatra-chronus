@@ -167,7 +167,12 @@ def inject_source_patch(image: np.ndarray, variance: np.ndarray, flags: np.ndarr
         raise ValueError("full PSF footprint touches an excluded flag pixel")
     if electrons_per_image_unit is None:
         image[sl] += signal
-        return {"mode": "deterministic", "variance_added_sum": 0.0}
+        return {
+            "mode": "deterministic",
+            "expected_electrons_sum": None,
+            "realized_electrons_sum": None,
+            "variance_added_sum": 0.0,
+        }
     conversion = np.asarray(electrons_per_image_unit, dtype=float)
     if conversion.ndim == 0:
         gain_patch = np.full(signal.shape, float(conversion), dtype=float)
@@ -188,8 +193,12 @@ def inject_source_patch(image: np.ndarray, variance: np.ndarray, flags: np.ndarr
     variance_added[active] = expected_electrons[active] / (gain_patch[active] ** 2)
     image[sl] += realization
     variance[sl] += variance_added
-    return {"mode": "source_poisson",
-            "variance_added_sum": float(variance_added.sum())}
+    return {
+        "mode": "source_poisson",
+        "expected_electrons_sum": float(expected_electrons.sum()),
+        "realized_electrons_sum": float(np.sum(realization[active] * gain_patch[active])),
+        "variance_added_sum": float(variance_added.sum()),
+    }
 
 
 def matched_filter_flux_uncertainty_jy(
@@ -495,6 +504,9 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
             phase=phase,reference_xy=psf_reference_xy,region_radius=psf_region_radius)
         injected_img=work_image.copy()
         injected_variance=variance.copy()
+        poisson_expected_electrons = 0.0
+        poisson_realized_electrons = 0.0
+        poisson_variance_added_sum = 0.0
         for x,y in xy:
             x0=int(np.floor(x))-px;y0=int(np.floor(y))-py
             if flux_unit == "Jy":
@@ -505,9 +517,15 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
             else:
                 # This is deliberately an image-sum injection unit, not Jy.
                 source_signal = level*p
-            inject_source_patch(injected_img, injected_variance, flags, source_signal, x, y,
+            injection_record = inject_source_patch(
+                injected_img, injected_variance, flags, source_signal, x, y,
                 rng=rng, electrons_per_image_unit=electrons_per_image_unit,
-                excluded_flag_bits=excluded_flag_bits)
+                excluded_flag_bits=excluded_flag_bits,
+            )
+            if injection_record["mode"] == "source_poisson":
+                poisson_expected_electrons += float(injection_record["expected_electrons_sum"])
+                poisson_realized_electrons += float(injection_record["realized_electrons_sum"])
+                poisson_variance_added_sum += float(injection_record["variance_added_sum"])
         if flux_unit == "Jy" and psf_reference_xy is not None and psf_region_radius is not None:
             injected_snr = matched_filter_snr_jy(
                 injected_img, injected_variance, p, omega,
@@ -544,11 +562,24 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                              "unmatched_peaks_outside_local_psf_region_excluded":n_outside_local_psf_region})
         offsets=[float(np.min(distances[:,j])) for j in sorted(recovered)] if len(peaks) else []
         ci_low,ci_high=wilson_interval(len(recovered),len(xy))
-        injected.append({"flux_level":float(level),"n_injected":len(xy),"n_recovered":len(recovered),
-                         "completeness":len(recovered)/len(xy),"completeness_wilson95_low":ci_low,
-                         "completeness_wilson95_high":ci_high,
-                         "median_astrometric_offset_px":float(np.median(offsets)) if offsets else None,
-                         "p95_astrometric_offset_px":float(np.percentile(offsets,95)) if offsets else None})
+        injected.append({
+            "flux_level": float(level), "n_injected": len(xy),
+            "n_recovered": len(recovered),
+            "completeness": len(recovered) / len(xy),
+            "completeness_wilson95_low": ci_low,
+            "completeness_wilson95_high": ci_high,
+            "median_astrometric_offset_px": float(np.median(offsets)) if offsets else None,
+            "p95_astrometric_offset_px": float(np.percentile(offsets, 95)) if offsets else None,
+            "source_poisson_expected_electrons": (
+                poisson_expected_electrons if electrons_per_image_unit is not None else None
+            ),
+            "source_poisson_realized_electrons": (
+                poisson_realized_electrons if electrons_per_image_unit is not None else None
+            ),
+            "source_poisson_variance_added_image_units2": (
+                poisson_variance_added_sum if electrons_per_image_unit is not None else None
+            ),
+        })
     return {"experiment":"SPHEREx DR1 real-image injection/recovery",
       "n_image_pixels":int(image.size),"image_shape":list(image.shape),"n_baseline_detections":int(len(baseline)),
       "psf_reference_xy":list(psf_reference_xy) if psf_reference_xy is not None else None,
