@@ -491,7 +491,7 @@ def test_schema_1_1_missing_source_product_manifest_is_unavailable_not_zero(tmp_
 def test_schema_1_1_cross_region_source_product_overlap_uses_exact_archive_product_ids(tmp_path):
     _fixture_sia_v11(tmp_path)
     for region in ("Taurus_Auriga", "Perseus_NGC1333"):
-        _write_csv(root / region / "candidate_source_product_matches.csv", [{
+        _write_csv(tmp_path / region / "candidate_source_product_matches.csv", [{
             "source_id": "source-shared",
             "archive_product_id": "ivo:shared-product",
             "obs_id": "shared-obs",
