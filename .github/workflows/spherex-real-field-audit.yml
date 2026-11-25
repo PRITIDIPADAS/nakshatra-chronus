@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/spherex-real-field-audit.yml
       - research_discovery/spherex/run_real_field_audit.py
+      - research_discovery/spherex/run_provenance_calibration_audit.py
       - research_discovery/spherex/fetch_native_mefs.py
       - research_discovery/spherex/discover_calibrations.py
       - research_discovery/spherex/probe_calibration_tap.py
@@ -46,21 +47,20 @@ jobs:
             --rows 50 \
             --out data/spherex_m101_audit/calibration_tap_inspection.json 2>&1 | tee calibration-tap.log
 
-      - name: Retrieve M101 native science MEF and detector calibrations
+      - name: Retrieve native science MEF and exact provenance-linked calibration inputs
         run: |
           set -euo pipefail
-          CHRONOS_GIT_COMMIT="$GITHUB_SHA" python -m research_discovery.spherex.run_real_field_audit \
-            --field M101,210.80227,54.34895 \
-            --bandpass SPHEREx-D2 \
-            --release dr1 \
-            --limit-per-family 5 \
+          CHRONOS_GIT_COMMIT="$GITHUB_SHA" python -m research_discovery.spherex.run_provenance_calibration_audit \
+            --field-label M101 \
+            --science-uri "ibe/data/spherex/dr1/level2/2025W19_2B/l2b-v27-2026-198/2/level2_2025W19_2B_0346_1D2_spx_l2b-v27-2026-198.fits" \
+            --max-total-bytes 450000000 \
             --out data/spherex_m101_audit 2>&1 | tee spherex-real-field.log
 
-      - name: Upload immutable archive products and audit records
+      - name: Upload science MEF, exact calibration inputs and provenance records
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: spherex-m101-dr1-d2-audit
+          name: spherex-m101-dr1-d2-provenance-calibration-audit
           path: |
             data/spherex_m101_audit/
             spherex-real-field.log
