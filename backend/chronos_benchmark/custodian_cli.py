@@ -13,7 +13,10 @@ from pathlib import Path
 import re
 import stat
 import sys
+from datetime import datetime, timezone
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _read_json(path: str | Path) -> Any:
@@ -50,6 +53,113 @@ def create_key_file(path: str | Path) -> Path:
             target.unlink(missing_ok=True)
             raise PermissionError("key file permissions must be owner-only (0600)")
     return target
+
+
+def create_signing_keypair(private_path: str | Path, public_path: str | Path) -> dict[str, str]:
+    """Create an Ed25519 custodian signing key; keep the private key outside the repository."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from .custodian_attestation import public_key_fingerprint
+
+    private_target = Path(private_path).expanduser().resolve()
+    public_target = Path(public_path).expanduser().resolve()
+    try:
+        private_target.relative_to(ROOT.resolve())
+    except ValueError:
+        pass
+    else:
+        raise ValueError("custodian signing private key must be stored outside the repository")
+    if private_target.exists() or public_target.exists():
+        raise FileExistsError("refusing to overwrite an existing custodian signing key")
+    key = Ed25519PrivateKey.generate()
+    private_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_pem = key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    private_target.parent.mkdir(parents=True, exist_ok=True)
+    public_target.parent.mkdir(parents=True, exist_ok=True)
+    private_target.write_bytes(private_pem)
+    public_target.write_bytes(public_pem)
+    try:
+        private_target.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+    if os.name != "nt":
+        mode = stat.S_IMODE(private_target.stat().st_mode)
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            private_target.unlink(missing_ok=True)
+            public_target.unlink(missing_ok=True)
+            raise PermissionError("custodian signing private key must have owner-only permissions (0600)")
+    return {
+        "private_key_file": str(private_target),
+        "public_key_file": str(public_target),
+        "public_key_sha256": public_key_fingerprint(public_pem),
+        "private_key_permissions": "0600",
+        "warning": "Pin the public-key SHA-256 out-of-band with the analysis team. Never commit or disclose the private key.",
+    }
+
+
+def create_custodian_attestation_file(
+    *,
+    custodian_id: str,
+    registration_url: str,
+    registration_id: str,
+    registered_utc: str,
+    registration_receipt_path: str | Path,
+    public_manifest_path: str | Path,
+    run_manifest_path: str | Path,
+    encrypted_truth_store_path: str | Path,
+    frozen_configuration_path: str | Path,
+    private_signing_key_path: str | Path,
+    output_path: str | Path,
+) -> dict[str, Any]:
+    from .custodian_attestation import build_attestation_payload, sign_attestation, public_key_fingerprint
+
+    public = _read_json(public_manifest_path)
+    run = _read_json(run_manifest_path)
+    frozen = _read_json(frozen_configuration_path)
+    encrypted = Path(encrypted_truth_store_path).read_bytes()
+    receipt = Path(registration_receipt_path).read_bytes()
+    private_pem = Path(private_signing_key_path).read_bytes()
+    payload = build_attestation_payload(
+        custodian_id=custodian_id,
+        registration_url=registration_url,
+        registration_id=registration_id,
+        registered_utc=registered_utc,
+        registration_receipt=receipt,
+        public_manifest=public,
+        run_manifest=run,
+        encrypted_truth_store=encrypted,
+        frozen_configuration=frozen,
+        attested_utc=datetime.now(timezone.utc).isoformat(),
+        analysis_team_holdout_access_before_registration=False,
+        custodian_independent_of_analysis_team=True,
+        registration_receipt_verified_by_custodian=True,
+    )
+    attestation = sign_attestation(payload, private_pem)
+    _write_json(output_path, attestation)
+    return {
+        "output": str(Path(output_path).resolve()),
+        "custodian_id": custodian_id,
+        "custodian_public_key_sha256": public_key_fingerprint(
+            __import__("cryptography.hazmat.primitives.serialization", fromlist=["load_pem_public_key"])
+            .load_pem_private_key(private_pem, password=None).public_key()
+            .public_bytes(
+                encoding=__import__("cryptography.hazmat.primitives.serialization", fromlist=["Encoding"]).Encoding.Raw,
+                format=__import__("cryptography.hazmat.primitives.serialization", fromlist=["PublicFormat"]).PublicFormat.Raw,
+            )
+        ),
+        "registered_utc": registered_utc,
+        "public_manifest_sha256": payload["public_manifest_sha256"],
+        "encrypted_truth_store_sha256": payload["encrypted_truth_store_sha256"],
+        "frozen_configuration_sha256": payload["frozen_configuration_sha256"],
+        "warning": "The analysis team must verify this Ed25519 signature using the separately pinned custodian public-key fingerprint.",
+    }
 
 
 def _read_key(path: str | Path) -> bytes:
@@ -122,7 +232,10 @@ def freeze_run(configuration_path: str | Path, source_commit: str,
 def unblind_files(key_path: str | Path, public_manifest_path: str | Path,
                   encrypted_store_path: str | Path, frozen_path: str | Path,
                   detection_run_path: str | Path, output_path: str | Path,
-                  *, bootstrap_draws: int = 2000, seed: int = 20261125) -> dict[str, Any]:
+                  *, custodian_attestation_path: str | Path | None = None,
+                  custodian_public_key_path: str | Path | None = None,
+                  expected_custodian_public_key_sha256: str | None = None,
+                  bootstrap_draws: int = 2000, seed: int = 20261125) -> dict[str, Any]:
     """Unblind only after a run was frozen and the detector output is complete."""
     from .blind import unblind_benchmark
 
@@ -131,8 +244,19 @@ def unblind_files(key_path: str | Path, public_manifest_path: str | Path,
     encrypted = Path(encrypted_store_path).read_bytes()
     frozen = _read_json(frozen_path)
     detection_run = _read_json(detection_run_path)
+    attestation = (
+        _read_json(custodian_attestation_path)
+        if custodian_attestation_path is not None else None
+    )
+    public_key = (
+        Path(custodian_public_key_path).read_bytes()
+        if custodian_public_key_path is not None else None
+    )
     report = unblind_benchmark(
         public_manifest, encrypted, key, frozen, detection_run,
+        custodian_attestation=attestation,
+        custodian_public_key=public_key,
+        expected_custodian_public_key_sha256=expected_custodian_public_key_sha256,
         bootstrap_draws=bootstrap_draws, seed=seed,
     )
     _write_json(output_path, report)
@@ -140,6 +264,7 @@ def unblind_files(key_path: str | Path, public_manifest_path: str | Path,
         "output": str(Path(output_path).resolve()),
         "scientific_claim_eligible": report["scientific_claim_eligible"],
         "eligibility_reasons": report.get("scientific_eligibility_reasons", []),
+        "custodian_attestation": report["blind_protocol"].get("custodian_attestation"),
         "blind_field_count": report["blind_protocol"]["blind_field_count"],
         "unblinded_utc": report["blind_protocol"]["unblinded_utc"],
         "warning": "Keep the custodian key private. Do not interpret a benchmark as a scientific discovery.",
@@ -163,6 +288,26 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--test-fraction", type=float, default=0.3)
     prepare.add_argument("--seed", type=int, default=17)
 
+    signing_keys = sub.add_parser("generate-signing-key", help="create the independent custodian Ed25519 signing key")
+    signing_keys.add_argument("--private-key-file", required=True)
+    signing_keys.add_argument("--public-key-file", required=True)
+
+    attest = sub.add_parser("attest", help="sign preregistration, holdout custody and exact blind dataset digests")
+    attest.add_argument("--custodian-id", required=True)
+    attest.add_argument("--registration-url", required=True)
+    attest.add_argument("--registration-id", required=True)
+    attest.add_argument("--registered-utc", required=True)
+    attest.add_argument("--registration-receipt", required=True)
+    attest.add_argument("--public-manifest", required=True)
+    attest.add_argument("--run-manifest", required=True)
+    attest.add_argument("--encrypted-store", required=True)
+    attest.add_argument("--frozen-configuration", required=True)
+    attest.add_argument("--private-signing-key", required=True)
+    attest.add_argument("--output", required=True)
+    attest.add_argument("--confirm-no-prior-holdout-access", action="store_true", required=True)
+    attest.add_argument("--confirm-independent-custodian", action="store_true", required=True)
+    attest.add_argument("--confirm-registration-receipt-checked", action="store_true", required=True)
+
     freeze = sub.add_parser("freeze", help="seal the preregistration, data digest and code commit")
     freeze.add_argument("--configuration", required=True)
     freeze.add_argument("--source-commit", required=True)
@@ -176,6 +321,9 @@ def main(argv: list[str] | None = None) -> int:
     unblind.add_argument("--frozen-configuration", required=True)
     unblind.add_argument("--detection-run", required=True)
     unblind.add_argument("--output", required=True)
+    unblind.add_argument("--custodian-attestation", required=True)
+    unblind.add_argument("--custodian-public-key", required=True)
+    unblind.add_argument("--expected-custodian-key-sha256", required=True)
     unblind.add_argument("--bootstrap-draws", type=int, default=2000)
     unblind.add_argument("--seed", type=int, default=20261125)
 
@@ -185,6 +333,26 @@ def main(argv: list[str] | None = None) -> int:
             path = create_key_file(args.key_file)
             result = {"key_file": str(path), "permissions": "0600",
                       "warning": "Store this file offline with the independent custodian. Never commit it."}
+        elif args.command == "generate-signing-key":
+            result = create_signing_keypair(args.private_key_file, args.public_key_file)
+        elif args.command == "attest":
+            if not (args.confirm_no_prior_holdout_access
+                    and args.confirm_independent_custodian
+                    and args.confirm_registration_receipt_checked):
+                raise ValueError("all three independent-custodian confirmations are required")
+            result = create_custodian_attestation_file(
+                custodian_id=args.custodian_id,
+                registration_url=args.registration_url,
+                registration_id=args.registration_id,
+                registered_utc=args.registered_utc,
+                registration_receipt_path=args.registration_receipt,
+                public_manifest_path=args.public_manifest,
+                run_manifest_path=args.run_manifest,
+                encrypted_truth_store_path=args.encrypted_store,
+                frozen_configuration_path=args.frozen_configuration,
+                private_signing_key_path=args.private_signing_key,
+                output_path=args.output,
+            )
         elif args.command == "prepare":
             result = prepare_blind_files(args.fields, args.key_file, args.output_dir,
                                          test_fraction=args.test_fraction, seed=args.seed)
@@ -195,6 +363,9 @@ def main(argv: list[str] | None = None) -> int:
             result = unblind_files(args.key_file, args.public_manifest,
                                    args.encrypted_store, args.frozen_configuration,
                                    args.detection_run, args.output,
+                                   custodian_attestation_path=args.custodian_attestation,
+                                   custodian_public_key_path=args.custodian_public_key,
+                                   expected_custodian_public_key_sha256=args.expected_custodian_key_sha256,
                                    bootstrap_draws=args.bootstrap_draws, seed=args.seed)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
