@@ -17,7 +17,7 @@
 | Session | Capability / deliverable | Software status | Evidence status | Open condition |
 |---|---|---|---|---|
 | 01 | Research question, scope, assumptions, evidence rules | Research specification exists; this ledger closes the missing capability-index deliverable | Specification is documentation, not an empirical result | Reconcile project-wide README claims during release preparation |
-| 02 | Versioned archive manifest, retrieval provenance, hashes | Implemented in \`research_discovery/spherex/archive_manifest.py\`, schema and CLI | M101 native science and calibration products have archived URIs, byte counts and SHA-256; latest M101 evidence is linked below | Broaden immutable manifests to each planned field and retain all retrieval failures |
+| 02 | Versioned archive manifest, retrieval provenance, hashes | Committed four-product M101 metadata/checksum snapshot at [data/spherex_archive_manifest.M101_DR1_D2.json](../data/spherex_archive_manifest.M101_DR1_D2.json); retrieval/validation code in \`research_discovery/spherex/archive_manifest.py\`, schema and CLI | M101 native science and calibration products have archived URIs, byte counts and SHA-256; latest M101 evidence is linked below | Broaden immutable manifests to each planned field and retain all retrieval failures |
 | 03 | Native FITS/MEF structural audit | Implemented in \`native_mef_audit.py\` and real-field runner | M101 DR1 D2 native MEF structure, aligned IMAGE/VARIANCE/FLAGS/ZODI and compatibility checks passed | Repeat on the intended full blind sample; one detector exposure is not general validation |
 | 04 | Calibration compatibility and authoritative wavelength provenance | Implemented in compatibility matrix, archive lineage and CWAVE/CBAND wavelength gate | M101 spectral-WCS and absolute-gain exact provenance relations were checked; compatibility reported \`compatible\` | Independent instrument review of the gain-to-electron derivation is pending; never infer calibration from filename or detector alone |
 | 05 | Sky-to-detector coordinate transform and landmark residuals | Transform code and unit/contract tests exist | No accepted independent real detector-landmark residual report is recorded in this tranche | Run against independently selected detector landmarks and publish residuals/covariance |
@@ -40,6 +40,8 @@
 ## Current verified real-data evidence
 
 ### M101 DR1 D2
+
+The committed [four-product archive manifest](../data/spherex_archive_manifest.M101_DR1_D2.json) records the science MEF, exact spectral-WCS and absolute-gain provenance inputs, and the supplemental solid-angle map. It contains source URIs, archive plane IDs, byte counts, SHA-256 and archive MD5s where available. The four FITS binaries remain in the retained GitHub Actions artifact rather than being duplicated in Git. The manifest does not claim a direct provenance foreign key for the solid-angle map.
 
 - Latest completed combined test/M101 workflow before the current population-gate changes: [run 45652295910](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45652295910), commit \`f9f315bf35fcb0a46a69cc30b7c4a434ed165e1d\`.
 - Test job: **316 passed, 7 warnings**; both JavaScript syntax checks passed.
