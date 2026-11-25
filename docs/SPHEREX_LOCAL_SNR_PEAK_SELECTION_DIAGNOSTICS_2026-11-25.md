@@ -44,3 +44,22 @@ Do not change the production detector or matching radius based on this one M101 
 This M101 diagnostic does not explain the Lupus III zero-recovery anomaly. The six-field SNR diagnostic rerun is tracked separately and was still in progress when this note was written.
 
 **Scientific gates remain open:** independent gain-to-electron calibration review, externally preregistered blind four-method evaluation, source-level selection/contamination-aware YSO analysis, independent astronomical reproduction and validated scientific release.
+
+
+## 26 November 2026 — isolated injected-component response
+
+The current completed M101 validation is [workflow 45685593266](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685593266), revision `44a96b3ae38e3a93d71687f50cb7accff5dbbeea`, artifact 15054464829, ZIP SHA-256 `64895b24b2ed030070b0474b9b000f8afa8d92d43599b90cbd1017ec3ccba46f`.
+
+An additional source-only diagnostic now evaluates the injected component separately: `injected_img - work_image`. It applies the Jy matched filter and the same peak extractor to that difference image while retaining the **original pre-injection VARIANCE map**. This answers a narrower question than primary recovery: whether the injected component alone produces a selected local peak when the native sky/background is removed.
+
+| Injected flux | Primary combined-image recovery | Source-only component peak-list count | Median source-only local maximum SNR |
+|---:|---:|---:|---:|
+| 54.198 µJy | 5/20 | 0/20 | 2.465 |
+| 108.396 µJy | 14/20 | 8/20 | 4.906 |
+| 216.792 µJy | 17/20 | 20/20 | 9.056 |
+
+Median combined-image local maximum SNR values are 5.959, 8.140 and 11.150 respectively. These measures differ because they are computed on different images and noise treatments. The primary combined-image recovery and its Wilson intervals remain unchanged. Source-only counts are **not** completeness, false-positive-corrected recovery or evidence of a CHRONOS advantage.
+
+The source-only result shows that the injection implementation can produce increasing isolated-component response on this M101 example. It does not identify the full-scene missed-peak mechanism. The earlier diagnostic question remains open: save per-injection exact full-scene local-maximum predicate outcomes and nearest selected-peak coordinates/scores, then compare on independent predeclared fields without changing the primary detector or matching rule.
+
+The six-field source-only aggregate-gated run [45685593223](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685593223) was still pending at this documentation refresh. No multi-field source-only conclusion is claimed.

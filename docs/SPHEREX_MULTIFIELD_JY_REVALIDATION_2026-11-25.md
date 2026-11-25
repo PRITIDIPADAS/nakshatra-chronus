@@ -57,3 +57,11 @@ The flux references differ by field and cannot be pooled into a universal sensit
 | Selection-function- and contamination-aware YSO population analysis | **Not satisfied** |
 | Independent astronomical reproduction / researcher review | **Not satisfied** |
 | Validated scientific release | **Not satisfied** |
+
+## 26 November 2026 — current multi-field diagnostic gate status
+
+The original six-field real-data pilot remains the primary recovery reference documented above. The most recently completed pilot artifact [45674421060](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45674421060) contains six completed predeclared D2 fields, 360 primary injection rows and 360 bound local-SNR diagnostic rows. It flags Lupus III as zero recovery at all three flux levels. This artifact was generated before the new source-only component diagnostics and therefore does not satisfy the newer source-only aggregate gate.
+
+The newer source-only pilot [45685593223](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685593223) had no job result or artifact available at the time of this addendum. The earlier attempt [45685127482](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685127482) was based on revision `930885e89`, before the latest aggregate-gate enforcement. Neither can be promoted to a verified six-region source-only result unless the complete current report passes the exact six-field, per-injection, science/gain identity, report-hash and aggregate validators.
+
+The source-only diagnostic uses the post-injection-minus-baseline image and original VARIANCE map. It is a secondary experiment and does not replace primary combined-scene recovery. Lupus III remains an unresolved adverse result: 0/20 at 0.5×, 1× and 2× its local reference in the previously completed six-field run. No threshold/match-radius relaxation or field removal is justified by the current evidence.

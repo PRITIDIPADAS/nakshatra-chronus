@@ -84,3 +84,14 @@ The current six-region workflow artifact contains the report JSONs and per-field
 - Injection report: \`fields/Lupus_III/data/calibrated_injection/calibrated_jy_injection_recovery.json\`.
 
 **Disposition: retain the Lupus III zero-recovery anomaly as an unresolved negative result. Do not remove the field from the aggregate, call it a calibration success, or generalise it to the whole detector.**
+
+
+## 26 November 2026 — M101 source-only response follow-up
+
+The completed M101 run [45685593266](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685593266) (revision `44a96b3ae38e3a93d71687f50cb7accff5dbbeea`) adds a diagnostic of the injected source component, separate from the full native sky. It uses the image difference `post-injection IMAGE − original IMAGE`, the position-dependent Jy matched filter and the original pre-injection VARIANCE map.
+
+The component-only peak-list diagnostic returned 0/20, 8/20 and 20/20 at the three test fluxes. The primary full-scene recovery remains 5/20, 14/20 and 17/20. These different results are **not** a Lupus III diagnosis: the M101 source-only experiment cannot explain the Lupus 0/20 result.
+
+A new six-field source-only aggregate-gated run was still pending at documentation time ([45685593223](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685593223)); the previous completed six-field artifact predates this diagnostic. No source-only outcome is assigned to Lupus III here.
+
+The root cause remains open. The archive metadata audit and compatible native MEF/calibration structure do not rule out a local ePSF/position-phase mismatch, background residual, flag footprint effects, noise covariance, crowding/blending, source-only/combined-scene peak selection differences, or an implementation/configuration error. These remain hypotheses only. The exact native Lupus image and the original 60 coordinate-level records must be examined together before selecting among them. The absolute-gain/electron convention also remains pending independent instrument review.

@@ -146,3 +146,28 @@ The fresh SIAv2 source-to-product reconnaissance [45670644451](https://github.co
 The strict exact-roster six-field run [45663010413](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45663010413) remains a completed exploratory result. The more recent diagnostic rerun [45670018299](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45670018299), which runs the new per-injection SNR audit on all six fields, was still in progress at the time of this note. Do not describe its per-field diagnostics as complete until its artifact is uploaded and inspected.
 
 Independent gain calibration review, externally preregistered four-method blind evaluation, source-level selection/contamination-aware YSO population study, independent astronomical reproduction and validated release remain open.
+
+
+## 26 November 2026 — source-only injection diagnostic and archive-manifest revalidation
+
+This addendum records the most recent completed evidence without rewriting earlier run history.
+
+### M101 source-only diagnostic
+
+[Workflow 45685593266](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685593266) completed on revision `44a96b3ae38e3a93d71687f50cb7accff5dbbeea`; its real M101 D2 audit and artifact upload passed. Artifact 15054464829 (91,222,025 bytes) has ZIP SHA-256 `64895b24b2ed030070b0474b9b000f8afa8d92d43599b90cbd1017ec3ccba46f`.
+
+The source-only diagnostic constructs the injected component as the post-injection image minus the original image, then computes matched-filter response and a separate peak list with the **original pre-injection variance map**. This intentionally isolates the injected component from the native sky/background; it does not represent the actual source-detection environment and is not used for the primary recovery assignment.
+
+| Flux relative to local nominal 5σ | Integrated flux | Primary combined-image recovery | Source-only diagnostic peak-list count | Median source-only local maximum SNR | Median combined-image local maximum SNR |
+|---:|---:|---:|---:|---:|---:|
+| 0.5× | 54.198 µJy | 5/20 | 0/20 | 2.465 | 5.959 |
+| 1× | 108.396 µJy | 14/20 | 8/20 | 4.906 | 8.140 |
+| 2× | 216.792 µJy | 17/20 | 20/20 | 9.056 | 11.150 |
+
+The primary recovery values, matching radius and threshold were not changed. The isolated-component peak counts are diagnostic only and must not be substituted into the completeness curve. The comparison helps separate injected-component response from the full-scene detection problem, but it does not establish why a particular injection is missed. In particular, this report does not establish the exact 11 × 11 local-maximum suppression status at every full-scene injected coordinate and does not explain the Lupus III anomaly.
+
+### Six-region archive manifest revalidation
+
+[Workflow 45677731011](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45677731011) completed successfully on the source/product manifest implementation. Artifact 15052808730 (70,934,685 bytes) has ZIP SHA-256 `9fb16d20ff2a621a4882a61275efc3591921f942f3521404bbd9e5fd0a3af08b`. It contains 2,421 candidate source IDs, 924,443 unique source/product pairs and 6,214 regional SIAv2 spectral-image product metadata records. All six per-region integrity reports are available and valid, with no duplicate pairs, pair IDs outside the candidate set, missing product IDs in the regional SIAv2 inventory, count mismatches, per-source product-set SHA-256 mismatches or product metadata inconsistencies. The high-latitude comparison has zero candidate sources and zero pairs; it is not a matched YSO/control population.
+
+**Boundary:** these are geometrical source-coordinate-in-`s_region` metadata associations. The 32 All-Sky Cube rows are metadata only; no native cubes or all source-level Level-2 pixels were downloaded in this reconnaissance. There are no validated source fluxes, independent temporal visits, light curves, or population-level YSO measurements from this run.
