@@ -396,6 +396,7 @@ def build_blind_detection_field_record(
         "blind_field_token": token,
         "input_signature": dict(signature),
         "match_radius": radius,
+        "score_thresholds": records["score_thresholds"],
         "methods": records["methods"],
         "baseline_contract": records["baseline_contract"],
     }

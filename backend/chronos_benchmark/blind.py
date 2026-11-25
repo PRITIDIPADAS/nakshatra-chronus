@@ -233,6 +233,42 @@ def verify_frozen_configuration(record: Mapping[str, Any]) -> dict[str, Any]:
 
 
 
+_PRIVATE_HANDOFF_KEYS = {
+    "truth_catalogue", "truth", "truth_id", "truth_ids",
+    "private_field", "original_field_id", "original_field_ids",
+    "split_group_id", "independence_group_id", "source_id", "source_ids",
+    "designation", "field_name", "region_name", "control_type", "control_label",
+    "injection_stratum", "injection_seed", "private_exposure_ids",
+    "original_exposure_ids", "science_uri", "calibration_uri", "archive_uri",
+    "native_uri", "file_uri", "local_path",
+}
+
+
+def _private_handoff_paths(value: Any, path: str = "$") -> list[str]:
+    """Find nested private truth/identity fields without rejecting opaque signatures."""
+    found: list[str] = []
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            name = str(key).lower()
+            current = f"{path}.{key}"
+            if name in _PRIVATE_HANDOFF_KEYS:
+                found.append(current)
+                continue
+            if name == "input_signature" and isinstance(child, Mapping):
+                # input_signature.field_id is permitted only because its value
+                # is separately checked against the opaque blind field token.
+                safe_signature = {
+                    k: v for k, v in child.items() if str(k).lower() != "field_id"
+                }
+                found.extend(_private_handoff_paths(safe_signature, current))
+            else:
+                found.extend(_private_handoff_paths(child, current))
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            found.extend(_private_handoff_paths(child, f"{path}[{index}]"))
+    return found
+
+
 def build_blind_detection_run(
     public_manifest: Mapping[str, Any],
     run_manifest: Mapping[str, Any],
@@ -292,8 +328,15 @@ def build_blind_detection_run(
         radius = float(row.get("match_radius", 0.0))
         if not math.isfinite(radius) or radius <= 0:
             raise ValueError(f"{token}: public match_radius must be finite and positive")
+        leaks = _private_handoff_paths(row)
+        if leaks:
+            raise ValueError(f"{token}: public run manifest contains private fields: " + ", ".join(leaks[:8]))
         public_by_token[token] = row
         radii[token] = radius
+
+    manifest_leaks = _private_handoff_paths(public_manifest)
+    if manifest_leaks:
+        raise ValueError("public manifest contains private fields: " + ", ".join(manifest_leaks[:8]))
 
     blind_tokens = set(map(str, public_manifest.get("blind_test_tokens") or []))
     public_blind_tokens = {
@@ -306,6 +349,25 @@ def build_blind_detection_run(
     configuration = frozen_configuration.get("configuration")
     if not isinstance(configuration, Mapping):
         raise ValueError("frozen configuration body is missing")
+    preregistration_sha = str(configuration.get("preregistration_sha256", "")).lower()
+    if len(preregistration_sha) != 64 or any(ch not in "0123456789abcdef" for ch in preregistration_sha):
+        raise ValueError("frozen configuration requires a 64-character preregistration_sha256")
+    noninferiority_margin = configuration.get("false_candidate_noninferiority_margin")
+    if (
+        not isinstance(noninferiority_margin, (int, float))
+        or not math.isfinite(float(noninferiority_margin))
+        or float(noninferiority_margin) < 0
+    ):
+        raise ValueError("frozen configuration requires a finite non-negative false-candidate non-inferiority margin")
+    if configuration.get("multiple_comparison_correction") != "bonferroni_95_familywise":
+        raise ValueError("frozen configuration must predeclare bonferroni_95_familywise correction")
+    matched_target = configuration.get("matched_target")
+    if not isinstance(matched_target, Mapping) or not matched_target or not set(matched_target).issubset({"false_candidates_per_field", "completeness"}):
+        raise ValueError("frozen matched_target must specify false_candidates_per_field, completeness, or both")
+    for target_name, raw_target in matched_target.items():
+        value = float(raw_target)
+        if not math.isfinite(value) or value < 0 or (target_name == "completeness" and not 0 < value <= 1):
+            raise ValueError(f"frozen matched target {target_name} is outside its valid range")
     from_frozen_radii = configuration.get("matching_radii_by_field")
     if canonical_json(from_frozen_radii) != canonical_json(radii):
         raise ValueError("frozen matching radii do not match all public field tokens")
@@ -329,9 +391,9 @@ def build_blind_detection_run(
     for record in field_records:
         if not isinstance(record, Mapping):
             raise ValueError("blind field records must be objects")
-        leaked = forbidden_keys.intersection(record)
-        if leaked:
-            raise ValueError("blind field record contains forbidden private fields: " + ", ".join(sorted(leaked)))
+        leaked_paths = _private_handoff_paths(record)
+        if leaked_paths:
+            raise ValueError("blind field record contains nested private fields: " + ", ".join(leaked_paths[:8]))
         token = str(record.get("blind_field_token", "")).strip()
         if token not in blind_tokens:
             raise ValueError(f"unknown or non-holdout blind field token: {token}")
@@ -343,6 +405,8 @@ def build_blind_detection_run(
             raise ValueError(f"{token}: detection input signature differs from the custodian-issued public signature")
         if float(record.get("match_radius", 0.0)) != radii[token]:
             raise ValueError(f"{token}: detection matching radius differs from the frozen public manifest")
+        if canonical_json(record.get("score_thresholds")) != canonical_json(thresholds):
+            raise ValueError(f"{token}: field score thresholds differ from the frozen four-method configuration")
         methods = record.get("methods")
         if not isinstance(methods, Mapping) or set(methods) != set(REQUIRED_METHODS):
             raise ValueError(f"{token}: exactly the four required method records must be supplied")
@@ -355,16 +419,30 @@ def build_blind_detection_run(
             detections = method_record.get("detections")
             if not isinstance(detections, list):
                 raise ValueError(f"{token}.{method}: detections must be a list")
+            seen_detection_ids = set()
+            expected_signature_sha = sha256_json(signature)
             for index, detection in enumerate(detections):
                 if not isinstance(detection, Mapping):
                     raise ValueError(f"{token}.{method}[{index}]: detection must be an object")
                 if not all(key in detection for key in ("detection_id", "x", "y", "score", "provenance")):
                     raise ValueError(f"{token}.{method}[{index}]: incomplete detection record")
+                detection_id = str(detection.get("detection_id", "")).strip()
+                if not detection_id or detection_id in seen_detection_ids:
+                    raise ValueError(f"{token}.{method}: detection IDs must be non-empty and unique")
+                seen_detection_ids.add(detection_id)
                 values = [float(detection[key]) for key in ("x", "y", "score")]
                 if any(not math.isfinite(value) for value in values):
                     raise ValueError(f"{token}.{method}[{index}]: non-finite detection coordinate or score")
-                if not isinstance(detection["provenance"], Mapping) or not detection["provenance"]:
+                provenance = detection["provenance"]
+                if not isinstance(provenance, Mapping) or not provenance:
                     raise ValueError(f"{token}.{method}[{index}]: detection provenance is required")
+                if provenance.get("method") != method:
+                    raise ValueError(f"{token}.{method}[{index}]: provenance method identity mismatch")
+                if method == "sky_detector_twin":
+                    if provenance.get("input_signature_sha256") != expected_signature_sha:
+                        raise ValueError(f"{token}.{method}[{index}]: Twin provenance is not bound to the public input signature")
+                    if not str(provenance.get("model_version", "")).strip():
+                        raise ValueError(f"{token}.{method}[{index}]: Twin model_version is required")
         baseline = record.get("baseline_contract") or {}
         if baseline.get("same_pipeline_state") is not True:
             raise ValueError(f"{token}: same-pipeline-state contract was not verified")
@@ -396,6 +474,8 @@ def build_blind_detection_run(
         "configuration": dict(configuration),
         "score_thresholds": dict(thresholds),
         "matched_target": dict(configuration["matched_target"]),
+        "false_candidate_noninferiority_margin": float(noninferiority_margin),
+        "multiple_comparison_correction": "bonferroni_95_familywise",
         "matching_radii_by_field": dict(radii),
         "blind_run_contract": {
             "truth_catalogues_accessed": False,
@@ -455,6 +535,10 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         raise ValueError("detection run score thresholds differ from the frozen configuration")
     if canonical_json(detection_run.get("matched_target")) != canonical_json(frozen_config.get("matched_target")):
         raise ValueError("detection run matched operating-point target differs from the frozen configuration")
+    if detection_run.get("false_candidate_noninferiority_margin") != frozen_config.get("false_candidate_noninferiority_margin"):
+        raise ValueError("detection run false-candidate non-inferiority margin differs from the frozen configuration")
+    if detection_run.get("multiple_comparison_correction") != frozen_config.get("multiple_comparison_correction"):
+        raise ValueError("detection run multiple-comparison correction differs from the frozen configuration")
     frozen_radii = frozen_config.get("matching_radii_by_field")
     public_radii = {
         row["blind_field_token"]: float(row["match_radius"])
@@ -517,6 +601,10 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         if public_signature != expected_public:
             raise ValueError(f"{token}: run input signature changed after the blind manifest was issued")
         original_signature = dict(original["input_signature"])
+        if float(run_field.get("match_radius", 0.0)) != float(original.get("match_radius", 0.0)):
+            raise ValueError(f"{token}: run matching radius differs from the custodian-private field record")
+        if canonical_json(run_field.get("score_thresholds")) != canonical_json(frozen_config.get("score_thresholds")):
+            raise ValueError(f"{token}: field score thresholds differ from frozen configuration")
         methods = run_field.get("methods")
         if not isinstance(methods, Mapping):
             raise ValueError(f"{token}: missing method detections")
@@ -570,6 +658,8 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
             "unblinding_record": unblinding_record,
             "source_commit": frozen_configuration["source_commit"],
             "dataset_digest": frozen_configuration["dataset_digest"],
+            "false_candidate_noninferiority_margin": frozen_config.get("false_candidate_noninferiority_margin"),
+            "multiple_comparison_correction": frozen_config.get("multiple_comparison_correction"),
         },
     }
     report = compare_benchmark_package(

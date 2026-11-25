@@ -91,10 +91,15 @@ def _fixture():
             }
             for name in REQUIRED_METHODS
         }
+        for method_name, method_record in methods.items():
+            for detection in method_record["detections"]:
+                if method_name == "sky_detector_twin":
+                    detection["provenance"]["input_signature_sha256"] = sha256_json(signature)
         records.append({
             "blind_field_token": public_field["blind_field_token"],
             "input_signature": signature,
             "match_radius": public_field["match_radius"],
+            "score_thresholds": configuration["score_thresholds"],
             "methods": methods,
             "baseline_contract": {
                 "same_pipeline_state": True,
@@ -197,4 +202,50 @@ def test_detection_run_rejects_mutated_frozen_manifest():
         build_blind_detection_run(
             altered, blind["run_manifest"], frozen, records,
             benchmark_id="mutated-manifest",
+        )
+
+
+def test_detection_run_rejects_nested_private_truth_and_original_identity():
+    _, blind, frozen, records = _fixture()
+    leaked = deepcopy(records)
+    leaked[0]["methods"]["snr_only"]["detections"][0]["provenance"]["truth_id"] = "secret-truth"
+    with pytest.raises(ValueError, match="nested private fields"):
+        build_blind_detection_run(
+            blind["public_manifest"], blind["run_manifest"], frozen, leaked,
+            benchmark_id="nested-truth-leak",
+        )
+
+    leaked = deepcopy(records)
+    leaked[0]["methods"]["instrument_forensics"]["detections"][0]["provenance"]["original_field_id"] = "PRIVATE-FIELD-1"
+    with pytest.raises(ValueError, match="nested private fields"):
+        build_blind_detection_run(
+            blind["public_manifest"], blind["run_manifest"], frozen, leaked,
+            benchmark_id="nested-id-leak",
+        )
+
+
+def test_detection_run_requires_each_field_to_use_exact_frozen_thresholds():
+    _, blind, frozen, records = _fixture()
+    changed = deepcopy(records)
+    changed[0]["score_thresholds"]["snr_only"] = [4.0, 6.0]
+    with pytest.raises(ValueError, match="score thresholds differ from the frozen"):
+        build_blind_detection_run(
+            blind["public_manifest"], blind["run_manifest"], frozen, changed,
+            benchmark_id="threshold-mismatch",
+        )
+
+
+def test_detection_run_requires_real_preregistration_and_noninferiority_policy():
+    _, blind, frozen, records = _fixture()
+    configuration = dict(frozen["configuration"])
+    configuration["preregistration_sha256"] = "not-a-sha"
+    bad = freeze_configuration(
+        configuration,
+        source_commit=frozen["source_commit"],
+        dataset_digest=frozen["dataset_digest"],
+    )
+    with pytest.raises(ValueError, match="preregistration_sha256"):
+        build_blind_detection_run(
+            blind["public_manifest"], blind["run_manifest"], bad, records,
+            benchmark_id="unregistered-config",
         )

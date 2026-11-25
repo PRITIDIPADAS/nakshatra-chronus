@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from chronos_benchmark.blind import (
+    build_blind_detection_run,
     create_blind_store,
     freeze_configuration,
     unblind_benchmark,
@@ -96,23 +97,23 @@ def _sealed_fixture():
         detection_fields.append({
             "blind_field_token": row["blind_field_token"],
             "input_signature": signature,
+            "match_radius": row["match_radius"],
+            "score_thresholds": configuration["score_thresholds"],
             "methods": {
                 name: {"input_signature": signature, "detections": []}
                 for name in methods
             },
+            "baseline_contract": {
+                "same_pipeline_state": True,
+                "verified_exposure_ids": sorted(signature["exposure_ids"]),
+                "verified_mask_sha256": signature["mask_sha256"],
+                "verified_pixel_wcs_sha256": signature["pixel_wcs_sha256"],
+            },
         })
-    detection_run = {
-        "benchmark_id": "custodian-attestation-test",
-        "dataset_digest": dataset_digest,
-        "frozen_configuration_sha256": frozen["configuration_sha256"],
-        "source_commit": "d" * 40,
-        "configuration": configuration,
-        "public_fields": run_manifest["fields"],
-        "matching_radii_by_field": configuration["matching_radii_by_field"],
-        "fields": detection_fields,
-        "score_thresholds": configuration["score_thresholds"],
-        "matched_target": configuration["matched_target"],
-    }
+    detection_run = build_blind_detection_run(
+        public, run_manifest, frozen, detection_fields,
+        benchmark_id="custodian-attestation-test",
+    )
     return key, blind, public, run_manifest, frozen, detection_run
 
 
@@ -163,6 +164,8 @@ def test_independent_custodian_signature_binds_receipt_and_exact_holdout_data():
     )
     assert report["blind_protocol"]["custodian_attestation"]["valid"] is True
     assert report["scientific_claim_eligible"] is False  # This fixture is synthetic, not real held-out SPHEREx.
+    assert report["paired_superiority"]["predeclared_false_candidate_noninferiority_margin"] == 0.0
+    assert report["paired_superiority"]["multiple_comparator_correction"]["verified_predeclared"] is True
 
 
 def test_custodian_attestation_fails_on_unpinned_key_or_changed_manifest():
