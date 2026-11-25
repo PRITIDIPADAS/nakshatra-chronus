@@ -92,7 +92,11 @@ def pattern_key(flags: dict[str, bool]) -> str:
 
 
 def _check_input_report(report: dict, candidate_rows: list[dict]) -> dict:
-    if report.get("schema") != "chronos-spllices-yso-recon/1.0":
+    supported_schemas = {
+        "chronos-spllices-yso-recon/1.0",
+        "chronos-spllices-yso-recon/1.1",
+    }
+    if report.get("schema") not in supported_schemas:
         raise ValueError("unsupported SPLICES reconnaissance report schema")
     expected = report.get("report_sha256")
     actual = sha256_json({key: value for key, value in report.items() if key != "report_sha256"})

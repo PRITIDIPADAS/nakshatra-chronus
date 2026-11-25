@@ -8,6 +8,7 @@ from research_discovery.spherex.analyze_splices_candidate_inventory import (
     label_flags,
     sha256_json,
     write_candidate_inventory,
+    _check_input_report,
 )
 
 
@@ -272,3 +273,27 @@ def test_candidate_inventory_preserves_rows_and_adds_explicit_label_flags(tmp_pa
     assert result[0]["published_yso_reference_present"] == "True"
     assert result[0]["class_1_contains_yso"] == "True"
     assert result[0]["stype_ml_contains_yso"] == "False"
+
+
+def test_input_report_accepts_current_v11_schema_with_checksum_and_row_validation(tmp_path):
+    rows = _fixture(tmp_path)
+    report = json.loads((tmp_path / "yso_population_recon.json").read_text())
+    report["schema"] = "chronos-spllices-yso-recon/1.1"
+    report["report_sha256"] = sha256_json({
+        key: value for key, value in report.items() if key != "report_sha256"
+    })
+    validated = _check_input_report(report, rows)
+    assert validated["report_sha256_verified"] is True
+    assert validated["candidate_record_count_verified"] is True
+    assert validated["candidate_rows"] == len(rows)
+
+
+def test_input_report_still_rejects_unknown_future_schema(tmp_path):
+    rows = _fixture(tmp_path)
+    report = json.loads((tmp_path / "yso_population_recon.json").read_text())
+    report["schema"] = "chronos-spllices-yso-recon/9.9"
+    report["report_sha256"] = sha256_json({
+        key: value for key, value in report.items() if key != "report_sha256"
+    })
+    with pytest.raises(ValueError, match="unsupported SPLICES reconnaissance report schema"):
+        _check_input_report(report, rows)
