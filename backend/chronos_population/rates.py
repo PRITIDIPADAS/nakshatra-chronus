@@ -117,7 +117,8 @@ def estimate_event_rate(
 
     verified_coverage = _revalidate_coverage(fields, coverage_audit, minimum_completeness)
     rng = np.random.default_rng(seed_value)
-    total_rate_draws = np.zeros(draws, dtype=float)
+    total_corrected_excess_draws = np.zeros(draws, dtype=float)
+    total_science_exposure_sqdeg_days = 0.0
     included: list[dict[str, Any]] = []
     seen_field_ids: set[str] = set()
 
@@ -183,8 +184,10 @@ def estimate_event_rate(
         null_count_draws = rng.poisson(null_mean_science)
         excess = np.maximum(science_count_draws - null_count_draws, 0)
         total_rate_draws += (
-            excess / np.maximum(completeness_draws, 1e-6) / (area * days)
+            excess / np.maximum(completeness_draws, 1e-6)
         )
+        field_exposure = area * days
+        total_science_exposure_sqdeg_days += field_exposure
         included.append({
             "field_id": field_id,
             "observed_events": observed,
@@ -197,14 +200,19 @@ def estimate_event_rate(
             "measured_completeness": completeness,
             "area_deg2": area,
             "baseline_days": days,
+            "science_exposure_sqdeg_days": field_exposure,
         })
 
+    if total_science_exposure_sqdeg_days <= 0:
+        raise ValueError("total science area-time exposure must be positive")
+    total_rate_draws = total_corrected_excess_draws / total_science_exposure_sqdeg_days
     q16, median, q84 = np.quantile(total_rate_draws, [0.16, 0.5, 0.84])
     q025, q975 = np.quantile(total_rate_draws, [0.025, 0.975])
     return {
         "included_fields": included,
         "skipped_fields": [],
         "field_count": len(included),
+        "total_science_exposure_sqdeg_days": total_science_exposure_sqdeg_days,
         "event_rate_per_sqdeg_day": {
             "median": float(median),
             "lower_68": float(q16),
@@ -217,8 +225,9 @@ def estimate_event_rate(
         "coverage_revalidated": True,
         "coverage_input_fields_sha256": verified_coverage["input_fields_sha256"],
         "method": (
-            "sum of field-level non-negative Poisson excesses, with Jeffreys Beta "
-            "completeness draws and scaled Gamma-Poisson null-control predictive draws"
+            "pooled completeness-corrected non-negative Poisson excess counts divided by "
+            "the sum of science-field solid-angle times time; Jeffreys Beta completeness "
+            "draws and scaled Gamma-Poisson null-control predictive draws"
         ),
         "limitations": [
             "The estimator independently recomputes the coverage gate over the exact submitted records.",
