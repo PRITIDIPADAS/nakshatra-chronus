@@ -11,6 +11,7 @@ deterministic and is explicitly labelled.
 import copy
 import math
 import hashlib
+import re
 from pathlib import Path
 from collections.abc import Mapping
 
