@@ -626,6 +626,8 @@ class SpectralExposureRequest(BaseModel):
 class FalsificationRequest(BaseModel):
     observations: list[dict[str, Any]]
     challenge_specs: list[dict[str, Any]] | None = None
+    candidate_family: list[dict[str, Any]] | None = None
+    candidate_family_complete: bool = False
     flux_covariance: list[list[float]] | None = None
     challenge_plan_sha256: str | None = None
     bootstrap_draws: int = 1000
@@ -691,6 +693,8 @@ def causal_falsify(request: FalsificationRequest):
     return guarded(lambda: run_falsification_suite(
         request.observations,
         challenge_specs=request.challenge_specs,
+        candidate_family=request.candidate_family,
+        candidate_family_complete=request.candidate_family_complete,
         challenge_plan_sha256=request.challenge_plan_sha256,
         flux_covariance=request.flux_covariance,
         bootstrap_draws=request.bootstrap_draws,
