@@ -315,3 +315,62 @@ def test_absolute_gain_bunit_normalization_accepts_space_around_slash():
     assert _is_surface_brightness_unit("MJy/sr")
     assert _is_surface_brightness_unit("MJy / sr")
     assert not _is_surface_brightness_unit("Jy/pixel")
+
+
+def test_exact_peak_selection_diagnostic_matches_production_eleven_by_eleven_rule():
+    from research_discovery.validation.injection_recovery import (
+        _local_snr_peak,
+        _peak_local_maximum_map,
+        _peak_selection_diagnostic,
+    )
+
+    snr = np.zeros((31, 31), dtype=float)
+    snr[15, 15] = 8.0
+    snr[15, 19] = 11.0
+    peak = _local_snr_peak(snr, 15.0, 15.0, 2.5)
+    maxima = _peak_local_maximum_map(snr, min_sep=5)
+    diagnostic = _peak_selection_diagnostic(snr, peak, maxima, threshold=5.0)
+    assert diagnostic["selected_by_exact_peak_rule"] is False
+    assert diagnostic["suppressed_by_stronger_neighbor"] is True
+    assert diagnostic["detector_window_max_snr"] == pytest.approx(11.0)
+    assert diagnostic["competitor_snr_margin"] == pytest.approx(3.0)
+
+    snr[15, 19] = 0.0
+    peak = _local_snr_peak(snr, 15.0, 15.0, 2.5)
+    maxima = _peak_local_maximum_map(snr, min_sep=5)
+    diagnostic = _peak_selection_diagnostic(snr, peak, maxima, threshold=5.0)
+    assert diagnostic["selected_by_exact_peak_rule"] is True
+    assert diagnostic["suppressed_by_stronger_neighbor"] is False
+    assert diagnostic["competitor_snr_margin"] == pytest.approx(0.0)
+
+
+def test_injection_report_records_exact_peak_selection_and_nearest_selected_peak():
+    rng = np.random.default_rng(109)
+    shape = (96, 96)
+    image = rng.normal(0.0, 0.04, shape)
+    variance = np.full(shape, 0.04 ** 2)
+    flags = np.zeros(shape, dtype=np.uint16)
+    omega = np.full(shape, 8.0e-7)
+    result = run_injection_recovery(
+        image, variance, flags, _psf(),
+        flux_levels=[30.0], n_per_level=2, snr_threshold=5.0,
+        seed=23, min_injection_separation=6, source_exclusion_radius=0,
+        solid_angle_sr_map=omega, flux_unit="Jy",
+        psf_reference_xy=(48.0, 48.0), psf_region_radius=18.0,
+    )
+    assert result["local_response_diagnostics"]["peak_selection_rule"] == {
+        "method": "sample must equal the maximum-filter value in its square neighborhood and be at or above threshold",
+        "minimum_separation_px": 5,
+        "window_width_px": 11,
+        "exact_production_predicate_recorded_per_injection": True,
+    }
+    assert len(result["injections"]) == 2
+    for row in result["injections"]:
+        assert row["post_injection_local_peak_selected_by_exact_peak_rule"] in (True, False, None)
+        assert "post_injection_local_peak_detector_window_max_snr" in row
+        assert "post_injection_local_peak_competitor_snr_margin" in row
+        assert "post_injection_local_peak_suppressed_by_stronger_neighbor" in row
+        assert "nearest_selected_peak_distance_px" in row
+        assert "nearest_selected_peak_x_px" in row
+        assert "nearest_selected_peak_y_px" in row
+        assert "nearest_selected_peak_snr" in row

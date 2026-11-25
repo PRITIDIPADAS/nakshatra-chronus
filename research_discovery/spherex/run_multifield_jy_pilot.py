@@ -138,6 +138,19 @@ def summarize_field_record(
         and row.get("source_only_reference_uses_preinjection_variance") is True
         for row in report_rows
     )
+    peak_selection_rule = response_diagnostics.get("peak_selection_rule") or {}
+    peak_selection_diagnostic_rows = sum(
+        isinstance(row, dict)
+        and "post_injection_local_peak_selected_by_exact_peak_rule" in row
+        and "post_injection_local_peak_detector_window_max_snr" in row
+        and "post_injection_local_peak_competitor_snr_margin" in row
+        and "post_injection_local_peak_suppressed_by_stronger_neighbor" in row
+        and "nearest_selected_peak_distance_px" in row
+        and "nearest_selected_peak_x_px" in row
+        and "nearest_selected_peak_y_px" in row
+        and "nearest_selected_peak_snr" in row
+        for row in report_rows
+    )
     report_rows_match_bins = report_bins_match and len(report_rows) == expected_injection_rows
     if report_rows_match_bins:
         for compact_bin in flux_bins:
@@ -154,6 +167,15 @@ def summarize_field_record(
                 )
             except (TypeError, ValueError, OverflowError):
                 report_rows_match_bins = False
+    peak_selection_diagnostics_complete = (
+        peak_selection_rule.get("exact_production_predicate_recorded_per_injection") is True
+        and peak_selection_rule.get("window_width_px") == 11
+        and peak_selection_rule.get("minimum_separation_px") == 5
+        and report_identity_matches
+        and report_rows_match_bins
+        and expected_injection_rows > 0
+        and peak_selection_diagnostic_rows == len(report_rows) == expected_injection_rows
+    )
     local_snr_diagnostics_complete = (
         response_diagnostics.get("available") is True
         and response_diagnostics.get("does_not_change_recovery_or_peak_matching") is True
@@ -281,6 +303,8 @@ def summarize_field_record(
         "source_only_diagnostic_rows": source_only_diagnostic_rows,
         "source_only_flux_bin_counts_match_injection_rows": source_only_flux_bin_counts_match,
         "source_only_diagnostics_complete": source_only_diagnostics_complete,
+        "peak_selection_diagnostic_rows": peak_selection_diagnostic_rows,
+        "peak_selection_diagnostics_complete": peak_selection_diagnostics_complete,
         "injection_report_identity_matches_science_and_gain": report_identity_matches,
         "injection_report_flux_bins_match_compact_summary": report_bins_match,
         "injection_report_recovery_counts_match_rows": report_rows_match_bins,
@@ -316,6 +340,7 @@ def summarize_field_record(
         "local_snr_diagnostics_complete_and_count_bound": local_snr_diagnostics_complete,
         "source_only_diagnostics_complete_and_count_bound": source_only_diagnostics_complete,
         "source_only_flux_bin_counts_match_injection_rows": source_only_flux_bin_counts_match,
+        "peak_selection_diagnostics_complete_and_count_bound": peak_selection_diagnostics_complete,
         "electron_conversion_map_valid_fraction_gt_99pct": (
             isinstance(conversion_valid_fraction, (int, float))
             and 0.99 < float(conversion_valid_fraction) <= 1.0
@@ -554,6 +579,8 @@ def validate_aggregate_report(report: dict) -> dict:
             errors.append(f"{name}: isolated source-only response diagnostics are incomplete or unbound")
         if investigation.get("source_only_flux_bin_counts_match_injection_rows") is not True:
             errors.append(f"{name}: source-only peak-list counts do not match the detailed injection rows")
+        if investigation.get("peak_selection_diagnostics_complete") is not True:
+            errors.append(f"{name}: exact detector peak-selection diagnostics are incomplete or unbound")
         if investigation.get("injection_report_identity_matches_science_and_gain") is not True:
             errors.append(f"{name}: per-injection report is not bound to the science/gain pair")
         science = row.get("science") or {}
