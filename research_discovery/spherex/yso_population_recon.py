@@ -124,10 +124,27 @@ def build_region_queries(region: dict) -> dict[str, str]:
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
         + ")) ORDER BY p.time_bounds_lower"
     )
+    # Optional full-region coverage: test shape/shape intersection rather
+    # than only testing the region centre. IRSA's SPHEREx ADQL interface
+    # documents INTERSECTS for two geometry regions. Keep this query
+    # non-fatal so an archive-side geometry limitation cannot invalidate
+    # the catalogue and centre-point reconnaissance already returned above.
+    full_region_exposure_sql = (
+        f"SELECT TOP {COVERAGE_ROW_LIMIT} p.planeid, a.uri, p.energy_bandpassname, "
+        "p.time_bounds_lower, p.time_bounds_upper "
+        "FROM spherex.artifact a JOIN spherex.plane p ON p.planeid = a.planeid "
+        "WHERE 1 = INTERSECTS("
+        f"CIRCLE('ICRS', {region['ra_deg']:.8f}, {region['dec_deg']:.8f}, {region['radius_deg']:.5f}), "
+        "p.poly) "
+        "AND (LOWER(a.uri) LIKE '%/dr1/level2/%' AND p.energy_bandpassname IN ("
+        + ", ".join(f"'{band}'" for band in DR1_BANDS)
+        + ")) ORDER BY p.time_bounds_lower"
+    )
     return {
         "catalogue_sources": catalogue_sql,
         "candidate_sources": candidate_sql,
         "dr1_level2_exposures": exposure_sql,
+        "dr1_level2_exposures_full_region": full_region_exposure_sql,
     }
 
 
@@ -216,16 +233,23 @@ def inspect_region(region: dict) -> dict:
     """Execute TAP queries and derive counts without unsupported spatial COUNT()."""
     query_definitions = build_region_queries(region)
     query_results = {}
+    optional_query_errors = {}
     for name, sql in query_definitions.items():
         try:
             query_results[name] = query_rows(sql)
         except Exception as exc:
-            query_results[name] = {
+            error_record = {
                 "query": sql,
                 "error": f"{type(exc).__name__}: {exc}",
                 "row_count": None,
                 "rows": [],
             }
+            if name == "dr1_level2_exposures_full_region":
+                error_record["optional"] = True
+                optional_query_errors[name] = error_record["error"]
+            else:
+                error_record["optional"] = False
+            query_results[name] = error_record
 
     catalogue_result = query_results["catalogue_sources"]
     catalogue_rows = catalogue_result.get("rows", [])
@@ -312,12 +336,40 @@ def inspect_region(region: dict) -> dict:
     counts["dr1_level2_coverage_query_semantics"] = (
         "region_center_point_inside_exposure_polygon"
     )
+
+    full_region_result = query_results["dr1_level2_exposures_full_region"]
+    full_region_rows = full_region_result.get("rows", [])
+    full_region_error = full_region_result.get("error")
+    full_region_by_band = {}
+    if not full_region_error:
+        for row in full_region_rows:
+            band = str(row.get("energy_bandpassname") or "UNKNOWN")
+            record = full_region_by_band.setdefault(band, {
+                "exposure_rows": 0, "first_time": None, "last_time": None,
+            })
+            record["exposure_rows"] += 1
+            lo, hi = row.get("time_bounds_lower"), row.get("time_bounds_upper")
+            record["first_time"] = min(record["first_time"], lo) if record["first_time"] is not None else lo
+            record["last_time"] = max(record["last_time"], hi) if record["last_time"] is not None else hi
+    counts["dr1_level2_exposures_intersecting_full_region_by_band"] = (
+        None if full_region_error else full_region_by_band
+    )
+    counts["dr1_level2_exposures_intersecting_full_region_total"] = (
+        None if full_region_error else len(full_region_rows)
+    )
+    counts["dr1_level2_full_region_query_complete_under_declared_row_cap"] = (
+        not full_region_error and len(full_region_rows) < COVERAGE_ROW_LIMIT
+    )
+    counts["dr1_level2_full_region_coverage_query_semantics"] = (
+        "region_circle_intersects_exposure_polygon"
+    )
+    counts["dr1_level2_full_region_optional_query_error"] = full_region_error
     counts["source_level_epoch_coverage_measured"] = False
 
     query_errors = {
         name: result["error"]
         for name, result in query_results.items()
-        if result.get("error")
+        if result.get("error") and not result.get("optional")
     }
     return {
         "region": region,
@@ -325,6 +377,7 @@ def inspect_region(region: dict) -> dict:
         "queries": query_results,
         "query_sha256": digest_json(query_definitions),
         "query_errors": query_errors,
+        "optional_query_errors": optional_query_errors,
     }
 
 
@@ -345,6 +398,7 @@ def main() -> None:
                 "counts": result["counts"],
                 "query_sha256": result["query_sha256"],
                 "query_errors": result["query_errors"],
+                "optional_query_errors": result["optional_query_errors"],
             })
             if result["query_errors"]:
                 errors.append({
@@ -363,7 +417,8 @@ def main() -> None:
             for name, query_result in result["queries"].items():
                 if "rows" in query_result and name in {
                     "catalogue_sources", "candidate_sources", "class_distribution",
-                    "label_disagreement_candidates", "dr1_level2_exposures"
+                    "label_disagreement_candidates", "dr1_level2_exposures",
+                    "dr1_level2_exposures_full_region"
                 }:
                     write_csv(region_dir / f"{name}.csv", query_result["rows"])
             (region_dir / "query_record.json").write_text(
@@ -388,6 +443,10 @@ def main() -> None:
         "candidate_record_count": len(all_candidates),
         "class_distribution_record_count": len(all_classes),
         "label_disagreement_candidate_count": len(all_label_disagreements),
+        "optional_query_errors": {
+            item["region"]["name"]: item.get("optional_query_errors", {})
+            for item in summaries if item.get("optional_query_errors")
+        },
         "label_profile_counts_by_region": {
             item["region"]["name"]: item["counts"].get("label_concordance")
             for item in summaries
@@ -402,9 +461,10 @@ def main() -> None:
             "Machine-learning classification is not treated as independent confirmation.",
             "The regional counts are not a population rate; selection functions and contamination must be modelled.",
             "This reconnaissance does not establish a new YSO discovery.",
-            "The DR1 exposure query tests whether each fixed region-centre coordinate lies inside an exposure polygon; it does not enumerate every exposure intersecting the full region cone.",
-            "The DR1 row-cap check establishes only that the centre-point query returned fewer than 20000 rows; it does not establish survey-wide or source-level coverage completeness.",
-            "No source-level candidate-to-exposure matching or extracted spectra/epoch completeness is measured by this reconnaissance.",
+            "The centre-point DR1 query tests whether each fixed region-centre coordinate lies inside an exposure polygon.",
+            "A separate optional INTERSECTS query tests whether each exposure polygon overlaps the full circular region. If IRSA rejects that optional geometry query, the error is recorded separately and does not invalidate the catalogue or centre-point queries.",
+            "The row-cap checks establish only that each completed query returned fewer than 20000 rows; they do not establish survey-wide or source-level coverage completeness.",
+            "Neither regional footprint query matches exposures to individual catalogue sources; no source-level epoch completeness is measured by this reconnaissance.",
         ],
         "report_sha256": None,
     }
