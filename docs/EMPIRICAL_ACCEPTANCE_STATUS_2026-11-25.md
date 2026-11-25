@@ -158,3 +158,6 @@ protocol, and external astronomical reproduction/review.
 A software or workflow success must never automatically overwrite these
 scientific statuses. Only a new, checksummed, reviewable empirical report can
 change a corresponding gate.
+
+
+Detailed single-exposure evidence, exact product hashes and injection/recovery intervals: [M101 DR1 D2 pilot report](SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md).
