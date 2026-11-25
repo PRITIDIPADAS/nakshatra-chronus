@@ -459,3 +459,58 @@ def test_unblinding_rejects_detection_run_with_modified_threshold_configuration(
             public, blind["encrypted_truth_store"], key, frozen,
             detection_run, bootstrap_draws=100,
         )
+
+
+
+def test_benchmark_report_breaks_out_negative_controls_and_injection_strata():
+    from chronos_benchmark.runner import compare_benchmark_package, truth_catalogue_digest
+    package = _package()
+    empty = package["fields"][0]
+    empty["truth_catalogue"] = []
+    empty["input_signature"]["truth_catalogue_sha256"] = truth_catalogue_digest([])
+    for record in empty["methods"].values():
+        record["input_signature"] = dict(empty["input_signature"])
+    empty["control_type"] = "empty_field"
+
+    injected = package["fields"][1]
+    injected["control_type"] = "science"
+    injected["injection_stratum"] = {
+        "flux_bin": "faint",
+        "background_bin": "high",
+        "detector_zone": "outer",
+    }
+    package["score_thresholds"] = {name: [5.0] for name in (
+        "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
+    )}
+    report = compare_benchmark_package(package, bootstrap_draws=100, seed=82)
+    point = report["aggregate"]["snr_only"]["threshold_curve"][0]
+    assert point["by_control_type"]["empty_field"]["false_positive"] == 1
+    assert point["by_injection_stratum"]["flux_bin"]["faint"]["field_count"] == 1
+    assert point["by_injection_stratum"]["background_bin"]["high"]["field_count"] == 1
+
+
+def test_blind_store_keeps_control_labels_and_injection_strata_private_until_unblinding():
+    from cryptography.fernet import Fernet
+    from chronos_benchmark.blind import create_blind_store
+    from chronos_benchmark.runner import truth_catalogue_digest
+
+    key = Fernet.generate_key()
+    fields = [_field(f"CONTROL-SECRET-{i}") for i in range(4)]
+    fields[0]["control_type"] = "empty_field"
+    fields[0]["truth_catalogue"] = []
+    fields[0]["input_signature"]["truth_catalogue_sha256"] = truth_catalogue_digest([])
+    fields[1]["control_type"] = "detector_pattern_control"
+    fields[1]["injection_stratum"] = {"detector_zone": "outer", "flux_bin": "faint"}
+    blind = create_blind_store(fields, key, test_fraction=0.25, seed=44)
+
+    public_text = json.dumps(blind["run_manifest"])
+    assert "CONTROL-SECRET-0" not in public_text
+    assert "empty_field" not in public_text
+    assert "detector_pattern_control" not in public_text
+    assert "outer" not in public_text
+    private = json.loads(Fernet(key).decrypt(blind["encrypted_truth_store"]).decode("utf-8"))
+    by_id = {row["field"]["field_id"]: row for row in private["fields"]}
+    assert by_id["CONTROL-SECRET-0"]["control_type"] == "empty_field"
+    assert by_id["CONTROL-SECRET-0"]["field"]["truth_catalogue"] == []
+    assert by_id["CONTROL-SECRET-1"]["control_type"] == "detector_pattern_control"
+    assert by_id["CONTROL-SECRET-1"]["injection_stratum"]["detector_zone"] == "outer"
