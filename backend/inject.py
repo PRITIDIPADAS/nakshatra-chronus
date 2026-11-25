@@ -157,11 +157,11 @@ def plant(exps, sources, pad=10, *, electron_calibration_records=None,
                     e.notes.append("Injection skipped: absolute-gain map is invalid inside the PSF footprint.")
                     continue
                 expected_electrons = np.zeros_like(source_signal, dtype=float)
-                expected_electrons[active] = source_signal[active] / conversion_map[active]
+                expected_electrons[active] = source_signal[active] * conversion_map[active]
                 source_realization = np.zeros_like(source_signal, dtype=float)
                 variance_increment = np.zeros_like(source_signal, dtype=float)
-                source_realization[active] = rng.poisson(expected_electrons[active]) * conversion_map[active]
-                variance_increment[active] = expected_electrons[active] * conversion_map[active] ** 2
+                source_realization[active] = rng.poisson(expected_electrons[active]) / conversion_map[active]
+                variance_increment[active] = expected_electrons[active] / conversion_map[active] ** 2
                 e.img = e.img + source_realization
                 e.var = e.var + variance_increment
                 e.notes.append("Injection source photon noise and variance were simulated from the verified per-pixel absolute-gain matrix and exposure time.")
