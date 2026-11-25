@@ -730,7 +730,7 @@ def test_pixel_forward_integrates_linear_motion_over_the_finite_exposure():
         **common, motion_integration_substeps=1
     )
     integrated = simulate_spectral_exposure(
-        **common, motion_integration_substeps= nine
+        **common, motion_integration_substeps=9
     )
     instant_map = np.asarray(instantaneous["components"]["source_electrons"])
     trail_map = np.asarray(integrated["components"]["source_electrons"])
