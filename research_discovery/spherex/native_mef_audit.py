@@ -53,6 +53,7 @@ def audit(science_path,spectral_wcs_path,*,solid_angle_path=None,compatibility_e
   science_detector=str(im.header.get("DETECTOR","")).strip()
   image_header=dict(im.header)
   report["image_shape"]=list(image.shape)
+  report["checks"]["native_full_frame"]={"status":"pass" if image.shape==(2040,2040) else "review_required","expected":[2040,2040]}
   report["image_bunit"]=im.header.get("BUNIT")
   report["checks"]["image_unit"]={"status":"pass" if im.header.get("BUNIT")=="MJy/sr" else "review_required","bunit":im.header.get("BUNIT")}
   release=str(sci[0].header.get("RELEASE","")).lower()
@@ -71,7 +72,10 @@ def audit(science_path,spectral_wcs_path,*,solid_angle_path=None,compatibility_e
     if key=="VARIANCE":
      v=arr.astype(float); valid=np.isfinite(v)&(v>0)
      report["variance"]={"finite_positive_fraction":float(valid.mean()),"nonpositive_or_nonfinite_pixels":int((~valid).sum())}
-    if key=="FLAGS":report["flags"]={"dtype":str(arr.dtype),"unique_values_sample":np.unique(arr)[:32].tolist(),"raw_mp_header_cards":{k:im.header[k] for k in im.header if str(k).startswith("MP_")}}
+    if key=="FLAGS":flag_header=sci[names.index("FLAGS")].header
+     report["flags"]={"dtype":str(arr.dtype),"unique_values_sample":np.unique(arr)[:32].tolist(),
+       "raw_mp_header_cards":{k:flag_header[k] for k in flag_header if str(k).startswith("MP_")},
+       "header_flag_dictionary_present":any(str(k).startswith("MP_") for k in flag_header)}
   if "FLAGS" in names and np.asarray(sci[names.index("FLAGS")].data).dtype.kind not in "ui":
    report["checks"]["flags_integer_type"]={"status":"fail"}
   else:report["checks"]["flags_integer_type"]={"status":"pass" if "FLAGS" in names else "fail"}
@@ -108,7 +112,8 @@ def audit(science_path,spectral_wcs_path,*,solid_angle_path=None,compatibility_e
      valid=np.isfinite(a)&(a>0)
      report["solid_angle"]={"file":str(solid_angle_path),"sha256":sha256(solid_angle_path),"shape":list(a.shape),"bunit":hdu.header.get("BUNIT"),"positive_fraction":float(valid.mean())}
      sci_det=science_detector; cal_det=str(hdu.header.get("DETECTOR",om[0].header.get("DETECTOR",""))).strip()
-     report["checks"]["solid_angle"]={"status":"pass" if a.shape==(2040,2040) and valid.all() and sci_det and cal_det and sci_det==cal_det else "review_required","science_detector":sci_det,"calibration_detector":cal_det}
+     unit=str(hdu.header.get("BUNIT","")).lower().replace(" ","")
+     report["checks"]["solid_angle"]={"status":"pass" if a.shape==(2040,2040) and valid.all() and sci_det and cal_det and sci_det==cal_det and unit in {"arcsec2","arcsec**2","arcsec^2"} else "review_required","science_detector":sci_det,"calibration_detector":cal_det,"bunit":hdu.header.get("BUNIT")}
   else:report["checks"]["solid_angle"]={"status":"review_required","reason":"matching pixel solid-angle calibration was not supplied"}
  if compatibility_evidence:
   report["calibration_compatibility"]=compatibility_decision(compatibility_evidence["science"],compatibility_evidence["calibration"])
@@ -120,8 +125,29 @@ def audit(science_path,spectral_wcs_path,*,solid_angle_path=None,compatibility_e
 
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument("science_mef",type=Path);p.add_argument("spectral_wcs",type=Path)
- p.add_argument("--solid-angle",type=Path);p.add_argument("--out",type=Path,default=Path("native_mef_audit.json"))
- a=p.parse_args();result=audit(a.science_mef,a.spectral_wcs,solid_angle_path=a.solid_angle)
- a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(result,indent=2,default=str));print(result["status"])
+ p.add_argument("--solid-angle",type=Path);p.add_argument("--compatibility-evidence",type=Path)
+ p.add_argument("--science-uri");p.add_argument("--spectral-wcs-uri")
+ p.add_argument("--out",type=Path,default=Path("native_mef_audit.json"))
+ p.add_argument("--summary",type=Path,default=Path("native_mef_audit.md"))
+ a=p.parse_args()
+ evidence=json.loads(a.compatibility_evidence.read_text()) if a.compatibility_evidence else None
+ result=audit(a.science_mef,a.spectral_wcs,solid_angle_path=a.solid_angle,compatibility_evidence=evidence)
+ result["science_native_uri"]=a.science_uri
+ result["spectral_wcs_native_uri"]=a.spectral_wcs_uri
+ a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(result,indent=2,default=str))
+ lines=["# Native SPHEREx MEF audit","",f"**Status:** {result['status']}","",
+        f"Science file: `{a.science_mef}`",
+        f"SHA-256: `{result['science_sha256']}`",
+        f"Spectral-WCS file: `{a.spectral_wcs}`",
+        f"SHA-256: `{result['spectral_wcs_sha256']}`","",
+        f"IMAGE shape: `{result.get('image_shape')}`",
+        f"IMAGE BUNIT: `{result.get('image_bunit')}`","",
+        "| Check | Result |","|---|---|"]
+ for name,check in result["checks"].items():
+  lines.append(f"| {name} | {check.get('status','reported')} |")
+ lines += ["","## Boundary","",result["science_claim_boundary"],"",
+   "Science wavelength assignment uses the separate CWAVE and CBAND maps. WCS-WAVE is not used as a science wavelength substitute."]
+ a.summary.parent.mkdir(parents=True,exist_ok=True);a.summary.write_text("\n".join(lines)+"\n")
+ print(result["status"]);print(a.out);print(a.summary)
  if result["status"]=="FAILED":raise SystemExit(2)
 if __name__=="__main__":main()
