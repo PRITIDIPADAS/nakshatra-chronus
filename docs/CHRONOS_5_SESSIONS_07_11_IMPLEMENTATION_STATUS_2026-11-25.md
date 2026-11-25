@@ -66,7 +66,7 @@ This note separates three things that must not be conflated: implemented softwar
 
 ## Current implementation tests and real-data evidence
 
-The branch's last verified software test job before the hardening commits completed successfully in workflow run [45634325374](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45634325374). The associated live archive run [45634302992](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45634302992) completed both the test job and M101 retrieval/audit job.
+The latest fully completed CI + archive-audit run verified before the strict six-field final-exit hardening is workflow [45638162464](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45638162464). Its test job passed **304 tests with 12 warnings**; both JavaScript syntax checks passed. The companion PR run [45638182131](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45638182131) passed **304 tests with 2 warnings**. The push workflow also completed the live M101 DR1 D2 retrieval, the fail-closed archive-evidence validator and artifact upload successfully.
 
 The M101 artifact from that run records:
 - One SPHEREx DR1 D2 Level-2 science MEF, 2040 × 2040 pixels, 113.5826 s, observation ID `2025W19_2B_0346_1`, exposure time 2025-05-10, FITS pipeline version `7.0.5`.
@@ -74,7 +74,15 @@ The M101 artifact from that run records:
 - Native science, spectral-WCS, absolute-gain and solid-angle products have retained byte counts and SHA-256 hashes. Compatibility checks report `compatible`; 175 invalid absolute-gain pixels remain masked and are not interpolated.
 - A one-exposure local Jy injection pilot with 20 injections at each of 0.5×, 1× and 2× the local 5σ reference recovered 5/20, 14/20 and 17/20, respectively. The absolute-gain-derived electron conversion and source-Poisson variance are enabled for this exploratory pilot, but the conversion record remains `derived_pending_independent_review`.
 
+The fresh CI artifact is run 45638162464, artifact 15033532053 (`spherex-m101-dr1-d2-audit`), 91,213,913 bytes. Its uploaded ZIP SHA-256 is `bfc7f21895f8192abc7ed70b1e95ea0af7ea8e331b7b67f06987db34fc0218be`. I downloaded and inspected that exact ZIP: it contains the 64,800,000-byte native science MEF, 33,312,960-byte spectral-WCS file, 16,652,160-byte absolute-gain matrix, 16,652,160-byte solid-angle map, native MEF audit, source-Poisson Jy report and archive manifest. The artifact retains the same file SHA-256 values recorded in the report. The run's explicit validator output confirms the calibration/provenance and 3×20 injection checks; the electron conversion remains pending human review.
+
 The source-Poisson pilot is not blind: injection positions and seed are visible to the run, the evaluation is local to one exposure, and it is not the Session 07 four-method comparison. The detailed report and artifact hashes are in [the M101 real-data pilot note](SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md).
+
+## Six-region calibrated-Jy result — evidence-qualified status
+
+Workflow [45624461435](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45624461435) completed all six predeclared regions and uploaded artifact 15029628060. The raw artifact SHA-256 is `250f3bfdbd3fe81b1d87aa00cd54389377f7c147639c408604cde672d2c31cfb`. The archived summaries were subsequently checked with the stricter field validator; its separately retained report SHA-256 is `a94c010a3d4cfd6d678d93fe32e598218a77d53f13acf61c57d010059ebae299`. See [the complete six-region revalidation report](SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md).
+
+This completes the exploratory multi-field injection/recovery gate only. It does not complete independent detector-calibration approval or Session 07/08 blind comparison. The most consequential field result is Lupus III: 0/20 recoveries at each of 105.579, 211.158 and 422.317 µJy, including twice its local nominal 5σ reference. Preserve this as an adverse result and investigate local background, mask, ePSF/matched-filter and detection-pipeline behaviour before drawing a sensitivity conclusion.
 
 ## Acceptance gates that remain open
 
@@ -86,7 +94,7 @@ The source-Poisson pilot is not blind: injection positions and seed are visible 
 | Session 10 local Jacobian/SVD identifiability and covariance checks | Implemented; depends on supplied model and covariance |
 | Session 11 falsification, interval correction and complete-family gate | Implemented; conditional checks, not full joint Bayesian PPC |
 | Calibration review for M101 gain-to-electron conversion | Pending independent human review |
-| Multi-field calibration-compatible injection evaluation | Not yet accepted from a verified current artifact |
+| Multi-field calibration-compatible injection evaluation | Completed exploratory six-region D2 evaluation; post-hoc strict validation passed 6/6 field summaries; gain conversion review pending |
 | Four-baseline blind benchmark on actual held-out SPHEREx fields | Not satisfied |
 | Population-level YSO discovery | Not satisfied |
 | Independent astronomical reproduction/review | Not satisfied |
