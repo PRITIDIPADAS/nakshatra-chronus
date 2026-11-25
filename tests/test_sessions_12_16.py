@@ -306,3 +306,146 @@ def test_observation_planner_rejects_malformed_verified_feasibility_timestamp():
     }
     with pytest.raises(ValueError, match="timezone"):
         plan_observations([candidate])
+
+
+def _package_source_file(tmp_path):
+    import hashlib
+    source = tmp_path / "science.fits"
+    payload = b"SIMPLE  fixture native science bytes"
+    source.write_bytes(payload)
+    return {
+        "role": "science_mef",
+        "archive_id": "SYNTHETIC-ARCHIVE-ID",
+        "product_type": "Level-2 MEF test fixture",
+        "release": "SYNTHETIC",
+        "detector": "D2",
+        "native_uri": "https://example.org/synthetic/science.fits",
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "byte_count": len(payload),
+        "local_path": str(source),
+        "compatibility_group": "SYNTHETIC-D2",
+    }
+
+
+def _package_inputs(tmp_path):
+    from chronos_causal.evidence_graph import build_evidence_graph
+    analysis = {
+        "verdict": "unknown",
+        "leading_model": "static_source",
+        "abstention_reasons": ["synthetic package fixture only"],
+    }
+    observations = [{
+        "observation_id": "SYNTHETIC-OBS-1",
+        "mjd": 60000.0,
+        "wavelength_um": 2.1,
+        "detector_id": "D2",
+        "calibration_group": "SYNTHETIC-D2",
+    }]
+    graph = build_evidence_graph(
+        candidate_id="SYNTHETIC-CANDIDATE",
+        observations=observations,
+        analysis=analysis,
+    )
+    return analysis, graph
+
+
+def test_investigation_package_embeds_sources_and_verifies_all_member_hashes(tmp_path):
+    import hashlib
+    import zipfile
+    from chronos_causal.investigation_package import (
+        create_investigation_package, verify_investigation_package,
+    )
+
+    analysis, graph = _package_inputs(tmp_path)
+    source = _package_source_file(tmp_path)
+    package_path = tmp_path / "investigation.zip"
+    created = create_investigation_package(
+        package_path,
+        candidate_id="SYNTHETIC-CANDIDATE",
+        analysis=analysis,
+        evidence_graph=graph,
+        source_files=[source],
+        reproduction_command="python reproduce.py --package investigation.zip",
+        code_commit="a" * 40,
+        environment={"python_version": "test-fixture"},
+        processing_configuration={"data_class": "synthetic fixture"},
+        failed_checks=[{"check": "real_data", "status": "not_run"}],
+        include_source_bytes=True,
+    )
+    verified = verify_investigation_package(package_path)
+    assert verified["valid"] is True
+    assert created["source_bytes_embedded"] is True
+    assert verified["source_bytes_embedded"] is True
+    assert verified["candidate_id"] == "SYNTHETIC-CANDIDATE"
+    assert created["sha256"] == hashlib.sha256(package_path.read_bytes()).hexdigest()
+
+
+def test_investigation_package_detects_tampered_member_after_repacking(tmp_path):
+    import hashlib
+    import zipfile
+    from chronos_causal.investigation_package import (
+        create_investigation_package, verify_investigation_package,
+    )
+
+    analysis, graph = _package_inputs(tmp_path)
+    package_path = tmp_path / "tamper-check.zip"
+    create_investigation_package(
+        package_path,
+        candidate_id="SYNTHETIC-CANDIDATE",
+        analysis=analysis,
+        evidence_graph=graph,
+        source_files=[_package_source_file(tmp_path)],
+        reproduction_command="python reproduce.py",
+        include_source_bytes=True,
+    )
+    with zipfile.ZipFile(package_path, "r") as original:
+        members = {name: original.read(name) for name in original.namelist()}
+    members["analysis.json"] = b'{"verdict":"tampered"}\n'
+    with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as changed:
+        for name, payload in members.items():
+            changed.writestr(name, payload)
+    package_hash = hashlib.sha256(package_path.read_bytes()).hexdigest()
+    package_path.with_name(package_path.name + ".sha256").write_text(
+        f"{package_hash}  {package_path.name}\n", encoding="utf-8"
+    )
+    verified = verify_investigation_package(package_path)
+    assert verified["valid"] is False
+    assert verified["reason"] == "one or more package members failed integrity verification"
+    assert any(row["path"] == "analysis.json" for row in verified["failures"])
+
+
+def test_investigation_package_requires_exact_source_hash_and_reproduction_command(tmp_path):
+    import pytest
+    from chronos_causal.investigation_package import create_investigation_package
+
+    analysis, graph = _package_inputs(tmp_path)
+    source = _package_source_file(tmp_path)
+    bad_source = dict(source, sha256="0" * 64)
+    with pytest.raises(ValueError, match="SHA-256"):
+        create_investigation_package(
+            tmp_path / "bad.zip", candidate_id="SYNTHETIC-CANDIDATE",
+            analysis=analysis, evidence_graph=graph, source_files=[bad_source],
+            reproduction_command="python reproduce.py",
+        )
+    with pytest.raises(ValueError, match="reproduction command"):
+        create_investigation_package(
+            tmp_path / "missing-command.zip", candidate_id="SYNTHETIC-CANDIDATE",
+            analysis=analysis, evidence_graph=graph, source_files=[source],
+            reproduction_command="",
+        )
+
+
+def test_investigation_package_can_record_external_sources_without_embedding_bytes(tmp_path):
+    from chronos_causal.investigation_package import create_investigation_package
+    analysis, graph = _package_inputs(tmp_path)
+    source = _package_source_file(tmp_path)
+    result = create_investigation_package(
+        tmp_path / "metadata-only.zip",
+        candidate_id="SYNTHETIC-CANDIDATE",
+        analysis=analysis,
+        evidence_graph=graph,
+        source_files=[source],
+        reproduction_command="python reproduce.py --retrieve-from-manifest",
+        include_source_bytes=False,
+    )
+    assert result["source_bytes_embedded"] is False
