@@ -69,7 +69,7 @@ detector-matched solid-angle map. Integrated source flux in Jy is converted
 to the MJy/sr science-pixel domain using each pixel's solid angle. The
 position-dependent detection template uses ePSF divided by pixel solid angle.
 
-The local nominal matched-filter 5-sigma reference sensitivity is
+In the earlier deterministic baseline run (before the source-Poisson model was connected), the local nominal matched-filter 5-sigma reference sensitivity was
 **0.000108396 Jy (108.396 microJy)**. Sixty deterministic source signals
 were injected, 20 at each of three flux levels:
 
@@ -94,7 +94,7 @@ The native audit JSON has SHA-256
 the overall field summary has SHA-256
 `b2142a05ddb045a2560fec69f242c680261c55f87fd7ae27756b47bcf98d7f16`.
 
-## Reproduction record
+## Reproduction record for the earlier deterministic baseline
 
 - Real-field audit and injection workflow: [GitHub Actions run 45614873760](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45614873760).
 - Latest combined tests + real-field run: [GitHub Actions run 45614925600](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45614925600).
@@ -162,3 +162,32 @@ any Poisson-aware completeness values can be reported. Until that run
 completes and its artifact is inspected, the 60-source deterministic results
 above remain the only measured M101 injection/recovery results. Source
 Poisson-aware M101 and multi-field results are **pending**, not passed.
+
+## Updated gain-derived source-Poisson run — 25 November 2026
+
+The M101 real-field workflow was rerun after adding a provenance-bound per-pixel electron conversion and source shot noise. This newer run supersedes the deterministic injection counts above for the source-Poisson configuration; the earlier run is retained as a historical baseline, not merged with the new counts.
+
+- Workflow: [GitHub Actions run 45622359188](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45622359188)
+- Code revision: `1065d862877ef3fbea250d74f7a6f03f3c11eab8`
+- Workflow conclusion: success; native MEF audit, direct calibration provenance, gain validation and Jy injection all completed.
+- Companion full test suite: [run 45622372718](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45622372718), **269 passed, 12 warnings**.
+- Artifact ID: `15026536639`; artifact SHA-256: `89e47150827c093dadd1fe8b8bcbb1273be15548b9a7f87c1eb1b8483eafce99` (GitHub Actions retention through 2026-12-25).
+- Field summary SHA-256: `bbd7c33c73a98706dc673bb4183c59593ba679e8e30c98a87344fd185f01ae94`.
+- Final native-MEF audit SHA-256: `58ab96630506cf3280569c60f50983ae6c3f5a1cca6e4306b8039a237979c8e4`.
+- Full injection/recovery JSON SHA-256: `427d66e337b3840293fe2a913b1fb08c187a2db035c30b64c6311caca8552568`.
+
+The native MEF/calibration compatibility result remained `compatible`. IRSA's live provenance query returned 14 input relations. The exact absolute-gain matrix link was verified with matching science and calibration plane IDs, matching native URIs, archive MD5 pass, calibration SHA-256 `d0a4c3352da99326c307e4e0115285faa8cba2769ea6b57cf340d4e6fc271b37`, and provenance query SHA-256 `6eba2bf33c5291940a61632eb297dcd940038aa5ac1d4c06a23f1124d78a41c0`.
+
+The conversion was calculated per detector pixel as exposure time divided by the absolute-gain matrix. Its valid fraction was 0.9999579489; 175 invalid/non-positive gain samples stayed masked. The existing Level-2 IMAGE data were not gain-corrected a second time. Source Poisson draws and their IMAGE-domain variance were added only to the injected sources. The conversion record is `derived_pending_independent_review`, with `review_status=pending`; no human reviewer or sign-off is claimed.
+
+| Integrated injected flux | Recovered | Completeness | Wilson 95% interval |
+|---:|---:|---:|---:|
+| 54.198 microJy | 5 / 20 | 25% | 11.19%–46.87% |
+| 108.396 microJy | 14 / 20 | 70% | 48.10%–85.45% |
+| 216.792 microJy | 17 / 20 | 85% | 63.96%–94.76% |
+
+The pre-injection local 5-sigma reference remains 108.396 microJy. This is a fixed-seed exploratory run of 60 simulated source signals in one local PSF region of one M101 D2 exposure. The source locations, input fluxes and random seed were available to the evaluator. It is **not blind**, not multi-field, not a four-method comparison, and not a survey-wide completeness curve. The ePSF's raw stamp is preserved; only the tiny below-threshold interpolation undershoot is clipped in a separate hashed stamp.
+
+## Current scientific boundary
+
+The gain-derived source-Poisson implementation has now passed its M101 real-data workflow and the full test suite at the revisions above. Its calibration derivation still requires independent human review before being labelled verified. The six-region multi-field Jy workflow is implemented, but its aggregate result must be checked before the multi-field gate is changed. The independent-custodian blind benchmark, YSO population analysis, independent astronomical reproduction/review and validated release gates remain unsatisfied.
