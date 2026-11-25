@@ -404,7 +404,8 @@ def population_yso_rate(request: YSOPopulationRateRequest):
                 "coverage_audit": coverage,
             })
         rate = estimate_event_rate(
-            request.fields, minimum_completeness=request.minimum_completeness,
+            request.fields, coverage_audit=coverage,
+            minimum_completeness=request.minimum_completeness,
             draws=request.draws, seed=request.seed,
         )
         return {
