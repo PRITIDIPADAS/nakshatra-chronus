@@ -210,7 +210,7 @@ def _verify_native_pixel(
         "solid_angle_unit": area_unit,
         "science_image_pixel_value": pixel_flux,
         "science_variance_pixel_value": pixel_variance,
-        "science_image_unit": image_hdu.header.get("BUNIT") if False else "MJy/sr",
+        "science_image_unit": "MJy/sr",
         "native_image_shape": list(image.shape),
         "native_map_shape": list(cwave.shape),
         "spectral_pixel_value_tolerance_um": 1e-6,

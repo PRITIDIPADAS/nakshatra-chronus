@@ -96,7 +96,7 @@ def test_selection_function_refuses_sparse_cells_and_mixed_frozen_provenance():
     from chronos_population.selection import fit_selection_function
 
     sparse = fit_selection_function(
-        _trials()[:10], _bin_spec(), field_records=_field_records(),
+        _trials()[::2], _bin_spec(), field_records=_field_records(),
         minimum_trials_per_cell=20, minimum_independent_fields=5,
     )
     assert sparse["supported"] is False

@@ -582,6 +582,11 @@ def _population_real_field(field_id="FIELD-1", source_id="YSO-1", *,
         "source_id": source_id,
         "sample_class": "young_stellar_object",
         "classification_reference": "https://example.org/independent-classification",
+        "selection_covariates": {
+            "flux_jy": 0.5, "wavelength_um": 3.1,
+            "crowding_index": 0.4, "background_rms": 0.2,
+            "epoch_count": 4, "detector_zone": "center",
+        },
         "observations": rows,
     }
     return {
@@ -602,13 +607,68 @@ def _population_real_field(field_id="FIELD-1", source_id="YSO-1", *,
     }
 
 
+
+def _population_selection_bin_spec():
+    return {
+        "edges": {
+            "flux_jy": [0.01, 1.0, 10.0],
+            "wavelength_um": [2.0, 3.0, 4.0],
+            "crowding_index": [0.0, 1.0, 2.0],
+            "background_rms": [0.0, 0.5, 1.0],
+            "epoch_count": [1, 3, 6],
+        },
+        "detector_zone_levels": ["center", "middle", "edge"],
+    }
+
+
+def _population_selection_inputs(fields):
+    spec = _population_selection_bin_spec()
+    covariates = {
+        "flux_jy": 0.5, "wavelength_um": 3.1,
+        "crowding_index": 0.4, "background_rms": 0.2,
+        "epoch_count": 4, "detector_zone": "center",
+    }
+    trials = []
+    for field in fields:
+        field_id = field["field_id"]
+        for index in range(4):
+            trials.append({
+                "trial_id": f"{field_id}-SELECTION-{index}",
+                "field_id": field_id,
+                "dataset_class": "real",
+                "release": "DR1",
+                "recovered": index != 0,
+                "covariates": dict(covariates),
+                "method_id": "test-frozen-yso-source-selection-v1",
+                "processing_config_sha256": "a" * 64,
+                "injection_protocol_sha256": "b" * 64,
+                "calibration_manifest_sha256": "c" * 64,
+                "independence_group_id": field.get("independence_group_id", field_id),
+            })
+    return trials, spec
+
+
+def _five_population_fields(*, omit_feature_epochs=(), repeated_source=None):
+    fields = []
+    for index in range(5):
+        source_id = repeated_source if index < 2 and repeated_source else f"YSO-{index}"
+        fields.append(_population_real_field(
+            f"FIELD-{index}", source_id,
+            omit_feature_epochs=omit_feature_epochs if index == 0 else (),
+        ))
+    return fields
+
+
 def test_population_coverage_requires_feature_and_both_continua_in_same_epochs():
     from chronos_population.coverage import assess_population_coverage
 
-    field = _population_real_field(omit_feature_epochs=(1, 2))
+    fields = _five_population_fields(omit_feature_epochs=(1, 2))
+    trials, spec = _population_selection_inputs(fields)
     result = assess_population_coverage(
-        [field],
-        minimum_independent_fields=1,
+        fields,
+        minimum_independent_fields=5,
+        selection_trials=trials,
+        selection_bin_spec=spec,
         feature_interval_um=[3.05, 3.15],
         blue_continuum_um=[2.8, 2.95],
         red_continuum_um=[3.3, 3.4],
@@ -624,9 +684,13 @@ def test_population_coverage_requires_feature_and_both_continua_in_same_epochs()
 def test_population_coverage_passes_only_with_repeated_same_epoch_spectral_coverage():
     from chronos_population.coverage import assess_population_coverage
 
+    fields = _five_population_fields()
+    trials, spec = _population_selection_inputs(fields)
     result = assess_population_coverage(
-        [_population_real_field()],
-        minimum_independent_fields=1,
+        fields,
+        minimum_independent_fields=5,
+        selection_trials=trials,
+        selection_bin_spec=spec,
         feature_interval_um=[3.05, 3.15],
         blue_continuum_um=[2.8, 2.95],
         red_continuum_um=[3.3, 3.4],
@@ -639,11 +703,13 @@ def test_population_coverage_rejects_same_source_counted_in_multiple_fields():
     from copy import deepcopy
     from chronos_population.coverage import assess_population_coverage
 
-    first = _population_real_field("FIELD-A", "REPEATED-SOURCE")
-    second = _population_real_field("FIELD-B", "REPEATED-SOURCE")
+    fields = _five_population_fields(repeated_source="REPEATED-SOURCE")
+    trials, spec = _population_selection_inputs(fields)
     result = assess_population_coverage(
-        [first, second],
-        minimum_independent_fields=2,
+        fields,
+        minimum_independent_fields=5,
+        selection_trials=trials,
+        selection_bin_spec=spec,
         feature_interval_um=[3.05, 3.15],
         blue_continuum_um=[2.8, 2.95],
         red_continuum_um=[3.3, 3.4],
@@ -657,10 +723,13 @@ def test_population_coverage_rejects_same_source_counted_in_multiple_fields():
 def _population_coverage_audit(fields, minimum_completeness=0.5):
     from chronos_population.coverage import assess_population_coverage
 
+    trials, spec = _population_selection_inputs(fields)
     return assess_population_coverage(
         fields,
-        minimum_independent_fields=1,
+        minimum_independent_fields=5,
         minimum_completeness=minimum_completeness,
+        selection_trials=trials,
+        selection_bin_spec=spec,
         feature_interval_um=[3.05, 3.15],
         blue_continuum_um=[2.8, 2.95],
         red_continuum_um=[3.3, 3.4],
@@ -670,17 +739,22 @@ def _population_coverage_audit(fields, minimum_completeness=0.5):
 def test_population_event_rate_scales_null_control_to_science_exposure():
     from chronos_population.rates import estimate_event_rate
 
-    field = _population_real_field()
-    audit = _population_coverage_audit([field])
-    result = estimate_event_rate([field], coverage_audit=audit, draws=1000, seed=19)
-    assert result["field_count"] == 1
+    fields = _five_population_fields()
+    audit = _population_coverage_audit(fields)
+    trials, spec = _population_selection_inputs(fields)
+    result = estimate_event_rate(
+        fields, coverage_audit=audit, selection_trials=trials,
+        selection_bin_spec=spec, draws=1000, seed=19,
+    )
+    assert result["field_count"] == 5
     assert result["coverage_revalidated"] is True
     included = result["included_fields"][0]
     assert included["null_control_to_science_exposure_ratio"] == pytest.approx(0.25)
     assert included["null_events_expected_in_science_exposure"] == pytest.approx(2.0)
     assert result["event_rate_per_sqdeg_day"]["median"] > 0
     assert result == estimate_event_rate(
-        [field], coverage_audit=audit, draws=1000, seed=19
+        fields, coverage_audit=audit, selection_trials=trials,
+        selection_bin_spec=spec, draws=1000, seed=19,
     )
 
 
@@ -694,44 +768,59 @@ def test_population_event_rate_refuses_synthetic_or_unattested_fields():
     unattested["independent_field"] = False
     fields = [valid, synthetic, unattested]
     audit = _population_coverage_audit(fields)
+    trials, spec = _population_selection_inputs(fields)
     assert audit["eligible_for_predeclared_population_protocol"] is False
     with pytest.raises(ValueError, match="coverage audit did not pass"):
-        estimate_event_rate(fields, coverage_audit=audit, draws=1000, seed=23)
+        estimate_event_rate(
+            fields, coverage_audit=audit, selection_trials=trials,
+            selection_bin_spec=spec, draws=1000, seed=23,
+        )
 
 
 def test_population_event_rate_rejects_missing_null_control_exposure_scale():
     from chronos_population.rates import estimate_event_rate
 
-    field = _population_real_field()
-    field.pop("null_control_to_science_exposure_ratio")
-    audit = _population_coverage_audit([field])
+    fields = _five_population_fields()
+    fields[0].pop("null_control_to_science_exposure_ratio")
+    audit = _population_coverage_audit(fields)
+    trials, spec = _population_selection_inputs(fields)
     assert audit["eligible_for_predeclared_population_protocol"] is False
     with pytest.raises(ValueError, match="coverage audit did not pass"):
-        estimate_event_rate([field], coverage_audit=audit, draws=1000, seed=29)
+        estimate_event_rate(
+            fields, coverage_audit=audit, selection_trials=trials,
+            selection_bin_spec=spec, draws=1000, seed=29,
+        )
 
 
 def test_population_event_rate_rejects_modified_coverage_audit_or_field_records():
     from chronos_population.rates import estimate_event_rate
 
-    field = _population_real_field()
-    audit = _population_coverage_audit([field])
+    fields = _five_population_fields()
+    audit = _population_coverage_audit(fields)
+    trials, spec = _population_selection_inputs(fields)
     forged_audit = dict(audit)
     forged_audit["input_fields_sha256"] = "0" * 64
     with pytest.raises(ValueError, match="field digest mismatch"):
-        estimate_event_rate([field], coverage_audit=forged_audit, draws=1000, seed=31)
+        estimate_event_rate(
+            fields, coverage_audit=forged_audit, selection_trials=trials,
+            selection_bin_spec=spec, draws=1000, seed=31,
+        )
 
-    modified_field = dict(field)
-    modified_field["observed_events"] += 1
+    modified_fields = [dict(row) for row in fields]
+    modified_fields[0]["observed_events"] += 1
     with pytest.raises(ValueError, match="field digest mismatch"):
-        estimate_event_rate([modified_field], coverage_audit=audit, draws=1000, seed=31)
+        estimate_event_rate(
+            modified_fields, coverage_audit=audit, selection_trials=trials,
+            selection_bin_spec=spec, draws=1000, seed=31,
+        )
 
 
 def test_population_coverage_derives_null_control_ratio_from_area_time():
     from chronos_population.coverage import assess_population_coverage
 
-    field = _population_real_field()
-    field["null_control_to_science_exposure_ratio"] = 0.5
-    result = _population_coverage_audit([field])
+    fields = _five_population_fields()
+    fields[0]["null_control_to_science_exposure_ratio"] = 0.5
+    result = _population_coverage_audit(fields)
     assert result["eligible_for_predeclared_population_protocol"] is False
     assert "null_control_exposure_ratio_inconsistent_with_area_time" in result["fields"][0]["reasons"]
 
@@ -739,11 +828,11 @@ def test_population_coverage_derives_null_control_ratio_from_area_time():
 def test_population_coverage_rejects_unbridged_calibration_group_changes():
     from chronos_population.coverage import assess_population_coverage
 
-    field = _population_real_field()
-    row = field["sources"][0]["observations"][-1]
+    fields = _five_population_fields()
+    row = fields[0]["sources"][0]["observations"][-1]
     row["calibration_group"] = "DR1-D2-SECOND-CAL"
     row["wavelength_provenance"]["compatibility_group"] = "DR1-D2-SECOND-CAL"
-    result = _population_coverage_audit([field])
+    result = _population_coverage_audit(fields)
     source = result["fields"][0]["sources"][0]
     assert result["eligible_for_predeclared_population_protocol"] is False
     assert "multiple_calibration_groups_without_verified_bridge" in source["reasons"]
@@ -752,22 +841,28 @@ def test_population_coverage_rejects_unbridged_calibration_group_changes():
 def test_population_event_rate_pools_counts_over_total_area_time_exposure():
     from chronos_population.rates import estimate_event_rate
 
-    one_field = _population_real_field("FIELD-A", "SOURCE-A")
-    second_field = _population_real_field("FIELD-B", "SOURCE-B")
-    single_audit = _population_coverage_audit([one_field])
-    combined_audit = _population_coverage_audit([one_field, second_field])
+    single_fields = _five_population_fields()
+    combined_fields = single_fields + [_population_real_field("FIELD-5", "YSO-5")]
+    single_audit = _population_coverage_audit(single_fields)
+    combined_audit = _population_coverage_audit(combined_fields)
+    single_trials, single_spec = _population_selection_inputs(single_fields)
+    combined_trials, combined_spec = _population_selection_inputs(combined_fields)
 
     single = estimate_event_rate(
-        [one_field], coverage_audit=single_audit, draws=10000, seed=71
+        single_fields, coverage_audit=single_audit,
+        selection_trials=single_trials, selection_bin_spec=single_spec,
+        draws=10000, seed=71,
     )
     combined = estimate_event_rate(
-        [one_field, second_field], coverage_audit=combined_audit, draws=10000, seed=71
+        combined_fields, coverage_audit=combined_audit,
+        selection_trials=combined_trials, selection_bin_spec=combined_spec,
+        draws=10000, seed=71,
     )
 
-    assert single["total_science_exposure_sqdeg_days"] == pytest.approx(10.0)
+    assert single["total_science_exposure_sqdeg_days"] == pytest.approx(50.0)
     assert single["event_rate_per_sqdeg_day"]["median"] > 0
-    assert combined["total_science_exposure_sqdeg_days"] == pytest.approx(20.0)
-    assert [row["science_exposure_sqdeg_days"] for row in combined["included_fields"]] == [10.0, 10.0]
+    assert combined["total_science_exposure_sqdeg_days"] == pytest.approx(60.0)
+    assert [row["science_exposure_sqdeg_days"] for row in combined["included_fields"]] == [10.0] * 6
     # Adding an equally representative independent field doubles exposure and
     # expected excess counts; it must not double the pooled rate.
     assert combined["event_rate_per_sqdeg_day"]["median"] == pytest.approx(
