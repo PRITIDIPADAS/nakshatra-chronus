@@ -9,6 +9,7 @@ on:
       - research_discovery/spherex/run_real_field_audit.py
       - research_discovery/spherex/fetch_native_mefs.py
       - research_discovery/spherex/discover_calibrations.py
+      - research_discovery/spherex/probe_calibration_tap.py
       - research_discovery/spherex/native_mef_audit.py
   workflow_dispatch:
 
@@ -38,9 +39,16 @@ jobs:
       - name: Compile the retrieval and audit package
         run: python -m compileall -q research_discovery/spherex
 
+      - name: Inspect the documented DR1 calibration TAP collection
+        run: |
+          set -euo pipefail
+          python -m research_discovery.spherex.probe_calibration_tap \
+            --rows 50 \
+            --out data/spherex_m101_audit/calibration_tap_inspection.json 2>&1 | tee calibration-tap.log
+
       - name: Retrieve M101 native science MEF and detector calibrations
         run: |
-          set -o pipefail
+          set -euo pipefail
           CHRONOS_GIT_COMMIT="$GITHUB_SHA" python -m research_discovery.spherex.run_real_field_audit \
             --field M101,210.80227,54.34895 \
             --bandpass SPHEREx-D2 \
@@ -56,5 +64,6 @@ jobs:
           path: |
             data/spherex_m101_audit/
             spherex-real-field.log
+            calibration-tap.log
           if-no-files-found: warn
           retention-days: 30
