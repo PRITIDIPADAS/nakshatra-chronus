@@ -13,6 +13,22 @@ def sha256_file(path):
  with Path(path).open("rb") as f:
   for b in iter(lambda:f.read(1024*1024),b""):h.update(b)
  return h.hexdigest()
+
+def archive_path_metadata(uri):
+ """Extract only literal version and processing-date tokens in the archive path."""
+ segments=[part for part in urlparse(uri).path.split("/") if part]
+ product_version=None
+ processing_date=None
+ for segment in segments:
+  version_match=re.fullmatch(r"v(?P<version>[0-9]+(?:\\.[0-9]+)*)(?:[-_](?P<date>\\d{4}-\\d{3}))?",segment,re.I)
+  if version_match:
+   product_version=version_match.group("version")
+   processing_date=version_match.group("date")
+   continue
+  if re.fullmatch(r"\\d{4}-\\d{3}",segment) and processing_date is None:
+   processing_date=segment
+ return {"product_version":product_version,"processing_date":processing_date}
+
 def download_calibration(uri,*,release,product,detector,out,timeout=180):
  u=urlparse(uri)
  if u.scheme!="https" or u.hostname!=HOST:raise ValueError("calibration URI must be an HTTPS IRSA archive URI")
@@ -23,8 +39,9 @@ def download_calibration(uri,*,release,product,detector,out,timeout=180):
  if f"/spherex/{release}/" not in path:raise ValueError("URI release path does not match the selected release")
  if product not in path and not (product=="solid_angle" and "solid_angle_pixel_map" in path):
   raise ValueError("URI product directory does not match the selected product")
- if not re.search(rf"/{detector}/",path) and product not in {"solid_angle"}:
+ if not re.search(rf"/{detector}/",path):
   raise ValueError("URI does not contain the requested numeric detector directory")
+ archive_metadata=archive_path_metadata(uri)
  dest=Path(out);dest.parent.mkdir(parents=True,exist_ok=True);tmp=dest.with_suffix(dest.suffix+".part")
  digest=hashlib.sha256();count=0;status="failed";error=None
  try:
@@ -45,6 +62,9 @@ def download_calibration(uri,*,release,product,detector,out,timeout=180):
   else:tmp.unlink(missing_ok=True)
  record={"schema_version":"1.0.0","product_type":product,"release":release.upper(),"detector":f"D{detector}",
   "native_uri":uri,"local_path":str(dest) if status=="downloaded" else str(tmp) if status=="partial" else None,
+  "product_family":f"spherex_{release}_{product}",
+  "product_version":archive_metadata["product_version"],
+  "processing_date":archive_metadata["processing_date"],
   "status":status,"byte_count":count if count else None,"sha256":digest.hexdigest() if status=="downloaded" else None,
   "retrieved_utc":datetime.now(timezone.utc).isoformat(),"etag":response.headers.get("ETag") if "response" in locals() else None,
   "last_modified":response.headers.get("Last-Modified") if "response" in locals() else None,
@@ -60,9 +80,10 @@ def main():
  from research_discovery.spherex.archive_manifest import build_manifest,product_record,validate_manifest
  product=product_record(product_type=r["product_type"],native_uri=r["native_uri"],status=r["status"],
    archive_id=None,release=r["release"],detector=r["detector"],observation_time=None,
-   pipeline_version=None,processing_date=None,local_path=r["local_path"],byte_count=r["byte_count"],
+   pipeline_version=None,processing_date=r.get("processing_date"),local_path=r["local_path"],byte_count=r["byte_count"],
    sha256=r["sha256"],compatibility_group=None,compatibility_status="candidate_only",
-   notes=r.get("error") or "Downloaded candidate only; no science exposure match has been established.")
+   notes=(r.get("error") or "Downloaded candidate only; no science exposure match has been established.")+
+     (f" Archive product version={r['product_version']}." if r.get("product_version") else " Product version token not present in URI."))
  manifest=build_manifest(archive="NASA/IPAC IRSA SPHEREx calibration archive",
    query={"native_uri":a.uri,"release":a.release,"product":a.product,"detector":a.detector},
    products=[product],processing_config={"retrieval":"exact URI only","compatibility":"candidate_only"})
