@@ -22,9 +22,8 @@ def _detector(value):
     return "D"+s if s in {"1","2","3","4","5","6"} else None
 
 def _is_surface_brightness_unit(value):
-    compact=re.sub(r"\\s+", "", str(value or "")).lower()
-    return compact in {"mjy/sr", "mjy\\\\sr"}
-
+    compact = str(value or "").lower().replace(" ", "")
+    return compact == "mjy/sr"
 
 def _is_absolute_gain_unit(value):
     compact=re.sub(r"[\s(){}]", "", str(value or "")).lower()
