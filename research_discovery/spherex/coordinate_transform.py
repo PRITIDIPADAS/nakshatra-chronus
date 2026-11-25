@@ -53,11 +53,6 @@ def detector_origin_offset(image_header, native_shape=NATIVE_SHAPE):
 def _assert_detector(science_detector, requested_detector):
     a=str(science_detector or "").strip().upper().replace("DETECTOR","").replace("D","")
     b=str(requested_detector or "").strip().upper().replace("D","")
-    # A generic transform can be exercised when both detector identities are
-    # absent (for example, a standalone ePSF table fixture). A one-sided
-    # identity or an actual mismatch is never accepted.
-    if not a and not b:
-        return
     if not a or not b or a!=b:
         raise ValueError(f"detector mismatch or missing detector identity: science={science_detector!r}, requested={requested_detector!r}")
 
