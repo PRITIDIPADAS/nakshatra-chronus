@@ -2,6 +2,7 @@ from research_discovery.spherex.run_multifield_jy_pilot import (
     FIELDS,
     aggregate_report,
     summarize_field_record,
+    validate_aggregate_report,
 )
 
 
@@ -241,3 +242,53 @@ def test_field_summary_requires_explicit_pending_review_not_human_signoff():
     )
     assert record["eligible_for_multi_field_pilot_summary"] is False
     assert record["checks"]["source_poisson_is_not_mislabelled_human_verified"] is False
+
+
+def _complete_report():
+    records = []
+    for index, field in enumerate(FIELDS):
+        summary = _summary()
+        summary["science"]["observation_id"] = f"obs-{index}"
+        summary["science"]["sha256"] = f"{index + 1:064x}"
+        record = summarize_field_record(
+            field, summary, return_code=0, log_path=f"{field['name']}.log"
+        )
+        record["summary_sha256"] = f"{index + 20:064x}"
+        record["summary_path"] = f"fields/{field['name']}/real_field_audit_summary.json"
+        records.append(record)
+    return aggregate_report(
+        records, started_utc="2026-11-25T00:00:00Z",
+        finished_utc="2026-11-25T00:01:00Z", code_revision="a" * 40,
+    )
+
+
+def test_final_aggregate_gate_requires_exact_field_manifest_and_report_digest():
+    report = _complete_report()
+    result = validate_aggregate_report(report)
+    assert result["valid"] is True
+    assert result["verified_field_count"] == 6
+    assert result["verified_field_names"] == sorted(field["name"] for field in FIELDS)
+    assert result["aggregate_report_sha256"] == report["report_sha256"]
+
+
+def test_final_aggregate_gate_rejects_duplicate_field_even_when_six_rows_completed():
+    report = _complete_report()
+    report["field_results"][-1]["field"] = dict(report["field_results"][0]["field"])
+    result = validate_aggregate_report(report)
+    assert result["valid"] is False
+    assert any("field names" in error or "manifest" in error for error in result["errors"])
+    assert any("SHA-256" in error for error in result["errors"])
+
+
+def test_final_aggregate_gate_rejects_modified_or_incomplete_summary():
+    report = _complete_report()
+    report["field_results"][0]["summary_sha256"] = "not-a-digest"
+    result = validate_aggregate_report(report)
+    assert result["valid"] is False
+    assert any("summary SHA-256" in error for error in result["errors"])
+
+    report = _complete_report()
+    report["field_count_completed"] = 5
+    result = validate_aggregate_report(report)
+    assert result["valid"] is False
+    assert any("not all predeclared fields completed" in error for error in result["errors"])
