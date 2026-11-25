@@ -48,7 +48,7 @@ def _verified_audit_fixture(tmp_path):
         "required_hdus", "image_2d", "native_full_frame", "image_unit",
         "release_psf_family", "flags_integer_type", "celestial_wcs",
         "alternate_wcs_a", "cutout_parent_origin", "cwave_cband",
-        "solid_angle", "variance_alignment", "zodi_alignment")}
+        "wavelength_units", "solid_angle", "variance_alignment", "zodi_alignment")}
     audit = {
         "science_native_uri": uris["science"],
         "science_sha256": files["science"]["sha256"],
