@@ -109,6 +109,11 @@ def _injection_report(summary):
                 "post_injection_local_max_snr_within_match_radius": post_snr,
                 "local_snr_delta_within_match_radius": post_snr - baseline_snr,
                 "post_injection_local_peak_offset_within_match_radius_px": 0.75,
+                "source_only_local_max_snr_within_match_radius": 2.5 + index * 0.1,
+                "source_only_local_peak_offset_within_match_radius_px": 0.5,
+                "source_only_peak_list_recovered": int(index < int(flux_bin["n_recovered"])),
+                "source_only_nearest_peak_distance_px": 0.75,
+                "source_only_diagnostic_uses_original_variance": True,
             })
     return {
         "threshold_snr": 5.0,
@@ -124,6 +129,9 @@ def _injection_report(summary):
             "extended_radius_px": 5.0,
             "threshold_snr": 5.0,
             "does_not_change_recovery_or_peak_matching": True,
+            "isolated_source_response_available": True,
+            "source_only_uses_original_variance": True,
+            "source_only_peak_list_recovery_is_diagnostic_not_primary": True,
         },
         "flux_summary": [dict(row) for row in injection["flux_summary"]],
         "injections": rows,
@@ -431,3 +439,47 @@ def test_final_aggregate_gate_rejects_missing_injection_report_digest_or_local_s
     result = validate_aggregate_report(report)
     assert result["valid"] is False
     assert any("local per-injection SNR diagnostics" in error for error in result["errors"])
+
+
+def test_field_summary_requires_complete_isolated_source_only_diagnostics():
+    summary = _summary()
+    report = _injection_report(summary)
+    report["local_response_diagnostics"]["isolated_source_response_available"] = False
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="d" * 64,
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["checks"]["source_only_diagnostics_complete_and_count_bound"] is False
+
+    report = _injection_report(summary)
+    report["injections"][0]["source_only_diagnostic_uses_original_variance"] = False
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="d" * 64,
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["recovery_investigation"]["source_only_diagnostics_complete"] is False
+
+
+def test_field_summary_exposes_source_only_response_separately_from_sky_recovery():
+    summary = _summary()
+    report = _injection_report(summary)
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="d" * 64,
+    )
+    investigation = record["recovery_investigation"]
+    assert record["eligible_for_multi_field_pilot_summary"] is True
+    assert investigation["source_only_diagnostics_complete"] is True
+    assert investigation["source_only_diagnostic_rows"] == 60
+    assert len(investigation["local_snr_flux_bin_diagnostics"]) == 3
+    assert investigation["local_snr_flux_bin_diagnostics"][0]["source_only_peak_list_recovered_count"] == 18
+
+
+def test_final_aggregate_gate_rejects_missing_source_only_diagnostic_rows():
+    report = _complete_report()
+    report["field_results"][0]["recovery_investigation"]["source_only_diagnostics_complete"] = False
+    result = validate_aggregate_report(report)
+    assert result["valid"] is False
+    assert any("isolated source-only response diagnostics" in error for error in result["errors"])
