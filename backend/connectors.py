@@ -94,7 +94,7 @@ def flag_bits(h):
 
 
 def wavelength(h, hd, x, y):
-    """Color and channel width at a pixel from the W lookup table of the file. Display grade. Microns."""
+    """Return WCS-WAVE for display only. It is not a science wavelength solution."""
     w = WCS(header=hd, fobj=h, key="W")
     w.sip = None
     lam, bw = w.pixel_to_world(x, y)
@@ -115,9 +115,13 @@ def wavelength(h, hd, x, y):
 def pick_psf(h, hd, x, y):
     """PSF zone nearest to cutout pixel x, y. Returns the prepared PSF and a note, or None and the reason.
     QR3 files hold an EPSF table (one 33 by 33 ePSF per detector zone, with XCENTER and YCENTER); QR2 files hold a PSF cube."""
-    # Detector pixel (0 based) of the cutout pixel, from the alternate WCS A of the cutout.
-    xd = float(hd.get("CRVAL1A", 0.0)) + (x + 1 - float(hd.get("CRPIX1A", 1.0)))
-    yd = float(hd.get("CRVAL2A", 0.0)) + (y + 1 - float(hd.get("CRPIX2A", 1.0)))
+    # WCS A is the complete cutout-pixel to native-detector transform.
+    from research_discovery.spherex.coordinate_transform import image_to_detector
+    detector_id = str(hd.get("DETECTOR", hd.get("DETID", "")))
+    xd, yd = image_to_detector(
+        float(x), float(y), dict(hd),
+        science_detector=detector_id, requested_detector=detector_id)
+    xd, yd = float(xd), float(yd)
     if "EPSF" in h and hasattr(h["EPSF"], "columns"):
         try:
             t, ph = h["EPSF"].data, h["EPSF"].header
@@ -183,7 +187,8 @@ def load(row, ra, dec, size, coll):
     if not (2 <= x < img.shape[1] - 2 and 2 <= y < img.shape[0] - 2):
         raise ValueError("Target outside the cutout")
     det = int(hd.get("DETECTOR", 0) or row_detector(row))
-    notes, lam_ok, src = [], True, "W lookup table of the file (display grade)"
+    notes = ["No compatible CWAVE/CBAND calibration was paired with this exposure. WCS-WAVE and nominal band centres are display-only; scientific wavelength comparisons are disabled."]
+    lam_ok, src = False, "WCS-WAVE display only; CWAVE/CBAND not paired"
     raw_exptime = row["t_exptime"] if "t_exptime" in row.colnames else hd.get("EXPTIME", 0.0)
     try:
         source_exptime = 0.0 if np.ma.is_masked(raw_exptime) else float(raw_exptime)
@@ -200,8 +205,9 @@ def load(row, ra, dec, size, coll):
         lam, bw = wavelength(h, hd, x, y)
     except Exception as err:
         lo, hi, R = core.BANDS.get(det, (0.75, 5.0, 40))
-        lam, bw, lam_ok, src = math.sqrt(lo * hi), math.sqrt(lo * hi) / R, False, "band center only"
-        notes.append(f"Color at the target not read ({type(err).__name__}).")
+        lam, bw = math.sqrt(lo * hi), math.sqrt(lo * hi) / R
+        lam_ok, src = False, "nominal band centre for display only"
+        notes.append(f"WCS-WAVE unavailable for display ({type(err).__name__}); no science wavelength assigned.")
     psf, pnote = pick_psf(h, hd, x, y)
     if psf is None or "not found" in pnote:
         notes.append(pnote)
@@ -357,9 +363,9 @@ def doctor(t, coll="spherex_dr1+spherex_qr3"):
         steps.append(dict(step="Target in cutout", ok=0 <= x < hd["NAXIS1"] and 0 <= y < hd["NAXIS2"], detail=f"pixel {x:.1f}, {y:.1f}"))
         try:
             lam, bw = wavelength(h, hd, x, y)
-            steps.append(dict(step="Color at the target", ok=True, detail=f"{lam:.4f} micron, width {bw:.4f}"))
+            steps.append(dict(step="WCS-WAVE display value", ok=False, detail=f"{lam:.4f} micron, width {bw:.4f}; display only, no scientific wavelength assigned without compatible CWAVE/CBAND"))
         except Exception as err:
-            steps.append(dict(step="Color at the target", ok=False, detail=f"{type(err).__name__}: {err}"))
+            steps.append(dict(step="Science wavelength", ok=False, detail=f"No compatible CWAVE/CBAND assignment: {type(err).__name__}: {err}"))
         psf, note = pick_psf(h, hd, x, y)
         steps.append(dict(step="PSF", ok=psf is not None, detail=f"{note} Shape {getattr(h['PSF'].data, 'shape', None) if 'PSF' in h else None}"))
         b = flag_bits(h)
