@@ -163,7 +163,7 @@ def parametric_bootstrap_checks(observed, predicted, sigma, *, groups=None,
             "null_95_interval": [
                 float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))
             ],
-            "upper_tail_p_value": _tail_probability(values, observed_value),
+            "upper_tail_p_value": _tail_probability(values, observed_value, two_sided=(name == "mean_z")),
         }
     group_summaries = {}
     for key, labels in observed_group_stats.items():
@@ -177,7 +177,7 @@ def parametric_bootstrap_checks(observed, predicted, sigma, *, groups=None,
                     "null_95_interval": [
                         float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))
                     ],
-                    "upper_tail_p_value": _tail_probability(values, observed_value),
+                    "upper_tail_p_value": _tail_probability(values, observed_value, two_sided=(metric == "mean_z")),
                 }
     return {
         "method": "parametric bootstrap conditional on supplied predictions",
