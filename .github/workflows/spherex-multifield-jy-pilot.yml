@@ -42,7 +42,7 @@ jobs:
           python -m pip install -r research_discovery/requirements-research.txt
       - name: Test field-gate logic
         run: python -m pytest research_discovery/tests/test_multifield_jy_pilot.py -q
-      - name: Run six predeclared real D2 fields sequentially
+      - name: Run six predeclared real D2 fields with exact roster acceptance
         run: |
           python -m research_discovery.spherex.run_multifield_jy_pilot \
             --out data/spherex_multifield_jy_pilot \
