@@ -257,6 +257,7 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> t
             "dr1_level2_footprint_rows": len(exposures),
             "dr1_level2_unique_plane_ids": len(seen_plane_ids),
             "dr1_level2_by_band": band_summary,
+            "exposure_query_semantics": "fixed_region_centre_point_inside_exposure_polygon",
             "source_level_epoch_coverage": "not measured by this regional footprint query",
         })
     return region_rows, all_exposures
@@ -337,8 +338,9 @@ def analyze(root: Path) -> dict:
             "plane_ids_in_multiple_region_queries": len(cross_region_planes),
             "plane_id_region_memberships": cross_region_planes,
             "interpretation": (
-                "A repeated plane ID indicates that one archive footprint intersects multiple "
-                "predeclared region-centre polygons. It is not a repeated observation."
+                "A repeated plane ID indicates that the same archive exposure footprint contains "
+                "the fixed centre coordinates of more than one predeclared region. It is not a "
+                "repeated observation and does not establish per-source coverage."
             ),
         },
         "candidate_selection_definition": (
@@ -351,6 +353,7 @@ def analyze(root: Path) -> dict:
             "Published YSO, harmonised CLASS_1 and STYPE_ML labels remain separate fields.",
             "The report's candidate label overlaps are not independent validation.",
             "No completeness, contamination, selection function, population rate or star-formation rate is estimated.",
+            "Regional exposure rows count exposures whose footprint contains the fixed region-centre coordinate; they do not enumerate all exposures intersecting the full region cone.",
             "Regional exposure-polygon rows do not establish which individual candidate has source-level epoch coverage.",
             "No spectra were extracted or reclassified in this inventory audit.",
             "The six-region high-latitude cone is a comparison region, not a matched control sample.",
