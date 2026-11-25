@@ -235,7 +235,7 @@ def verify_frozen_configuration(record: Mapping[str, Any]) -> dict[str, Any]:
 
 _PRIVATE_HANDOFF_KEYS = {
     "truth_catalogue", "truth", "truth_id", "truth_ids",
-    "private_field", "original_field_id", "original_field_ids",
+    "private_field", "field_id", "original_field_id", "original_field_ids",
     "split_group_id", "independence_group_id", "source_id", "source_ids",
     "designation", "field_name", "region_name", "control_type", "control_label",
     "injection_stratum", "injection_seed", "private_exposure_ids",
