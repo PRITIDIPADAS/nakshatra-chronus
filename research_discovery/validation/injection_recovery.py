@@ -26,20 +26,74 @@ def normalize_psf(psf: np.ndarray) -> np.ndarray:
     return p / total
 
 
-def validate_electron_calibration_record(record):
-    """Validate the exposure and absolute-gain provenance record; returns a copy."""
+def validate_electron_calibration_record(record, *, allow_unreviewed: bool = False):
+    """Validate exact electron-conversion provenance.
+
+    Independently reviewed records use verification_status='verified'. A
+    provenance-derived record may be used only with the explicit opt-in flag
+    and remains marked derived_pending_independent_review in every report.
+    """
     if not isinstance(record, dict):
         raise ValueError("source Poisson noise requires an electron calibration record")
-    required = ("verification_status", "science_file_sha256", "science_observation_id",
-                "science_source_uri", "detector", "image_unit", "exposure_time_s",
-                "calibration_product", "calibration_uri", "calibration_file_path",
-                "calibration_sha256", "calibration_bunit", "conversion_method",
-                "verified_by", "verified_utc")
+    required = (
+        "verification_status", "science_file_sha256", "science_observation_id",
+        "science_source_uri", "detector", "image_unit", "exposure_time_s",
+        "calibration_product", "calibration_uri", "calibration_file_path",
+        "calibration_sha256", "calibration_bunit", "conversion_method",
+    )
     missing = [key for key in required if record.get(key) in (None, "")]
     if missing:
         raise ValueError("electron calibration record is missing: " + ", ".join(missing))
-    if record["verification_status"] != "verified":
-        raise ValueError("electron calibration is not marked verified; deterministic injection remains available")
+
+    status = str(record["verification_status"])
+    if status == "verified":
+        for key in ("verified_by", "verified_utc"):
+            if record.get(key) in (None, ""):
+                raise ValueError(f"verified electron calibration record is missing {key}")
+        from datetime import datetime
+        try:
+            verified_at = datetime.fromisoformat(str(record["verified_utc"]).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("verified_utc must be an ISO-8601 timestamp") from exc
+        if verified_at.tzinfo is None:
+            raise ValueError("verified_utc must include a timezone")
+    elif status == "derived_pending_independent_review":
+        if not allow_unreviewed:
+            raise ValueError(
+                "electron calibration derivation is pending independent review; "
+                "pass the explicit allow_unreviewed opt-in only for exploratory evaluation"
+            )
+        for key in ("derived_by", "derived_utc", "provenance_link"):
+            if record.get(key) in (None, ""):
+                raise ValueError(f"pending-review electron calibration record is missing {key}")
+        if str(record.get("review_status", "")).lower() != "pending":
+            raise ValueError("pending-review record must retain review_status='pending'")
+        link = record["provenance_link"]
+        link_required = ("input_table", "science_planeid", "calibration_planeid", "inputid", "outputid")
+        if not isinstance(link, dict) or any(not link.get(key) for key in link_required):
+            raise ValueError("pending-review record requires a complete IRSA provenance_input link")
+        if link["input_table"] != "spherex.provenance_input":
+            raise ValueError("electron calibration provenance must come from spherex.provenance_input")
+        if str(link["inputid"]) != str(link["calibration_planeid"]):
+            raise ValueError("provenance inputid does not match calibration plane ID")
+        if str(link["outputid"]) != str(link["science_planeid"]):
+            raise ValueError("provenance outputid does not match science plane ID")
+        if str(record["calibration_uri"]) != str(link.get("calibration_native_uri", "")):
+            raise ValueError("calibration URI does not match the provenance-linked calibration artifact")
+        if str(record["science_source_uri"]) != str(link.get("science_native_uri", "")):
+            raise ValueError("science URI does not match the provenance-linked science artifact")
+        from datetime import datetime
+        try:
+            derived_at = datetime.fromisoformat(str(record["derived_utc"]).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("derived_utc must be an ISO-8601 timestamp") from exc
+        if derived_at.tzinfo is None:
+            raise ValueError("derived_utc must include a timezone")
+    else:
+        raise ValueError(
+            "verification_status must be 'verified' or 'derived_pending_independent_review'"
+        )
+
     if record["calibration_product"] != "abs_gain_matrix":
         raise ValueError("SPHEREx source photon noise requires the detector-specific abs_gain_matrix")
     exposure_time = float(record["exposure_time_s"])
@@ -55,19 +109,12 @@ def validate_electron_calibration_record(record):
         raise ValueError("calibration_uri must be an HTTPS source URI")
     if not str(record["calibration_bunit"]).strip():
         raise ValueError("absolute-gain calibration BUNIT must be recorded exactly")
-    if record.get("detector") not in {"D1","D2","D3","D4","D5","D6"}:
+    if record.get("detector") not in {"D1", "D2", "D3", "D4", "D5", "D6"}:
         raise ValueError("detector must be the exact D1-D6 identifier")
     if str(record.get("science_native_file_sha256", record["science_file_sha256"])).lower() != str(record["science_file_sha256"]).lower():
         raise ValueError("science_native_file_sha256 must match the native science MEF SHA-256")
-    if not str(record.get("conversion_method","")).strip():
+    if not str(record.get("conversion_method", "")).strip():
         raise ValueError("conversion_method must document the physical unit derivation")
-    from datetime import datetime
-    try:
-        verified_at = datetime.fromisoformat(str(record["verified_utc"]).replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ValueError("verified_utc must be an ISO-8601 timestamp") from exc
-    if verified_at.tzinfo is None:
-        raise ValueError("verified_utc must include a timezone")
     calibration_path = Path(str(record["calibration_file_path"]))
     if not calibration_path.is_file():
         raise FileNotFoundError(f"absolute-gain calibration bytes are unavailable: {calibration_path}")
@@ -76,8 +123,9 @@ def validate_electron_calibration_record(record):
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     if digest.hexdigest().lower() != str(record["calibration_sha256"]).lower():
-        raise ValueError("absolute-gain calibration file SHA-256 does not match the signed-off record")
+        raise ValueError("absolute-gain calibration file SHA-256 does not match the provenance record")
     return dict(record)
+
 
 
 def inject_source_patch(image: np.ndarray, variance: np.ndarray, flags: np.ndarray,
@@ -349,6 +397,7 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                            background: np.ndarray | None = None,
                            electrons_per_image_unit: np.ndarray | None = None,
                            electron_calibration_record: dict | None = None,
+                           allow_unreviewed_electron_calibration: bool = False,
                            detection_psf: np.ndarray | None = None) -> dict:
     image=np.asarray(image,float); variance=np.asarray(variance,float); flags=np.asarray(flags)
     if image.ndim!=2 or variance.shape!=image.shape or flags.shape!=image.shape: raise ValueError("IMAGE/VARIANCE/FLAGS must have equal 2D shapes")
@@ -366,7 +415,10 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
     if electrons_per_image_unit is not None:
         if electron_calibration_record is None:
             raise ValueError("A conversion map cannot be used without its signed calibration record")
-        validate_electron_calibration_record(electron_calibration_record)
+        validate_electron_calibration_record(
+            electron_calibration_record,
+            allow_unreviewed=allow_unreviewed_electron_calibration,
+        )
         electrons_per_image_unit = np.asarray(electrons_per_image_unit, dtype=float)
         if electrons_per_image_unit.shape != image.shape:
             raise ValueError("per-pixel electrons-per-image-unit map must align exactly with IMAGE")
@@ -521,6 +573,8 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
           "conversion_map_valid_fraction": float(np.mean(np.isfinite(electrons_per_image_unit) & (electrons_per_image_unit > 0))) if electrons_per_image_unit is not None else None,
           "conversion": "exposure_time_s / abs_gain_matrix at each detector pixel" if electrons_per_image_unit is not None else None,
           "calibration_record": electron_calibration_record,
+          "calibration_review_status": (electron_calibration_record or {}).get("review_status", "independent_reviewed" if electron_calibration_record else "not_modelled"),
+          "independent_human_reviewed": bool(electron_calibration_record and electron_calibration_record.get("verification_status") == "verified"),
           "variance_update": "Added pixel-dependent source Poisson variance in IMAGE units" if electrons_per_image_unit is not None else "Not modelled; deterministic signal only",
       },
       "background_interpretation":"Caller-supplied aligned background model subtracted before matched filtering" if background is not None else "No background model subtracted; users should supply the matching ZODI/background or precomputed residual map for scientifically appropriate detection",
@@ -543,7 +597,9 @@ def main():
     p.add_argument("--flag-bits",type=int,default=0,help="Additional raw flag bits to exclude")
     p.add_argument("--seed",type=int,default=20261114)
     p.add_argument("--electron-calibration-record",type=Path,
-                   help="Verified JSON binding this exact science MEF to its absolute-gain calibration")
+                   help="JSON binding this exact science MEF to its absolute-gain calibration")
+    p.add_argument("--allow-unreviewed-electron-calibration", action="store_true",
+                   help="Explicit exploratory opt-in for provenance-derived calibration still pending independent human review")
     p.add_argument("--science-uri",help="Exact native HTTPS archive URI for this science MEF")
     p.add_argument("--exposure-time-s",type=float,
                    help="Exposure time in seconds from the matching archive record")
@@ -616,7 +672,10 @@ def main():
                 raise ValueError("electron calibration record native science MEF SHA-256 mismatch")
             if a.exposure_time_s is None or not np.isfinite(a.exposure_time_s) or a.exposure_time_s<=0:
                 raise ValueError("--exposure-time-s from the matching archive record is required for photon-noise mode")
-            validate_electron_calibration_record(electron_record)
+            validate_electron_calibration_record(
+                electron_record,
+                allow_unreviewed=a.allow_unreviewed_electron_calibration,
+            )
             if not np.isclose(float(electron_record["exposure_time_s"]),a.exposure_time_s,rtol=0,atol=1e-6):
                 raise ValueError("record exposure_time_s does not match --exposure-time-s")
             for key,actual in (("science_file_sha256",science_sha),("science_observation_id",science_obsid),
@@ -646,7 +705,8 @@ def main():
         solid_angle_sr_map=omega,flux_unit=a.flux_unit,
         psf_reference_xy=psf_reference_xy,psf_region_radius=a.psf_region_radius,
         background=background,electrons_per_image_unit=electrons_per_image_unit,
-        electron_calibration_record=electron_record)
+        electron_calibration_record=electron_record,
+        allow_unreviewed_electron_calibration=a.allow_unreviewed_electron_calibration)
     a.out.mkdir(parents=True,exist_ok=True)
     result["science_provenance"]={"native_uri":a.science_uri,"local_path":str(a.science_mef),
         "sha256":science_sha,"observation_id":science_obsid,"detector":science_detector,
