@@ -204,12 +204,15 @@ def plan_observations(
             raise ValueError("alternative prior set labels must be non-empty")
         local = []
         for candidate in ranked:
+            model_forecasts = {
+                name: {
+                    "mean": candidate["score"]["predictive_mean"][name],
+                    "sigma": candidate["score"]["predictive_model_sigma"][name],
+                }
+                for name in candidate["score"]["hypotheses"]
+            }
             local_score = expected_information_gain(
-                candidate["score"]["predictive_mean"] | {
-                    name: {"mean": candidate["score"]["predictive_mean"][name],
-                           "sigma": candidate["score"]["predictive_model_sigma"][name]}
-                    for name in candidate["score"]["hypotheses"]
-                },
+                model_forecasts,
                 alternative,
                 candidate["score"]["measurement_sigma"],
             )
