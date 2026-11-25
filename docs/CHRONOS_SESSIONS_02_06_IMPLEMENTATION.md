@@ -41,9 +41,13 @@ fetch_calibration.py downloads only an explicitly supplied HTTPS IRSA URI. A dow
 
     python -m research_discovery.spherex.fetch_calibration       <exact_IRSA_calibration_uri> --release dr1       --product spectral_wcs --detector 2       --out data/calibration/D2_spectral_wcs.fits       --manifest data/calibration/D2_spectral_wcs.download.json
 
-The compatibility decision requires explicit release, detector, pipeline version, processing date and coordinate frame. It also checks CWAVE and CBAND maps. The matrix builder consumes exported exposure and candidate metadata; unavailable metadata remains unresolved:
+The compatibility decision requires explicit release, detector, pipeline version, processing date and coordinate frame. It also checks CWAVE and CBAND maps plus a separate detector-matched solid-angle product with native shape, arcsec-squared units, URI and SHA-256. A missing item leaves the pair unresolved. The compatibility input is JSON with science_exposures and calibration_candidates arrays. Each row has id, uri and metadata. A spectral-WCS candidate metadata object contains release, detector, pipeline_version, processing_date, coordinate_frame, and either full cwave/cband arrays or a local audit report reference. It also contains a solid_angle_map object copied from the actual solid-angle audit: status, detector, shape, bunit, uri and sha256. Example pipeline:
 
-    python -m research_discovery.spherex.calibration_matrix       data/calibration/compatibility_inputs.json       --out data/calibration/compatibility_matrix.json
+    python -m research_discovery.spherex.merge_archive_manifests data/spherex_native/archive_manifest.json data/calibration/D2_spectral_wcs.archive_manifest.json data/calibration/D2_solid_angle.archive_manifest.json --out data/calibration/merged_manifest.json
+
+    python -m research_discovery.spherex.calibration_matrix data/calibration/compatibility_inputs.json --out data/calibration/compatibility_matrix.json
+
+    python -m research_discovery.spherex.apply_compatibility_matrix data/calibration/merged_manifest.json data/calibration/compatibility_matrix.json --out data/calibration/compatible_manifest.json
 
 Scientific wavelength values are obtained from the detector-matched CWAVE and CBAND calibration maps, in microns. The in-file WCS-WAVE table is reported for inspection but is never substituted for these science maps. The MEF auditor slices the native calibration grid to the science image using the documented cutout origin. Invalid calibration pixels remain masked; there is no silent interpolation or extrapolation.
 
@@ -69,8 +73,8 @@ Required record fields:
       "verification_status": "verified",
       "electrons_per_image_unit": 0.0,
       "science_file_sha256": "<64 lowercase hex characters>",
-      "science_observation_id": "<exact OBSID_Dn used by CHRONOS>",
-      "science_source_uri": "<exact HTTPS archive URI>",
+      "science_observation_id": "<exact original OBSID from the science MEF>",
+      "science_source_uri": "<exact native HTTPS archive URI>",
       "detector": "D2",
       "image_unit": "MJy/sr",
       "calibration_uri": "<exact HTTPS calibration URI>",
@@ -81,9 +85,9 @@ Required record fields:
       "verified_utc": "<ISO-8601 UTC timestamp>"
     }
 
-The example values above are placeholders, not SPHEREx instrument constants. A real conversion must be derived from the correct exposure and calibration product. Do not fill the record with guessed values.
+The example values above are placeholders, not SPHEREx instrument constants. A real conversion must be derived from the correct exposure and calibration product. Do not fill the record with guessed values. The science_file_sha256 identifies the exact bytes injected: the native MEF for the research-discovery CLI, or the exact cutout bytes retained by the browser-backed connector. Both records retain the original native archive URI. The CLI requires --science-uri <exact native HTTPS archive URI> alongside --electron-calibration-record <record.json>.
 
-The legacy backend/inject.py path now carries the loaded cutout's original archive URI, exact cutout-byte SHA-256 and IMAGE unit. A record must match the exposure identity, detector, unit, cutout hash and native source URI; its local calibration bytes are re-hashed. A scalar gain is rejected. Exposures with no such record stay deterministic, with a note attached to the exposure.
+The legacy backend/inject.py path now carries the loaded cutout's original archive URI, original OBSID, exact cutout-byte SHA-256, detector and IMAGE unit. A record must match the exposure identity, detector, unit, cutout hash and native source URI; its local calibration bytes are re-hashed. A scalar gain is rejected. Exposures with no such record stay deterministic, with a note attached to the exposure.
 
 ## Current evidence status
 
