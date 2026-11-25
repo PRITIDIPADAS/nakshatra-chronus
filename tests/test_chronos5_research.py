@@ -514,3 +514,77 @@ def test_blind_store_keeps_control_labels_and_injection_strata_private_until_unb
     assert by_id["CONTROL-SECRET-0"]["field"]["truth_catalogue"] == []
     assert by_id["CONTROL-SECRET-1"]["control_type"] == "detector_pattern_control"
     assert by_id["CONTROL-SECRET-1"]["injection_stratum"]["detector_zone"] == "outer"
+
+
+
+def test_transient_candidate_family_bootstrap_corrects_across_candidates_and_windows():
+    from chronos_benchmark.scenarios import generate_scenario
+    from chronos_causal.posterior_predictive import transient_candidate_family_bootstrap
+
+    first = generate_scenario(
+        "transient", seed=111, n_observations=12
+    )["observations"]
+    second = generate_scenario(
+        "achromatic_variable", seed=222, n_observations=12
+    )["observations"]
+    report = transient_candidate_family_bootstrap(
+        [
+            {"candidate_id": "candidate-A", "observations": first},
+            {"candidate_id": "candidate-B", "observations": second},
+        ],
+        draws=100,
+        seed=17,
+    )
+    assert report["candidate_count"] == 2
+    assert report["candidate_selection_adjusted"] is True
+    assert report["total_candidate_interval_searches"] == sum(
+        row["searched_interval_count"] for row in report["per_candidate"]
+    )
+    assert 0 <= report["family_wise_false_alarm_probability"] <= 1
+    assert report["resampling_scope"].startswith("maximum transient scan statistic")
+
+
+def test_transient_leading_model_is_unknown_without_candidate_family_correction(monkeypatch):
+    from chronos_benchmark.scenarios import generate_scenario
+    import chronos_causal.falsification as falsification
+
+    observations = generate_scenario(
+        "transient", seed=333, n_observations=12
+    )["observations"]
+    flux = [row["flux"] for row in observations]
+    n = len(observations)
+
+    def fake_investigate(rows, **kwargs):
+        return {
+            "candidate_id": "candidate-current",
+            "verdict": "transient",
+            "leading_model": "transient",
+            "relative_model_support": [
+                {"name": "transient", "flux_prediction": flux},
+                {"name": "static_source", "flux_prediction": [sum(flux) / n] * n},
+            ],
+            "delta_bic_to_runner_up": 10.0,
+            "abstention_reasons": [],
+        }
+
+    monkeypatch.setattr(falsification, "investigate", fake_investigate)
+    report = falsification.run_falsification_suite(
+        observations, bootstrap_draws=100, transient_draws=100, seed=8
+    )
+    assert report["leading_model"] == "transient"
+    assert report["verdict"] == "unknown"
+    assert report["candidate_selection_correction"]["status"] == "not_evaluated"
+    assert any("candidate-family selection correction" in reason
+               for reason in report["abstention_reasons"])
+
+
+def test_falsification_api_accepts_complete_candidate_family():
+    from chronos_causal.api import FalsificationRequest
+    request = FalsificationRequest(
+        observations=[],
+        candidate_family=[{
+            "candidate_id": "candidate-A",
+            "observations": [],
+        }],
+    )
+    assert request.candidate_family[0]["candidate_id"] == "candidate-A"
