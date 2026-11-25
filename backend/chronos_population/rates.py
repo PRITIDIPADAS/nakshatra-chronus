@@ -87,6 +87,7 @@ def _revalidate_coverage(
             selection_bin_spec=selection_bin_spec,
             minimum_trials_per_selection_cell=thresholds["minimum_trials_per_selection_cell"],
             minimum_selection_probability=thresholds["minimum_selection_probability"],
+            minimum_fields_per_cell=thresholds["minimum_fields_per_selection_cell"],
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f"coverage_audit cannot be independently recomputed: {exc}") from exc
