@@ -154,6 +154,28 @@ def test_inventory_report_counts_label_patterns_duplicate_ids_and_region_exposur
     assert full_overlap["plane_id_region_memberships"]["plane-2"] == ["Perseus_NGC1333", "Taurus_Auriga"]
 
 
+def test_failed_optional_full_region_query_ignores_stale_csv_and_never_reports_zero(tmp_path):
+    _fixture(tmp_path)
+    report_path = tmp_path / "yso_population_recon.json"
+    report = json.loads(report_path.read_text())
+    report["region_results"][0]["optional_query_errors"] = {
+        "dr1_level2_exposures_full_region": "TAP geometry function unavailable"
+    }
+    report["report_sha256"] = sha256_json({
+        key: value for key, value in report.items() if key != "report_sha256"
+    })
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    result = analyze(tmp_path)
+    first_region = result["regional_candidate_and_coverage_summaries"][0]
+    assert first_region["dr1_level2_full_region_intersection_query_status"] == "unavailable"
+    assert first_region["dr1_level2_full_region_intersection_exposure_rows"] is None
+    assert "TAP geometry function unavailable" in first_region["dr1_level2_full_region_intersection_query_error"]
+    # The stale CSV's rows for the failed region are excluded. The other
+    # region's successful rows remain available and are not rewritten as zero.
+    assert result["cross_region_full_region_exposure_overlap"]["exposure_rows_across_regions"] == 2
+
+
 def test_input_report_hash_and_candidate_row_count_are_fail_closed(tmp_path):
     rows = _fixture(tmp_path)
     report_path = tmp_path / "yso_population_recon.json"
