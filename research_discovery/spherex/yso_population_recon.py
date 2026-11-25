@@ -144,39 +144,57 @@ def build_region_queries(region: dict) -> dict[str, str]:
 
 
 def inspect_region(region: dict) -> dict:
+    """Run each predeclared TAP query while preserving query-level failures."""
     query_results = {}
     query_definitions = build_region_queries(region)
     for name, sql in query_definitions.items():
-        if name == "dr1_level2_coverage_by_band":
-            try:
-                query_results[name] = query_rows(sql)
-            except Exception as exc:
-                query_results[name] = {
-                    "query": sql,
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "row_count": 0,
-                    "rows": [],
-                }
-        else:
+        try:
             query_results[name] = query_rows(sql)
+        except Exception as exc:
+            query_results[name] = {
+                "query": sql,
+                "error": f"{type(exc).__name__}: {exc}",
+                "row_count": None,
+                "rows": [],
+            }
 
     counts = {}
     for name in ("total", "published_yso_label", "class_1_yso", "ml_yso"):
-        rows = query_results[name]["rows"]
-        counts[name] = int(rows[0]["n"]) if rows else 0
-    counts["candidate_rows_returned"] = query_results["candidate_sources"]["row_count"]
+        result = query_results[name]
+        rows = result.get("rows", [])
+        counts[name] = (
+            int(rows[0]["n"]) if rows and "n" in rows[0]
+            else None if result.get("error")
+            else 0
+        )
+    candidate_result = query_results["candidate_sources"]
+    counts["candidate_rows_returned"] = (
+        candidate_result["row_count"] if not candidate_result.get("error") else None
+    )
     counts["candidate_query_limit"] = CANDIDATE_LIMIT
-    coverage_rows = query_results["dr1_level2_coverage_by_band"].get("rows", [])
-    counts["dr1_level2_exposure_rows_by_band"] = {
-        str(row["energy_bandpassname"]): int(row["n_exposures"])
-        for row in coverage_rows
-    }
-    counts["dr1_level2_exposure_total"] = sum(counts["dr1_level2_exposure_rows_by_band"].values())
+    coverage_result = query_results["dr1_level2_coverage_by_band"]
+    coverage_rows = coverage_result.get("rows", [])
+    counts["dr1_level2_exposure_rows_by_band"] = (
+        {
+            str(row["energy_bandpassname"]): int(row["n_exposures"])
+            for row in coverage_rows
+        }
+        if not coverage_result.get("error") else None
+    )
+    counts["dr1_level2_exposure_total"] = (
+        sum(counts["dr1_level2_exposure_rows_by_band"].values())
+        if counts["dr1_level2_exposure_rows_by_band"] is not None else None
+    )
     return {
         "region": region,
         "counts": counts,
         "queries": query_results,
-        "query_sha256": digest_json({k: v.get("query") for k, v in query_results.items()}),
+        "query_sha256": digest_json({k: v for k, v in query_definitions.items()}),
+        "query_errors": {
+            name: result["error"]
+            for name, result in query_results.items()
+            if result.get("error")
+        },
     }
 
 def main() -> None:
@@ -194,12 +212,13 @@ def main() -> None:
                 "region": region,
                 "counts": result["counts"],
                 "query_sha256": result["query_sha256"],
-                "query_errors": {
-                    key: value.get("error")
-                    for key, value in result["queries"].items()
-                    if value.get("error")
-                },
+                "query_errors": result["query_errors"],
             })
+            if result["query_errors"]:
+                errors.append({
+                    "region": region,
+                    "query_errors": result["query_errors"],
+                })
             for row in result["queries"]["candidate_sources"]["rows"]:
                 all_candidates.append({**row, "recon_region": region["name"], "region_role": region["role"]})
             for row in result["queries"]["class_distribution"]["rows"]:
@@ -250,6 +269,10 @@ def main() -> None:
         "report": str(OUTPUT / "yso_population_recon.json"),
         "report_sha256": report["report_sha256"],
     }, indent=2, default=str))
+    # Preserve the full report/artifact, but make any incomplete survey visible
+    # as a failed CI job instead of a misleading green workflow.
+    if errors:
+        raise SystemExit(f"{len(errors)} region(s) had failed TAP queries; inspect the uploaded report artifact.")
 
 
 if __name__ == "__main__":
