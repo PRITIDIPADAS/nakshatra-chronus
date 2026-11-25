@@ -169,6 +169,7 @@ def main() -> None:
         "wavelength_min_um": args.min_um, "wavelength_max_um": args.max_um,
     }
     query_metadata["retrieved_utc"] = retrieved_utc
+    query_metadata["download_scope"] = "all SIA2 rows" if args.download and args.limit is None else (f"first {args.limit} rows downloaded" if args.download else "discovery only; no files downloaded")
     (args.out / "query.json").write_text(json.dumps(query_metadata, indent=2))
     print(f"IRSA returned {len(table)} rows. Saved {args.out / 'sia_results.csv'}")
     downloads = download_manifest(table, args.out / "fits", limit=args.limit) if args.download else []
@@ -177,8 +178,6 @@ def main() -> None:
                  for k in table.colnames} for row in table]
     archive_manifest = manifest_from_sia(sia_rows, query_url=query_url,
         query_metadata=query_metadata, downloads=downloads, retrieved_utc=retrieved_utc)
-    archive_manifest["download_scope"] = "all SIA2 rows" if args.download and args.limit is None else (
-        f"first {args.limit} rows downloaded" if args.download else "discovery only; no files downloaded")
     (args.out / "archive_manifest.json").write_text(json.dumps(archive_manifest, indent=2, default=str))
     validation = validate_manifest(archive_manifest, verify_local=args.download, base_dir=Path.cwd())
     (args.out / "archive_manifest_validation.json").write_text(json.dumps(validation, indent=2))
