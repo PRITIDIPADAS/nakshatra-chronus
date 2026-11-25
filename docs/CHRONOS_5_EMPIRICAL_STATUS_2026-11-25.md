@@ -103,3 +103,11 @@ The following gates remain open: gain-to-electron calibration review; external p
 The repository now includes data/spherex_archive_manifest.M101_DR1_D2.json, a four-product M101 DR1 D2 metadata/checksum snapshot for the native science MEF, CWAVE/CBAND spectral-WCS map, absolute-gain map and supplemental solid-angle map. Each product has a source URI, archive plane identity, byte count and SHA-256; available calibration archive MD5 values are also retained. Only the spectral-WCS and absolute-gain products are asserted as direct spherex.provenance_input links to the science plane. The solid-angle map is explicitly supplemental. The native FITS files remain in the checksummed workflow #904 artifact and are not duplicated in Git.
 
 The manifest preserves the one-exposure claim boundary and the gain conversion state derived_pending_independent_review. It is an archive traceability improvement, not additional empirical validation and not an independent calibration sign-off.
+
+## Latest pooled-rate and API verification — 25 November 2026
+
+On feature-branch head f5fe73471c83d1e9639ebf204abbf139ae01da77, push workflow #967 / 45657439621 passed the complete suite: **334 passed, 7 warnings**; both JavaScript syntax checks and the live M101 retrieve/audit/hash-validation/artifact-upload job passed. The matching PR workflow #968 / 45657453959 also completed successfully.
+
+The population-rate estimator now reuses the frozen completeness threshold from the coverage audit unless an explicit matching threshold is supplied; it revalidates the audit against the exact submitted field records. Science-minus-null-control count draws remain signed while field results are pooled, and the non-negative boundary is applied once to the pooled sum, divided by the combined science-field solid-angle×time exposure. Null-control exposure ratios are checked against both area-time denominators. The generic /api/v5/population/rate route now requires a coverage-audit object rather than allowing an unaudited rate request.
+
+These are software/statistical-contract improvements only. No source-photometry sample, YSO discovery or independent population result is claimed; the population-selection, classification, contamination, cadence and independent preregistration gates remain open.
