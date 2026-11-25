@@ -165,17 +165,21 @@ def build_region_queries(region: dict) -> dict[str, str]:
         f"SELECT TOP {SOURCE_EPOCH_ROW_LIMIT} s.source_id, s.designation, s.ra, s.dec, "
         "s.yso_pub, s.class_1, s.stype_ml, p.planeid, p.obsid, a.uri, "
         "p.energy_bandpassname, p.time_bounds_lower, p.time_bounds_upper "
-        "FROM spherex.splices s "
-        "JOIN spherex.plane p ON CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1 "
-        "JOIN spherex.artifact a ON a.planeid = p.planeid "
-        f"WHERE {ra_condition} "
+        "FROM spherex.splices s, spherex.plane p, spherex.artifact a "
+        # IRSA TAP requires the single geometric predicate in WHERE, not in
+        # a JOIN ... ON expression. Keep all remaining SQL restrictions in
+        # one parenthesized block as required by its TAP ADQL guidance.
+        "WHERE CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1 "
+        "AND p.planeid = a.planeid "
+        "AND ("
+        f"{ra_condition} "
         f"AND s.dec BETWEEN {dec_min:.8f} AND {dec_max:.8f} "
         "AND (s.yso_pub IS NOT NULL OR UPPER(s.class_1) LIKE '%YSO%' "
         "OR UPPER(s.stype_ml) LIKE '%YSO%') "
         "AND LOWER(a.uri) LIKE '%/dr1/level2/%' "
         "AND p.energy_bandpassname IN ("
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
-        + ") ORDER BY s.source_id, p.time_bounds_lower"
+        + ")) ORDER BY s.source_id, p.time_bounds_lower"
     )
     return {
         "catalogue_sources": catalogue_sql,
