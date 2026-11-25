@@ -14,12 +14,14 @@ def build_matrix(payload):
         science_metadata = dict(exposure.get("metadata") or {})
         science_metadata["native_uri"] = exposure.get("uri")
         science_metadata["sha256"] = exposure.get("sha256")
+        science_metadata["local_path"] = exposure.get("local_path")
         for candidate in calibrations:
             if str(candidate.get("product_type", "")) != "spectral_wcs":
                 continue
             calibration_metadata = dict(candidate.get("metadata") or {})
             calibration_metadata["native_uri"] = candidate.get("uri")
             calibration_metadata["sha256"] = candidate.get("sha256")
+            calibration_metadata["local_path"] = candidate.get("local_path")
             decision = compatibility_decision(science_metadata, calibration_metadata)
             rows.append({
                 "science_id": exposure.get("id"),
