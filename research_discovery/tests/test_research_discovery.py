@@ -126,22 +126,40 @@ def test_injection_locations_avoid_preexisting_sources():
     assert result["baseline_source_exclusion_applied"] is True
 
 
-def test_calibration_discovery_uses_official_numeric_detector_folder(monkeypatch):
+def test_calibration_discovery_uses_tap_artifacts_and_numeric_detector_folder(monkeypatch):
+    from astropy.table import Table
+    from astroquery.ipac.irsa import Irsa
+
     base = calibration_discovery.ROOT + "dr1/epsf/"
-    version_dir = base + "cal-epsf-v1-2026-191/"
+    uri = base + "cal-epsf-v1-2026-191/4/epsf_D4_spx_cal-epsf-v1-2026-191.fits"
     calls = []
-    def fake_list(url):
-        calls.append(url)
-        if url == base:
-            return [version_dir]
-        if url == version_dir + "4/":
-            return [version_dir + "4/epsf_D4_spx_cal-epsf-v1-2026-191.fits"]
-        return []
-    monkeypatch.setattr(calibration_discovery, "_list", fake_list)
+
+    class Result:
+        def to_table(self):
+            return Table({
+                "uri": [
+                    "ibe/data/spherex/dr1/epsf/cal-epsf-v1-2026-191/4/"
+                    "epsf_D4_spx_cal-epsf-v1-2026-191.fits",
+                    "ibe/data/spherex/dr1/epsf/cal-epsf-v1-2026-191/3/"
+                    "epsf_D3_spx_cal-epsf-v1-2026-191.fits",
+                    "ibe/data/spherex/qr3/epsf/cal-epsf-v1-2026-191/4/"
+                    "epsf_D4_spx_cal-epsf-v1-2026-191.fits",
+                ]
+            })
+
+    def fake_query(query):
+        calls.append(query)
+        return Result()
+
+    monkeypatch.setattr(Irsa, "query_tap", staticmethod(fake_query))
     results = calibration_discovery.find_products("epsf", detector=4, release="dr1")
-    assert results == [version_dir + "4/epsf_D4_spx_cal-epsf-v1-2026-191.fits"]
-    assert version_dir + "4/" in calls
-    assert all("/D4/" not in call for call in calls)
+    assert results == [uri]
+    assert len(calls) == 1
+    assert "FROM spherex.artifact" in calls[0]
+    assert "producttype = 'calibration'" in calls[0]
+    assert "releasetype = 'data'" in calls[0]
+    assert all("/4/" in result for result in results)
+    assert all("/D4/" not in result for result in results)
 
 
 
