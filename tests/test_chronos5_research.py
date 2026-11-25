@@ -588,3 +588,70 @@ def test_falsification_api_accepts_complete_candidate_family():
         }],
     )
     assert request.candidate_family[0]["candidate_id"] == "candidate-A"
+
+
+
+def test_sky_detector_twin_detection_must_prove_common_field_signature():
+    from types import SimpleNamespace
+    from chronos_benchmark.adapters import (
+        build_four_baseline_records, field_mask_sha256, reference_wcs_sha256,
+    )
+    from chronos_benchmark.runner import truth_catalogue_digest, sha256_json
+
+    class Header:
+        def tostring(self, **kwargs):
+            return "TWIN-COMMON-WCS"
+
+    class ReferenceWCS:
+        def to_header(self, relax=True):
+            return Header()
+
+    truth = [{"truth_id": "TWIN-TRUTH", "x": 12.0, "y": 12.0}]
+    state = {
+        "exps": [SimpleNamespace(id="TW-E1", det=2), SimpleNamespace(id="TW-E2", det=2)],
+        "ref": ReferenceWCS(),
+        "DEEPS": np.zeros((32, 32), dtype=float),
+        "RB": np.zeros((2, 32, 32), dtype=bool),
+        "IN": np.ones((2, 32, 32), dtype=bool),
+        "R": np.zeros((2, 32, 32), dtype=float),
+        "MAP": [],
+        "cands": [],
+    }
+    signature = {
+        "field_id": "TWIN-COMMON-FIELD",
+        "dataset_class": "synthetic",
+        "exposure_ids": ["TW-E1", "TW-E2"],
+        "mask_sha256": field_mask_sha256(state),
+        "truth_catalogue_sha256": truth_catalogue_digest(truth),
+        "coordinate_frame": "sky",
+        "coordinate_unit": "pixel",
+        "pixel_wcs_sha256": reference_wcs_sha256(state["ref"]),
+    }
+    threshold_map = {name: [5.0, 1.0] for name in (
+        "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
+    )}
+    valid_twin = [{
+        "detection_id": "TWIN-001", "x": 12.0, "y": 12.1, "score": 7.0,
+        "provenance": {
+            "input_signature_sha256": sha256_json(signature),
+            "model_version": "sky-detector-twin-test/1",
+        },
+    }]
+    built = build_four_baseline_records(
+        state, signature, sky_detector_twin_detections=valid_twin,
+        score_thresholds=threshold_map,
+    )
+    assert built["methods"]["sky_detector_twin"]["detections"][0]["provenance"]["model_version"] == "sky-detector-twin-test/1"
+
+    invalid_twin = [{
+        **valid_twin[0],
+        "provenance": {
+            "input_signature_sha256": "0" * 64,
+            "model_version": "sky-detector-twin-test/1",
+        },
+    }]
+    with pytest.raises(ValueError, match="input_signature_sha256"):
+        build_four_baseline_records(
+            state, signature, sky_detector_twin_detections=invalid_twin,
+            score_thresholds=threshold_map,
+        )
