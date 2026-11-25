@@ -5,6 +5,8 @@ on:
     branches: [chronos-5-causal-sky-twin]
     paths:
       - "research_discovery/spherex/yso_population_recon.py"
+      - "research_discovery/tests/test_spherex_yso_population_recon.py"
+      - "research_discovery/requirements-research.txt"
       - ".github/workflows/spherex-yso-population-recon.yml"
   workflow_dispatch:
 
@@ -20,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Check out the pinned project branch
+      - name: Check out the exact triggering revision
         uses: actions/checkout@v4
         with:
-          ref: chronos-5-causal-sky-twin
+          ref: ${{ github.sha }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
