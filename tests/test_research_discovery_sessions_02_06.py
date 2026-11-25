@@ -86,6 +86,22 @@ def _verified_audit_fixture(tmp_path):
         "solid_angle_map_path": str(files["area"]["path"]),
         "wavelength_audit_path": str(audit_path), "wavelength_audit_sha256": audit_sha,
         "solid_angle_map_uri": uris["area"], "solid_angle_map_sha256": files["area"]["sha256"]}
+    calibration_meta["archive_provenance_link"] = {
+        "input_table": "spherex.provenance_input",
+        "science_planeid": "science-plane-fixture",
+        "calibration_planeid": "spectral-plane-fixture",
+        "inputid": "spectral-plane-fixture",
+        "outputid": "science-plane-fixture",
+        "artifact_planeid": "spectral-plane-fixture",
+        "science_native_uri": uris["science"],
+        "calibration_native_uri": uris["spectral"],
+        "calibration_producttype": "calibration",
+        "artifact_md5_status": "pass",
+        "artifact_md5_expected": "a" * 32,
+        "artifact_md5_actual": "a" * 32,
+        "calibration_sha256": files["spectral"]["sha256"],
+        "query_sha256": "c" * 64,
+    }
     products = [
         product_record(product_type="level2_mef", native_uri=uris["science"],
             status="downloaded", archive_id="science-archive-id", release="DR1",
@@ -637,7 +653,7 @@ def test_archive_provenance_link_allows_distinct_science_and_calibration_build_i
             "inputid": "cal-plane-1", "outputid": "science-plane-1",
             "artifact_planeid": "cal-plane-1",
             "science_native_uri": science["native_uri"],
-            "calibration_native_uri": calibration["native_uri"],
+            "calibration_native_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2.fits",
             "calibration_producttype": "calibration",
             "artifact_md5_status": "pass",
             "artifact_md5_expected": "a" * 32,
