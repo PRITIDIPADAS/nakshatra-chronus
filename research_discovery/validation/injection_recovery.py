@@ -55,6 +55,12 @@ def validate_electron_calibration_record(record):
         raise ValueError("calibration_uri must be an HTTPS source URI")
     if not str(record["calibration_bunit"]).strip():
         raise ValueError("absolute-gain calibration BUNIT must be recorded exactly")
+    if record.get("detector") not in {"D1","D2","D3","D4","D5","D6"}:
+        raise ValueError("detector must be the exact D1-D6 identifier")
+    if str(record.get("science_native_file_sha256", record["science_file_sha256"])).lower() != str(record["science_file_sha256"]).lower():
+        raise ValueError("science_native_file_sha256 must match the native science MEF SHA-256")
+    if not str(record.get("conversion_method","")).strip():
+        raise ValueError("conversion_method must document the physical unit derivation")
     return dict(record)
 
 
@@ -407,6 +413,8 @@ def main():
         if electron_record is not None:
             if not a.science_uri or str(electron_record.get("science_source_uri",""))!=a.science_uri:
                 raise ValueError("electron calibration record science_source_uri does not match --science-uri")
+            if str(electron_record.get("science_native_file_sha256",electron_record.get("science_file_sha256",""))).lower()!=science_sha.lower():
+                raise ValueError("electron calibration record native science MEF SHA-256 mismatch")
             if a.exposure_time_s is None or not np.isfinite(a.exposure_time_s) or a.exposure_time_s<=0:
                 raise ValueError("--exposure-time-s from the matching archive record is required for photon-noise mode")
             validate_electron_calibration_record(electron_record)
