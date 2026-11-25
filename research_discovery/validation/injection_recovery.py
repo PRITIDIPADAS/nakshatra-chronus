@@ -452,10 +452,22 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
       "excluded_flag_bits":int(excluded_flag_bits),"flux_unit":flux_unit,
       "background_model_subtracted":bool(background is not None),
       "detection_template": {
-          "uses_separate_surface_brightness_psf": detection_psf is not None,
+          "method": (
+              "position_dependent_pixel_solid_angle_response"
+              if flux_unit == "Jy" and psf_reference_xy is not None and psf_region_radius is not None
+              else "separate_surface_brightness_psf"
+              if detection_psf is not None else "integrated_flux_epsf"
+          ),
+          "uses_position_dependent_pixel_solid_angle": bool(
+              flux_unit == "Jy" and psf_reference_xy is not None and psf_region_radius is not None
+          ),
+          "uses_separate_surface_brightness_psf": bool(
+              detection_psf is not None
+              and not (flux_unit == "Jy" and psf_reference_xy is not None and psf_region_radius is not None)
+          ),
           "unit_sum": float(filter_psf.sum()),
           "shape": list(filter_psf.shape),
-          "note": "Injection morphology remains the integrated-flux ePSF; the optional detection template represents the same ePSF divided by the local pixel solid angle for MJy/sr data."
+          "note": "For local Jy recovery, the matched filter evaluates the ePSF divided by the aligned per-pixel solid angle at each candidate position. Injection morphology remains the integrated-flux ePSF."
       },
       "source_photon_noise": {
           "enabled": electrons_per_image_unit is not None,
