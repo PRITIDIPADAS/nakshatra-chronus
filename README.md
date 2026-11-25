@@ -1,9 +1,9 @@
 # Nakshatra CHRONOS
 
-See [`docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md`](docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md) for the evidence-gated project status and [the completed M101 DR1/D2 real-data pilot](docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md) for archive provenance and calibration checks, plus [the live six-region SPLICES/DR1 reconnaissance](docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
+See [`docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md`](docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md) for the evidence-gated project status, the [20-session capability ledger](docs/CHRONOS_5_CAPABILITY_LEDGER.md), the [committed M101 DR1 D2 archive manifest](data/spherex_archive_manifest.M101_DR1_D2.json), the [M101 real-data pilot](docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md), and the [SPLICES/DR1 reconnaissance](docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
 
 
-**An observatory for change in the SPHEREx infrared sky.** CHRONOS finds what changed between SPHEREx visits, tests whether the change is real, ranks five explanations, tries to prove its own answer wrong, and writes a report in which every sentence points to a measurement.
+**An observatory for change in the SPHEREx infrared sky.** CHRONOS finds what changed between SPHEREx visits, tests whether the change is real, compares five explanations, tries to prove its own answer wrong, and writes a report in which every sentence points to a measurement.
 
 NASA Space Apps Challenge · Planet X and SPHEREx
 
@@ -69,7 +69,7 @@ CHRONOS compares only **fair pairs**: the same array, nearly the same color, one
 1. **What changed?** Three independent methods look.
 2. **Where?** On one grid, anchored to Gaia stars, with measured position errors.
 3. **Is it real?** The artefact court, the simultaneous array behind the dichroic, the flags, crosstalk geometry, counterfactual reanalysis.
-4. **What is it?** Five hypotheses with calibrated probabilities, and the right to say unknown.
+4. **What is it?** Five hypotheses with evidence-qualified support and an explicit unknown state.
 5. **What would prove us wrong?** The self questioning machine runs the tests that could break the leading explanation.
 
 ![Fair pairs](docs/figures/fair_plane.png)
@@ -206,6 +206,8 @@ No  Assistance from AI in any ways.No image, video or audio in the project is SI
 ## Cite and license
 
 Citation metadata: [CITATION.cff](CITATION.cff). Code: Apache License 2.0 ([LICENSE](LICENSE)). Font: EB Garamond, SIL Open Font License ([frontend/fonts/OFL.txt](frontend/fonts/OFL.txt)).
+
+The M101 archive manifest is a metadata/checksum record; the large FITS binaries remain in the checksummed Actions artifact. Its gain-to-electron conversion is pending independent review.
 
 ## CHRONOS 5.0 Sessions 12–20
 
