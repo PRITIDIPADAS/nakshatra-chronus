@@ -683,6 +683,27 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                 if int(j) not in source_only_recovered and int(i) not in source_only_matched_peak:
                     source_only_recovered.add(int(j))
                     source_only_matched_peak.add(int(i))
+        # Counterfactual reference: use the same realized source-only image
+        # but omit the added source-Poisson variance increment. This isolates
+        # the variance penalty; it is not a physically complete detection SNR.
+        source_only_reference_peaks = detect_peaks(
+            source_only_reference_snr, threshold=snr_threshold,
+            min_sep=peak_min_separation_px,
+        )
+        source_only_reference_distances = _distance(source_only_reference_peaks, xy)
+        source_only_reference_recovered = set()
+        source_only_reference_matched_peak = set()
+        if source_only_reference_distances.size:
+            for idx in np.argsort(source_only_reference_distances, axis=None):
+                i, j = np.unravel_index(idx, source_only_reference_distances.shape)
+                if source_only_reference_distances[i, j] > match_radius:
+                    break
+                if (
+                    int(j) not in source_only_reference_recovered
+                    and int(i) not in source_only_reference_matched_peak
+                ):
+                    source_only_reference_recovered.add(int(j))
+                    source_only_reference_matched_peak.add(int(i))
         level_injection_rows = []
         for j,(x,y) in enumerate(xy):
             baseline_match_peak = _local_snr_peak(
@@ -777,8 +798,16 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                     float(np.min(source_only_distances[:, j]))
                     if source_only_distances.size else None
                 ),
+                "source_only_reference_peak_list_recovered": int(
+                    j in source_only_reference_recovered
+                ),
+                "source_only_reference_nearest_peak_distance_px": (
+                    float(np.min(source_only_reference_distances[:, j]))
+                    if source_only_reference_distances.size else None
+                ),
                 "source_only_diagnostic_uses_injected_variance": True,
                 "source_only_reference_uses_preinjection_variance": True,
+                "source_only_reference_peak_list_is_counterfactual": True,
                 "local_snr_delta_within_match_radius": (
                     injected_match_snr - baseline_match_snr
                     if injected_match_snr is not None and baseline_match_snr is not None
@@ -846,6 +875,10 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
             ),
             "source_only_peak_list_recovered_count": len(source_only_recovered),
             "source_only_peak_list_recovered_fraction": len(source_only_recovered) / len(xy),
+            "source_only_reference_peak_list_recovered_count": len(source_only_reference_recovered),
+            "source_only_reference_peak_list_recovered_fraction": (
+                len(source_only_reference_recovered) / len(xy)
+            ),
             "new_unmatched_peaks_within_local_psf_region": len(new_peaks),
             "unmatched_peaks_outside_local_psf_region_excluded": n_outside_local_psf_region,
             "injections_with_local_max_snr_ge_threshold_within_match_radius": sum(
@@ -945,6 +978,8 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
           ),
           "source_only_uses_injected_variance": True,
           "source_only_preinjection_variance_reference_available": True,
+          "source_only_reference_peak_list_available": True,
+          "source_only_reference_peak_list_is_counterfactual": True,
           "source_only_peak_list_recovery_is_diagnostic_not_primary": True,
           "peak_selection_rule": {
               "method": "sample must equal the maximum-filter value in its square neighborhood and be at or above threshold",

@@ -136,6 +136,8 @@ def summarize_field_record(
         and row.get("source_only_diagnostic_uses_injected_variance") is True
         and row.get("source_only_reference_local_max_snr_preinjection_variance") is not None
         and row.get("source_only_reference_uses_preinjection_variance") is True
+        and row.get("source_only_reference_peak_list_recovered") in (0, 1)
+        and row.get("source_only_reference_peak_list_is_counterfactual") is True
         for row in report_rows
     )
     peak_selection_rule = response_diagnostics.get("peak_selection_rule") or {}
@@ -206,6 +208,16 @@ def summarize_field_record(
                     int(row.get("source_only_peak_list_recovered", 0))
                     for row in bin_rows
                 )
+                source_only_reference_count = float(
+                    source_bin.get("source_only_reference_peak_list_recovered_count")
+                )
+                source_only_reference_fraction = float(
+                    source_bin.get("source_only_reference_peak_list_recovered_fraction")
+                )
+                source_only_reference_row_count = sum(
+                    int(row.get("source_only_reference_peak_list_recovered", 0))
+                    for row in bin_rows
+                )
                 source_only_flux_bin_counts_match = (
                     source_only_flux_bin_counts_match
                     and abs(source_level - level) <= 1e-12
@@ -217,6 +229,15 @@ def summarize_field_record(
                     and int(reported_count) == row_count
                     and 0.0 <= reported_fraction <= 1.0
                     and abs(reported_fraction - row_count / n_injected) <= 1e-12
+                    and source_only_reference_count >= 0
+                    and source_only_reference_count <= n_injected
+                    and source_only_reference_count.is_integer()
+                    and int(source_only_reference_count) == source_only_reference_row_count
+                    and 0.0 <= source_only_reference_fraction <= 1.0
+                    and abs(
+                        source_only_reference_fraction
+                        - source_only_reference_row_count / n_injected
+                    ) <= 1e-12
                 )
             except (TypeError, ValueError, OverflowError, ZeroDivisionError):
                 source_only_flux_bin_counts_match = False
@@ -224,6 +245,8 @@ def summarize_field_record(
         response_diagnostics.get("isolated_source_response_available") is True
         and response_diagnostics.get("source_only_uses_injected_variance") is True
         and response_diagnostics.get("source_only_preinjection_variance_reference_available") is True
+        and response_diagnostics.get("source_only_reference_peak_list_available") is True
+        and response_diagnostics.get("source_only_reference_peak_list_is_counterfactual") is True
         and response_diagnostics.get("source_only_peak_list_recovery_is_diagnostic_not_primary") is True
         and report_identity_matches
         and report_rows_match_bins
@@ -274,6 +297,14 @@ def summarize_field_record(
                     "source_only_peak_list_recovered_count": sum(
                         int(row.get("source_only_peak_list_recovered", 0))
                         for row in bin_rows
+                    ),
+                    "source_only_reference_peak_list_recovered_count": sum(
+                        int(row.get("source_only_reference_peak_list_recovered", 0))
+                        for row in bin_rows
+                    ),
+                    "source_only_reference_peak_list_recovered_fraction": (
+                        sum(int(row.get("source_only_reference_peak_list_recovered", 0)) for row in bin_rows)
+                        / len(bin_rows) if bin_rows else None
                     ),
                     "source_only_peak_list_recovered_fraction": (
                         sum(int(row.get("source_only_peak_list_recovered", 0)) for row in bin_rows)

@@ -116,6 +116,9 @@ def _injection_report(summary):
                 "source_only_nearest_peak_distance_px": 0.75,
                 "source_only_diagnostic_uses_injected_variance": True,
                 "source_only_reference_uses_preinjection_variance": True,
+                "source_only_reference_peak_list_recovered": int(index < int(flux_bin["n_recovered"])),
+                "source_only_reference_nearest_peak_distance_px": 0.75,
+                "source_only_reference_peak_list_is_counterfactual": True,
                 "post_injection_local_peak_selected_by_exact_peak_rule": True,
                 "post_injection_local_peak_detector_window_max_snr": post_snr,
                 "post_injection_local_peak_competitor_snr_margin": 0.0,
@@ -132,10 +135,18 @@ def _injection_report(summary):
             if abs(float(row["flux_level"]) - float(flux_bin["flux_level"])) <= 1e-12
         ]
         recovered_count = sum(int(row["source_only_peak_list_recovered"]) for row in level_rows)
+        reference_recovered_count = sum(
+            int(row["source_only_reference_peak_list_recovered"])
+            for row in level_rows
+        )
         source_only_summary.append({
             "flux_level": float(flux_bin["flux_level"]),
             "source_only_peak_list_recovered_count": recovered_count,
             "source_only_peak_list_recovered_fraction": recovered_count / len(level_rows),
+            "source_only_reference_peak_list_recovered_count": reference_recovered_count,
+            "source_only_reference_peak_list_recovered_fraction": (
+                reference_recovered_count / len(level_rows)
+            ),
         })
     return {
         "threshold_snr": 5.0,
@@ -154,6 +165,8 @@ def _injection_report(summary):
             "isolated_source_response_available": True,
             "source_only_uses_injected_variance": True,
             "source_only_preinjection_variance_reference_available": True,
+            "source_only_reference_peak_list_available": True,
+            "source_only_reference_peak_list_is_counterfactual": True,
             "source_only_peak_list_recovery_is_diagnostic_not_primary": True,
             "peak_selection_rule": {
                 "method": "sample must equal the maximum-filter value in its square neighborhood and be at or above threshold",
@@ -504,6 +517,9 @@ def test_field_summary_exposes_source_only_response_separately_from_sky_recovery
     assert investigation["source_only_diagnostics_complete"] is True
     assert investigation["source_only_flux_bin_counts_match_injection_rows"] is True
     assert investigation["peak_selection_diagnostics_complete"] is True
+    assert investigation["local_snr_flux_bin_diagnostics"][0][
+        "source_only_reference_peak_list_recovered_count"
+    ] == 18
     assert investigation["peak_selection_diagnostic_rows"] == 60
     assert investigation["source_only_diagnostic_rows"] == 60
     assert len(investigation["local_snr_flux_bin_diagnostics"]) == 3
@@ -543,3 +559,20 @@ def test_field_summary_rejects_incomplete_exact_peak_selection_diagnostics():
     )
     assert record["eligible_for_multi_field_pilot_summary"] is False
     assert record["checks"]["peak_selection_diagnostics_complete_and_count_bound"] is False
+
+
+def test_field_summary_rejects_reference_variance_peak_count_mismatch():
+    summary = _summary()
+    report = _injection_report(summary)
+    report["new_unmatched_peak_summary"][1][
+        "source_only_reference_peak_list_recovered_count"
+    ] = 1
+    report["new_unmatched_peak_summary"][1][
+        "source_only_reference_peak_list_recovered_fraction"
+    ] = 0.05
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="a" * 64,
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["checks"]["source_only_flux_bin_counts_match_injection_rows"] is False
