@@ -7,6 +7,7 @@ challenge fixtures are admitted only when explicitly labelled as synthetic.
 """
 from __future__ import annotations
 
+import math
 import re
 from typing import Any, Mapping
 
@@ -68,8 +69,8 @@ def validate_science_wavelength(row: Mapping[str, Any], *, index: int | None = N
         wavelength = float(row.get("wavelength_um"))
     except (TypeError, ValueError):
         raise ValueError(prefix + "wavelength_um must be numeric") from None
-    if not (wavelength > 0):
-        raise ValueError(prefix + "wavelength_um must be positive")
+    if not math.isfinite(wavelength) or not (wavelength > 0):
+        raise ValueError(prefix + "wavelength_um must be finite and positive")
 
 
 def validate_spectral_epoch(epoch: Mapping[str, Any], *, index: int | None = None) -> None:
@@ -95,5 +96,5 @@ def validate_spectral_epoch(epoch: Mapping[str, Any], *, index: int | None = Non
             number = float(value)
         except (TypeError, ValueError):
             raise ValueError(prefix + f"valid wavelength pixel {position} is not numeric") from None
-        if not (number > 0):
-            raise ValueError(prefix + f"valid wavelength pixel {position} must be positive")
+        if not math.isfinite(number) or not (number > 0):
+            raise ValueError(prefix + f"valid wavelength pixel {position} must be finite and positive")
