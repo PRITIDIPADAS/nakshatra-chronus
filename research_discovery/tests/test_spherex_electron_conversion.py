@@ -12,8 +12,8 @@ from research_discovery.spherex.electron_conversion import (
 
 def _gain_map(path, *, detector="D2", bunit="MJy s / (electron sr)"):
     values = np.full(NATIVE_SHAPE, 0.5, dtype=np.float32)
-    values[20, 10] = np.nan
-    values[20, 11] = 0.0
+    values[20, 11] = np.nan
+    values[20, 12] = 0.0
     primary = fits.PrimaryHDU()
     image = fits.ImageHDU(values, name="IMAGE")
     image.header["DETECTOR"] = detector
