@@ -108,9 +108,9 @@ def _verified_audit_fixture(tmp_path):
     manifest = build_manifest(archive="IRSA", query={}, products=products, processing_config={})
     matrix = build_matrix({
         "science_exposures": [{"id": "science", "uri": uris["science"],
-            "sha256": files["science"]["sha256"], "metadata": science_meta}],
+            "sha256": files["science"]["sha256"], "local_path": str(files["science"]["path"]), "metadata": science_meta}],
         "calibration_candidates": [{"id": "D2-spectral", "uri": uris["spectral"],
-            "sha256": files["spectral"]["sha256"], "product_type": "spectral_wcs",
+            "sha256": files["spectral"]["sha256"], "local_path": str(files["spectral"]["path"]), "product_type": "spectral_wcs",
             "metadata": calibration_meta}],
     })
     return manifest, matrix, audit_path, science_meta, calibration_meta
