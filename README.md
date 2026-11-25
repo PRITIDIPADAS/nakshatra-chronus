@@ -170,11 +170,11 @@ docs/        architecture, methods, validation, data, limits, submission text, d
 site/        the static observatory, built by scripts/build_static.py and served by GitHub Pages
 ```
 
-Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Methods: [docs/METHODS.md](docs/METHODS.md) · Validation: [docs/VALIDATION.md](docs/VALIDATION.md) · Data: [docs/DATA.md](docs/DATA.md) · Sources: [docs/CITATIONS.md](docs/CITATIONS.md)
+Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Methods: [docs/METHODS.md](docs/METHODS.md) · Validation: [docs/VALIDATION.md](docs/VALIDATION.md) · Data: [docs/DATA.md](docs/DATA.md) · Sources: [docs/CITATIONS.md](docs/CITATIONS.md) · [CHRONOS Sessions 02–06 implementation and evidence gates](docs/CHRONOS_SESSIONS_02_06_IMPLEMENTATION.md)
 
 ## Data used
 
-* **SPHEREx Quick Release spectral images (QR2 and QR3), NASA IRSA.** Found with the IRSA SIA2 service, read as cutouts. CHRONOS uses every extension: IMAGE for the sky, FLAGS for masks and contamination counts, VARIANCE for the noise model (checked on empty sky), ZODI for the background level, PSF for photometry, WCS-WAVE for the color of each pixel, and the alternate WCS A for detector positions.
+* **SPHEREx, NASA IRSA.** The live observatory can read Quick Release cutouts (QR2/QR3) for display and candidate investigation. Its WCS-WAVE lookup is display-grade only. The separate Session 02–06 research path standardizes new comparisons on DR1/QR3 and assigns science wavelengths from detector-matched CWAVE/CBAND calibration maps, while retaining IMAGE, FLAGS, VARIANCE, ZODI, PSF/ePSF and alternate WCS A metadata. Actual native-MEF audit and calibration compatibility remain conditional on retrieving the exact files and verifying their provenance.
 * **Gaia DR3, ESA.** Star anchors, star ensemble gains, catalog motion for cross matching.
 * **AllWISE, NASA IRSA.** Overlay in live mode.
 * **JPL Small Body Identification service.** Known small bodies in live mode.
