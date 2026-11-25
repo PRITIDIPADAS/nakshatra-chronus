@@ -17,7 +17,10 @@ import numpy as np
 from research_discovery.spherex.extract_epsf_stamp import extract as extract_epsf
 from research_discovery.spherex.flag_policy import policy_mask
 from research_discovery.spherex.psf_physicality import enforce_nonnegative_interpolation_psf
-from research_discovery.spherex.source_timeseries import assemble_source_timeseries
+from research_discovery.spherex.source_timeseries import (
+    _bilinear_sample,
+    assemble_source_timeseries,
+)
 
 ARCSEC2_TO_SR = (math.pi / (180.0 * 3600.0)) ** 2
 
@@ -211,7 +214,7 @@ def extract_source_photometry(
     out.mkdir(parents=True, exist_ok=True)
     science_path = Path(files["science"]["local_path"])
     with (
-        fits.open(science_path, memmap=True) as science_hdul,
+        fits.open(science_path, memmap=False) as science_hdul,
         fits.open(files["solid_angle"]["local_path"], memmap=True) as area_hdul,
         fits.open(files["spectral_wcs"]["local_path"], memmap=True) as spectral_hdul,
     ):
@@ -271,7 +274,8 @@ def extract_source_photometry(
         pixel_x, pixel_y = int(math.floor(x + 0.5)), int(math.floor(y + 0.5))
         if not (0 <= pixel_x < image.shape[1] and 0 <= pixel_y < image.shape[0]):
             raise ValueError("source lies outside the native science image")
-        wavelength_um, bandwidth_um = float(cwave[pixel_y, pixel_x]), float(cband[pixel_y, pixel_x])
+        wavelength_um = _bilinear_sample(cwave, x, y, "CWAVE")
+        bandwidth_um = _bilinear_sample(cband, x, y, "CBAND")
         if not (math.isfinite(wavelength_um) and wavelength_um > 0 and math.isfinite(bandwidth_um) and bandwidth_um > 0):
             raise ValueError("source detector pixel has invalid CWAVE/CBAND values")
 
@@ -339,6 +343,10 @@ def extract_source_photometry(
         "valid": valid,
         "pixel_valid": True,
         "pixel_index": {"x": pixel_x, "y": pixel_y},
+        "pixel_position": {"x": x, "y": y, "convention": "zero-based"},
+        "ra_deg": ra_deg,
+        "dec_deg": dec_deg,
+        "image_wcs_tolerance_pixels": 0.5,
         "quality_flags": quality_flags,
         "fit_diagnostics": fit,
     }
@@ -390,7 +398,7 @@ def extract_source_photometry(
         ],
     }
     result["verified_source_timeseries"] = (
-        assemble_source_timeseries(result, minimum_epochs=1, verify_files=True)
+        assemble_source_timeseries(result, minimum_epochs=2, verify_files=True)
         if valid else None
     )
     result["output_manifest_sha256"] = hashlib.sha256(

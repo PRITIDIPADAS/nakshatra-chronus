@@ -31,8 +31,9 @@ def _photometry_inputs(tmp_path):
     image_header["CDELT1"] = -0.0001
     image_header["CDELT2"] = 0.0001
 
-    yy, xx = np.mgrid[-5:6, -5:6]
-    psf = np.exp(-0.5 * (xx**2 + yy**2) / 2.0)
+    source_x, source_y = 15.25, 15.4
+    yy, xx = np.mgrid[10:21, 10:21]
+    psf = np.exp(-0.5 * ((xx - source_x) ** 2 + (yy - source_y) ** 2) / 2.0)
     psf /= psf.sum()
     omega_sr_value = 38.0 * (np.pi / (180.0 * 3600.0)) ** 2
     response = 1.0e-6 * psf / omega_sr_value
@@ -51,10 +52,13 @@ def _photometry_inputs(tmp_path):
 
     spectral_header = fits.Header({"DETECTOR": 2, "BUNIT": "um"})
     spectral_path = tmp_path / "spectral.fits"
+    grid_y, grid_x = np.mgrid[:shape[0], :shape[1]]
+    cwave = 3.0 + 0.001 * grid_x + 0.002 * grid_y
+    cband = 0.02 + 0.0001 * grid_x + 0.0002 * grid_y
     fits.HDUList([
         fits.PrimaryHDU(),
-        fits.ImageHDU(np.full(shape, 3.1, dtype=np.float32), header=spectral_header, name="CWAVE"),
-        fits.ImageHDU(np.full(shape, 0.02, dtype=np.float32), header=spectral_header, name="CBAND"),
+        fits.ImageHDU(cwave.astype(np.float32), header=spectral_header, name="CWAVE"),
+        fits.ImageHDU(cband.astype(np.float32), header=spectral_header, name="CBAND"),
     ]).writeto(spectral_path)
 
     area_header = fits.Header({"DETECTOR": 2, "BUNIT": "arcsec2"})
@@ -92,10 +96,11 @@ def _photometry_inputs(tmp_path):
         "detector": "D2",
         "calibration_group": "DR1-D2-CAL-1",
     }
+    sky = WCS(image_header).pixel_to_world(source_x, source_y)
     source = {
         "source_id": "S1",
-        "ra_deg": 10.0,
-        "dec_deg": 20.0,
+        "ra_deg": float(sky.ra.deg),
+        "dec_deg": float(sky.dec.deg),
         "sample_class": "young_stellar_object",
         "classification_reference": "https://catalogue.example/S1",
     }
@@ -103,18 +108,21 @@ def _photometry_inputs(tmp_path):
 
 
 def _fake_epsf_extractor(science_path, *, x, y, out, stamp_size):
-    yy, xx = np.mgrid[-stamp_size // 2 + 1:stamp_size // 2 + 1,
-                      -stamp_size // 2 + 1:stamp_size // 2 + 1]
-    psf = np.exp(-0.5 * (xx**2 + yy**2) / 2.0)
+    x_lower = int(np.floor(x - (stamp_size - 1) / 2.0))
+    y_lower = int(np.floor(y - (stamp_size - 1) / 2.0))
+    yy, xx = np.mgrid[:stamp_size, :stamp_size]
+    psf = np.exp(-0.5 * (
+        (xx + x_lower - x) ** 2 + (yy + y_lower - y) ** 2
+    ) / 2.0)
     psf /= psf.sum()
     fits.PrimaryHDU(
         psf.astype(np.float32),
-        header=fits.Header({"DETECTOR": "2", "XLL": 10, "YLL": 10, "SRCX": x, "SRCY": y}),
+        header=fits.Header({"DETECTOR": "2", "XLL": x_lower, "YLL": y_lower, "SRCX": x, "SRCY": y}),
     ).writeto(out, overwrite=True)
     return {
         "output_stamp": str(out),
         "output_sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
-        "stamp_lower_left_cutout_pixel_0based": [10, 10],
+        "stamp_lower_left_cutout_pixel_0based": [x_lower, y_lower],
         "source_position_cutout_pixel_0based": [x, y],
         "method": "synthetic unit-test ePSF fixture",
     }
@@ -139,10 +147,17 @@ def test_native_source_photometry_fits_integrated_jy_and_reverifies_native_wavel
     assert row["fit_status"] == "success"
     assert row["flux_jy"] == pytest.approx(0.25, rel=1e-4)
     assert row["sigma_jy"] > 0
-    assert row["wavelength_um"] == pytest.approx(3.1)
-    assert row["bandwidth_um"] == pytest.approx(0.02)
+    assert row["wavelength_um"] == pytest.approx(3.0 + 0.001 * 15.25 + 0.002 * 15.4, abs=1e-7)
+    assert row["bandwidth_um"] == pytest.approx(0.02 + 0.0001 * 15.25 + 0.0002 * 15.4, abs=1e-7)
     assert row["pixel_index"] == {"x": 15, "y": 15}
-    assert result["verified_source_timeseries"]["sources"][0]["time_series_summary"]["epoch_count"] == 1
+    assert row["pixel_position"] == {
+        "x": pytest.approx(15.25), "y": pytest.approx(15.4), "convention": "zero-based"
+    }
+    assert row["ra_deg"] == pytest.approx(source["ra_deg"])
+    assert row["dec_deg"] == pytest.approx(source["dec_deg"])
+    series_summary = result["verified_source_timeseries"]["sources"][0]["time_series_summary"]
+    assert series_summary["epoch_count"] == 1
+    assert series_summary["usable_multi_epoch_series"] is False
     assert Path(result["output_path"]).is_file()
 
 

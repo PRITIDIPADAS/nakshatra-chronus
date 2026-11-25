@@ -26,15 +26,51 @@ def _bin_spec():
 
 
 def _trials():
+    from chronos_population.selection import (
+        RECOVERY_RULE_ID, RECOVERY_RULE_SHA256, _canonical_sha256,
+    )
+
     rows = []
+    quality_policy = {
+        "policy_id": "test-quality-policy-v1",
+        "flag_policy": "photometry",
+        "fit_ql_max": 1.0,
+        "max_abs_background_to_flux_ratio": 0.2,
+    }
+    quality_policy_sha256 = _canonical_sha256(quality_policy)
     for field_index in range(5):
         for trial_index in range(4):
+            recovered = trial_index != 0
+            evidence = {
+                "rule_id": RECOVERY_RULE_ID,
+                "detector_output_sha256": "e" * 64,
+                "injection_truth_sha256": "f" * 64,
+                "image_id": f"IMAGE-{field_index}",
+                "peak_snr": 6.0 if recovered else 4.0,
+                "threshold_sigma": 5.0,
+                "separation_pixels": 1.0 if recovered else 3.0,
+                "match_radius_pixels": 2.0,
+                "fit_ql": 0.5,
+                "fit_ql_max": quality_policy["fit_ql_max"],
+                "background_fraction": 0.1,
+                "background_fraction_max": quality_policy["max_abs_background_to_flux_ratio"],
+                "flags": 0,
+                "peak_is_local_maximum": recovered,
+                "one_to_one_assignment": recovered,
+                "primary_selection_rule_passed": recovered,
+                "fit_quality_pass": True,
+                "background_quality_pass": True,
+                "photometry_flags_pass": True,
+                "peak_id": f"PEAK-{field_index}-{trial_index}" if recovered else None,
+                "injected_xy": [100.0, 100.0],
+                "peak_xy": [101.0, 100.0] if recovered else [103.0, 100.0],
+            }
             rows.append({
                 "trial_id": f"F{field_index}-I{trial_index}",
                 "field_id": f"F{field_index}",
                 "dataset_class": "real",
                 "release": "DR1",
-                "recovered": trial_index != 0,
+                "recovered": recovered,
                 "covariates": {
                     "flux_jy": 0.5, "wavelength_um": 2.5,
                     "crowding_index": 0.4, "background_rms": 0.2,
@@ -44,6 +80,11 @@ def _trials():
                 "processing_config_sha256": "a" * 64,
                 "injection_protocol_sha256": "b" * 64,
                 "calibration_manifest_sha256": "c" * 64,
+                "preregistration_sha256": "d" * 64,
+                "recovery_rule_sha256": RECOVERY_RULE_SHA256,
+                "quality_policy": dict(quality_policy),
+                "quality_policy_sha256": quality_policy_sha256,
+                "recovery_evidence": evidence,
             })
     return rows
 
