@@ -323,10 +323,15 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         missing = sorted(expected_tokens - seen)
         extra = sorted(seen - expected_tokens)
         raise ValueError(f"blind run must contain every held-out field exactly once; missing={missing}, extra={extra}")
+    from .custodian_attestation import sha256_json as attestation_sha256_json
     unblinding_record = {
         "action": "unblind_and_evaluate",
         "encrypted_truth_store_sha256": public_manifest["truth_store_sha256"],
         "key_fingerprint": public_manifest["key_fingerprint"],
+        "custodian_attestation_sha256": (
+            attestation_sha256_json(dict(custodian_attestation))
+            if isinstance(custodian_attestation, Mapping) else None
+        ),
         "heldout_field_tokens_processed": sorted(seen),
     }
     frozen_config = dict(frozen_configuration.get("configuration") or {})
