@@ -53,6 +53,8 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
     links = provenance.get("exact_product_links") or {}
     science = summary.get("science") or {}
     injection = summary.get("calibrated_jy_injection_evaluation") or {}
+    photon_noise = injection.get("source_photon_noise") or {}
+    electron_derivation = injection.get("electron_calibration_derivation") or {}
 
     checks = {
         "native_mef_audit_compatible": compatibility.get("status") == "compatible",
@@ -65,6 +67,9 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
             "structure_and_units_pass",
         },
         "jy_injection_completed": injection.get("status") == "completed",
+        "source_poisson_noise_modelled": bool(photon_noise.get("enabled") and photon_noise.get("physically_modelled")),
+        "electron_conversion_derived_from_exact_gain": bool(electron_derivation.get("absolute_gain_uri") and electron_derivation.get("absolute_gain_sha256")),
+        "electron_conversion_review_status_is_explicit": electron_derivation.get("independent_review_status") == "pending",
         "science_native_uri_present": bool(science.get("uri")),
         "science_sha256_present": bool(science.get("sha256")),
         "science_detector_is_D2": science.get("detector") == "D2",
@@ -77,10 +82,8 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
         "nominal_local_5sigma_sensitivity_jy": injection.get("five_sigma_sensitivity_jy"),
         "flux_summary": injection.get("flux_summary"),
         "baseline_detections": injection.get("n_baseline_detections"),
-        "source_poisson_noise": (
-            (injection.get("source_photon_noise") or {}).get("physically_modelled")
-            if isinstance(injection.get("source_photon_noise"), dict) else None
-        ),
+        "source_poisson_noise": photon_noise,
+        "electron_calibration_derivation": electron_derivation,
     }
     return {
         "field": field,
@@ -150,7 +153,7 @@ def aggregate_report(records: list[dict], *, started_utc: str,
         "scientific_gate_status": {
             "single_field_real_data_pilot": "completed" if completed else "not_completed",
             "multi_field_calibrated_jy_evaluation": (
-                "completed_for_predeclared_regions" if len(completed) == len(FIELDS)
+                "completed_exploratory_for_predeclared_regions" if len(completed) == len(FIELDS)
                 and results_unique_placeholder(completed) else "not_satisfied"
             ),
             "independent_blind_four_baseline_benchmark": "not_satisfied",
