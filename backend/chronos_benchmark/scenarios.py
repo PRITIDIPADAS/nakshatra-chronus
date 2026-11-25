@@ -66,6 +66,10 @@ def generate_scenario(scenario: str, *, seed: int = 1, n_observations: int = 12)
             "detector_id": "D2" if i % 2 == 0 else "D3",
             "template_score": detector_score,
             "calibration_group": "SYNTHETIC-FIXTURE",
+            "wavelength_source": "synthetic_fixture",
+            "wavelength_unit": "um",
+            "wavelength_validated": True,
+            "synthetic_fixture": True,
             "valid": True,
         })
     return {
