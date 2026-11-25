@@ -146,3 +146,8 @@ SPHEREx DR1 and QR3 spectral images are the current uniformly processed set for 
 The source-to-exposure TAP association uses one point-in-polygon predicate in `WHERE`, joins artifact and plane records through their explicit plane ID, and accepts DR1/QR3 Level-2 paths. A source/plane match is geometric coverage only; it is not evidence of extracted-flux validity, usable spectrum quality, sufficient cadence or physical source identity.
 
 The DR1 All-Sky Cube (`spherex_dr1_cube`) is a separate 102-channel spatial-spectral product over the nominal 0.75–5.0 μm range. It is not counted as a sequence of independent temporal exposures. QR2 is not mixed into DR1/QR3 analysis. Collection names and product roles follow the [IRSA SPHEREx Data Access guide](https://irsa.ipac.caltech.edu/spherex-archive-documentation/spherex-data-access/) and [Data Releases guide](https://irsa.ipac.caltech.edu/spherex-archive-documentation/spherex-data-releases/).
+
+
+## DR1 All-Sky Cube metadata inventory
+
+The SPLICES/DR1/QR3 reconnaissance now performs a separate IRSA SIAv2 inventory query against `spherex_dr1_cube`. The inventory records the actual archive metadata rows, native access URI fields returned by SIAv2, product type, row cap, release and query errors. It is deliberately not joined to exposure timestamps or counted as a Level-2 epoch series. The report retains the nominal 102-channel, 0.75–5.0 μm specification, marks the inventory as metadata-only and explicitly records that the native cube has not been downloaded by this reconnaissance. This makes the archive product discoverable without overstating what has been extracted or analysed.

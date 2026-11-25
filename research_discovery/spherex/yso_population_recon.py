@@ -42,6 +42,8 @@ SIA_COLLECTION_RELEASE = {
     "spherex_qr3": "qr3",
     "spherex_qr3_deep": "qr3",
 }
+DR1_ALL_SKY_CUBE_COLLECTION = "spherex_dr1_cube"
+CUBE_METADATA_ROW_LIMIT = 1000
 
 
 def scalar(value: Any) -> Any:
@@ -103,6 +105,47 @@ def query_region_footprints_sia(region: dict, collection: str) -> dict:
         "row_count": len(rows),
         "rows": rows,
         "query_complete_below_row_cap": len(rows) < COVERAGE_ROW_LIMIT,
+    }
+
+
+def query_dr1_all_sky_cube_sia() -> dict:
+    """Inventory the DR1 all-sky spectral cube without treating it as epochs.
+
+    The all-sky cube is a spatial-spectral product. This query intentionally
+    does not request a POS cone or join its rows to source exposure timestamps.
+    The returned table is metadata only; the native cube is not downloaded here.
+    """
+    table = Irsa.query_sia(
+        collection=DR1_ALL_SKY_CUBE_COLLECTION,
+        maxrec=CUBE_METADATA_ROW_LIMIT,
+    )
+    table = table.to_table() if hasattr(table, "to_table") else table
+    rows = []
+    for row in table:
+        item = {str(name): scalar(row[name]) for name in table.colnames}
+        item["_chronos_collection"] = DR1_ALL_SKY_CUBE_COLLECTION
+        item["_chronos_release"] = "dr1"
+        item["_chronos_dataset_class"] = "real"
+        item["_chronos_product_role"] = "all_sky_spatial_spectral_cube"
+        item["_chronos_nominal_spectral_channels"] = 102
+        item["_chronos_nominal_wavelength_min_um"] = 0.75
+        item["_chronos_nominal_wavelength_max_um"] = 5.0
+        item["_chronos_temporal_epoch_series"] = False
+        rows.append(item)
+    return {
+        "service": "IRSA SIAv2",
+        "collection": DR1_ALL_SKY_CUBE_COLLECTION,
+        "release": "dr1",
+        "product_role": "all_sky_spatial_spectral_cube",
+        "nominal_spectral_channels": 102,
+        "nominal_wavelength_range_um": [0.75, 5.0],
+        "maxrec": CUBE_METADATA_ROW_LIMIT,
+        "columns": list(table.colnames),
+        "row_count": len(rows),
+        "rows": rows,
+        "query_complete_below_row_cap": len(rows) < CUBE_METADATA_ROW_LIMIT,
+        "native_cube_downloaded": False,
+        "temporal_epoch_series": False,
     }
 
 
@@ -756,6 +799,28 @@ def main() -> None:
     write_csv(OUTPUT / "candidate_source_exposure_matches_all_regions.csv", all_source_exposure_matches)
     write_csv(OUTPUT / "candidate_source_epoch_summary_all_regions.csv", all_source_epoch_summaries)
     write_csv(OUTPUT / "region_intersecting_footprints_sia_all_regions.csv", all_region_sia_footprints)
+    cube_error = None
+    try:
+        cube_inventory = query_dr1_all_sky_cube_sia()
+    except Exception as exc:
+        cube_error = f"{type(exc).__name__}: {exc}"
+        cube_inventory = {
+            "service": "IRSA SIAv2",
+            "collection": DR1_ALL_SKY_CUBE_COLLECTION,
+            "release": "dr1",
+            "product_role": "all_sky_spatial_spectral_cube",
+            "nominal_spectral_channels": 102,
+            "nominal_wavelength_range_um": [0.75, 5.0],
+            "maxrec": CUBE_METADATA_ROW_LIMIT,
+            "columns": [],
+            "row_count": None,
+            "rows": [],
+            "query_complete_below_row_cap": False,
+            "native_cube_downloaded": False,
+            "temporal_epoch_series": False,
+            "error": cube_error,
+        }
+    write_csv(OUTPUT / "dr1_all_sky_cube_sia_metadata.csv", cube_inventory["rows"])
     report = {
         "schema": "chronos-spllices-yso-recon/1.1",
         "started_utc": started,
@@ -770,12 +835,20 @@ def main() -> None:
             "data_class": "real",
         },
         "dr1_all_sky_cube": {
-            "collection": "spherex_dr1_cube",
-            "nominal_channels": 102,
-            "wavelength_range_um": [0.75, 5.0],
-            "role": "spatial-spectral context, not a temporal epoch sequence",
-            "queried_in_this_reconnaissance": False,
+            "collection": DR1_ALL_SKY_CUBE_COLLECTION,
+            "nominal_channels": cube_inventory["nominal_spectral_channels"],
+            "wavelength_range_um": cube_inventory["nominal_wavelength_range_um"],
+            "role": cube_inventory["product_role"],
+            "queried_in_this_reconnaissance": cube_error is None,
+            "metadata_row_count": cube_inventory["row_count"],
+            "query_complete_below_row_cap": cube_inventory["query_complete_below_row_cap"],
+            "metadata_only": True,
+            "native_cube_downloaded": False,
+            "temporal_epoch_series": False,
+            "query_error": cube_error,
+            "metadata_report": "data/yso_population_recon/dr1_all_sky_cube_sia_metadata.csv",
         },
+        "dr1_all_sky_cube_inventory": cube_inventory,
         "predeclared_regions": list(REGIONS),
         "region_results": summaries,
         "candidate_record_count": len(all_candidates),
@@ -809,7 +882,7 @@ def main() -> None:
             "This reconnaissance does not establish a new YSO discovery.",
             "The centre-point DR1 TAP query tests whether each fixed region-centre coordinate lies inside an exposure polygon.",
             "Full-region footprint coverage uses SIAv2 POS-circle searches over DR1 and QR3 wide/deep spectral-image collections; each collection and row cap is preserved separately.",
-            "The DR1 All-Sky Cube is a distinct 102-channel spatial-spectral product and is not treated as a sequence of independent temporal exposures.",
+            "The DR1 All-Sky Cube is queried separately through SIAv2 and retained as metadata-only spatial-spectral context; the native cube is not downloaded by this reconnaissance and is never treated as a sequence of independent temporal exposures.",
             "DR1 and QR3 are the current uniformly processed spectral-image set; QR2 is not combined into this analysis.",
             "The row-cap checks establish only that each completed query returned fewer than 20000 rows; they do not establish survey-wide or source-level coverage completeness.",
             "The candidate-source TAP query matches SPLICES coordinates to DR1/QR3 Level-2 exposure polygons; this is geometric archive footprint coverage, not extracted-flux validity, spectrum quality, usable epoch cadence or source-level epoch completeness.",

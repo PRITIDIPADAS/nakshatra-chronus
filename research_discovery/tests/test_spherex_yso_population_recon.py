@@ -96,6 +96,37 @@ def test_candidate_source_epoch_rows_identify_dr1_qr3_and_unknown_uris():
     assert recon.release_from_uri("https://irsa.example/unknown/a.fits") == "unknown"
 
 
+def test_dr1_all_sky_cube_query_is_separate_from_temporal_exposures(monkeypatch):
+    calls = []
+    class FakeTable:
+        colnames = ["obs_id", "access_url", "dataproduct_type"]
+        def __iter__(self):
+            return iter([{
+                "obs_id": "ALLSKY-DR1",
+                "access_url": "https://irsa.example/dr1/allsky-cube.fits",
+                "dataproduct_type": "cube",
+            }])
+
+    def fake_query_sia(**kwargs):
+        calls.append(kwargs)
+        return FakeTable()
+
+    monkeypatch.setattr(recon.Irsa, "query_sia", fake_query_sia)
+    result = recon.query_dr1_all_sky_cube_sia()
+    assert calls == [{
+        "collection": "spherex_dr1_cube",
+        "maxrec": recon.CUBE_METADATA_ROW_LIMIT,
+    }]
+    assert result["product_role"] == "all_sky_spatial_spectral_cube"
+    assert result["nominal_spectral_channels"] == 102
+    assert result["nominal_wavelength_range_um"] == [0.75, 5.0]
+    assert result["native_cube_downloaded"] is False
+    assert result["temporal_epoch_series"] is False
+    assert result["rows"][0]["_chronos_product_role"] == "all_sky_spatial_spectral_cube"
+    assert result["rows"][0]["_chronos_temporal_epoch_series"] is False
+
+
+
 def test_source_exposure_cone_filter_handles_ra_wrap_and_deduplicates_source_plane_pairs():
     region = {"name": "Wrap_Test", "ra_deg": 0.0, "dec_deg": 0.0,
               "radius_deg": 1.0, "role": "control"}
