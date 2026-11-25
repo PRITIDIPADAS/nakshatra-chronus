@@ -278,16 +278,61 @@ def _distance(a: np.ndarray,b: np.ndarray)->np.ndarray:
 def _choose_positions(valid: np.ndarray,n: int,margin: int,rng: np.random.Generator,min_distance: int,
                       phase: tuple[float,float]=(0.0,0.0), reference_xy: tuple[float,float] | None=None,
                       region_radius: float | None=None)->np.ndarray:
-    h,w=valid.shape; coords=[]; attempts=0; max_attempts=max(3000,n*300)
-    while len(coords)<n and attempts<max_attempts:
-        attempts+=1; ix=int(rng.integers(margin,w-margin)); iy=int(rng.integers(margin,h-margin))
-        x=float(ix)+phase[0]; y=float(iy)+phase[1]
-        if not valid[iy,ix]: continue
-        if reference_xy is not None and region_radius is not None:
-            if (x-reference_xy[0])**2+(y-reference_xy[1])**2 > region_radius**2: continue
-        if coords and np.min(np.sqrt(((np.asarray(coords)-[x,y])**2).sum(axis=1)))<min_distance: continue
-        coords.append((x,y))
-    if len(coords)<n: raise RuntimeError(f"Could place only {len(coords)}/{n} injections; lower density, increase region radius, or relax masks")
+    h,w=valid.shape
+    coords=[]
+    if reference_xy is not None and region_radius is not None:
+        # Sample the constrained region directly. Randomly drawing across the
+        # full detector wastes nearly every trial when a local position-dependent
+        # PSF is valid only within a small circle around its reference position.
+        cx,cy=map(float,reference_xy)
+        x_first=max(margin,int(np.ceil(cx-region_radius-phase[0])))
+        x_last=min(w-margin-1,int(np.floor(cx+region_radius-phase[0])))
+        y_first=max(margin,int(np.ceil(cy-region_radius-phase[1])))
+        y_last=min(h-margin-1,int(np.floor(cy+region_radius-phase[1])))
+        if x_last>=x_first and y_last>=y_first:
+            local=valid[y_first:y_last+1,x_first:x_last+1]
+            yy,xx=np.nonzero(local)
+            xx=xx+x_first
+            yy=yy+y_first
+            x_values=xx.astype(float)+phase[0]
+            y_values=yy.astype(float)+phase[1]
+            inside=(x_values-cx)**2+(y_values-cy)**2 <= region_radius**2
+            candidates=np.column_stack((x_values[inside],y_values[inside]))
+            # Randomize candidate order, then greedily enforce the same
+            # hard minimum separation. Every usable local candidate is
+            # considered, so failure reflects actual local capacity rather
+            # than inefficient global rejection sampling.
+            if len(candidates):
+                for index in rng.permutation(len(candidates)):
+                    candidate=candidates[int(index)]
+                    if coords and np.min(np.sqrt(
+                        ((np.asarray(coords)-candidate)**2).sum(axis=1)
+                    )) < min_distance:
+                        continue
+                    coords.append((float(candidate[0]),float(candidate[1])))
+                    if len(coords)>=n:
+                        break
+    else:
+        attempts=0
+        max_attempts=max(3000,n*300)
+        while len(coords)<n and attempts<max_attempts:
+            attempts+=1
+            ix=int(rng.integers(margin,w-margin))
+            iy=int(rng.integers(margin,h-margin))
+            x=float(ix)+phase[0]
+            y=float(iy)+phase[1]
+            if not valid[iy,ix]:
+                continue
+            if coords and np.min(np.sqrt(
+                ((np.asarray(coords)-[x,y])**2).sum(axis=1)
+            )) < min_distance:
+                continue
+            coords.append((x,y))
+    if len(coords)<n:
+        raise RuntimeError(
+            f"Could place only {len(coords)}/{n} injections after examining the "
+            "eligible placement region; the mask and spacing constraints were retained"
+        )
     return np.asarray(coords,float)
 
 
