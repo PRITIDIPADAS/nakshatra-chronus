@@ -27,7 +27,14 @@ The research preview adds measurement-level sky/detector model competition, loca
 
 These are software capabilities, not completed real-sky results. The four-baseline acceptance gate still requires all four methods to be run on the same calibrated real held-out SPHEREx fields. The generic pixel model is not calibrated SPHEREx detector physics, and the conditional bootstrap is not a full Bayesian posterior-predictive analysis.
 
-This is a research preview. Relative BIC weights are not calibrated posterior probabilities. Generic detector experiments are not calibrated SPHEREx simulations. Synthetic challenge cases are not evidence of real-sky performance. A six-region SPLICES/DR1 catalogue reconnaissance is now recorded, and a six-region calibrated-Jy pilot workflow has been added. The M101 source-Poisson rerun has passed CI with calibration derivation pending external review. The six-region SPLICES reconnaissance is complete as descriptive catalogue work. The blind-field benchmark, YSO population analysis, independent reproduction and validated-release gates remain mandatory.
+This is a research preview. Relative BIC weights are not calibrated posterior probabilities. Generic detector experiments are not calibrated SPHEREx simulations. Synthetic challenge cases are not evidence of real-sky performance.
+
+**Real-data evidence and limits:**
+- [M101 DR1 D2 native audit and Jy injection report](docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md): one real exposure, 60 fixed-seed source injections at three locally measured flux levels. The archive-linked absolute-gain map is used for source-Poisson simulation, but the electron-conversion derivation remains pending independent human review. This is not a blind run or a four-method comparison.
+- [SPLICES/DR1 regional reconnaissance](docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md): five star-forming regions and one high-latitude control. The catalogue label fields remain separate. The Level-2 query tests each region-centre coordinate against exposure polygons; it is not a full-cone or source-level epoch-coverage measurement.
+- [Independent custodian operations](docs/CHRONOS_CUSTODIAN_OPERATIONS.md): external preregistration, sealed truth custody, pinned Ed25519 attestation, configuration freeze and custodian-only unblinding.
+
+The six-region calibrated-Jy workflow is a pilot plan; its aggregate multi-field result has not yet passed its gates. No population-level YSO discovery, independent astronomical reproduction or validated scientific release is claimed. The blind-field benchmark and external review remain mandatory.
 
 ## CHRONOS 4D: ten laboratories (new)
 
