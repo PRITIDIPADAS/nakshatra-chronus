@@ -193,7 +193,9 @@ def test_calibration_pair_requires_explicit_matching_metadata():
                "processing_date":"2026-001","coordinate_frame":"native_detector"}
     cal = {"release":"DR1","detector":"2","pipeline_version":"7.1",
            "processing_date":"2026-001","coordinate_frame":"native_detector",
-           "cwave":np.ones((2040,2040),dtype=np.float32)*2.0,"cband":np.ones((2040,2040),dtype=np.float32)*0.1}
+           "cwave":np.ones((2040,2040),dtype=np.float32)*2.0,"cband":np.ones((2040,2040),dtype=np.float32)*0.1,
+           "solid_angle_map":{"status":"pass","detector":"D2","shape":[2040,2040],
+             "bunit":"arcsec2","uri":"https://irsa.ipac.caltech.edu/solid-angle/D2.fits","sha256":"d"*64}}
     assert compatibility_decision(science,cal)["status"] == "compatible"
     cal["detector"] = "D5"
     assert compatibility_decision(science,cal)["status"] == "rejected"
@@ -203,6 +205,19 @@ def test_calibration_pair_missing_metadata_is_review_required():
     from research_discovery.spherex.calibration_compatibility import compatibility_decision
     report=compatibility_decision({"release":"DR1","detector":"D2"},{"release":"DR1","detector":"D2"})
     assert report["status"] == "review_required"
+
+
+def test_calibration_pair_without_solid_angle_remains_unresolved():
+    from research_discovery.spherex.calibration_compatibility import compatibility_decision
+    science={"release":"DR1","detector":"D2","pipeline_version":"7.1",
+             "processing_date":"2026-001","coordinate_frame":"native_detector"}
+    cal={"release":"DR1","detector":"D2","pipeline_version":"7.1",
+         "processing_date":"2026-001","coordinate_frame":"native_detector",
+         "cwave":np.ones((2040,2040),dtype=np.float32),
+         "cband":np.ones((2040,2040),dtype=np.float32)}
+    result=compatibility_decision(science,cal)
+    assert result["status"]=="review_required"
+    assert result["checks"]["solid_angle_map"]["status"]=="unknown"
 
 
 def test_cwave_cband_cutout_slices_without_interpolation_and_masks_invalid_values():
