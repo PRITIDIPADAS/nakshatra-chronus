@@ -769,3 +769,41 @@ def test_population_event_rate_pools_counts_over_total_area_time_exposure():
     assert combined["event_rate_per_sqdeg_day"]["median"] == pytest.approx(
         single["event_rate_per_sqdeg_day"]["median"], rel=0.15
     )
+
+
+def test_population_rate_pools_signed_field_excess_before_nonnegative_boundary():
+    import numpy as np
+    from chronos_population.rates import _add_signed_corrected_excess
+
+    # The first control draw exceeds its science count. That negative net
+    # contribution must offset the positive second-field contribution.
+    total = np.zeros(3, dtype=float)
+    total = _add_signed_corrected_excess(
+        total,
+        np.array([2.0, 3.0, 1.0]),
+        np.array([10.0, 7.0, 9.0]),
+        np.array([1.0, 1.0, 1.0]),
+    )
+    total = _add_signed_corrected_excess(
+        total,
+        np.array([20.0, 8.0, 11.0]),
+        np.array([1.0, 2.0, 5.0]),
+        np.array([1.0, 1.0, 1.0]),
+    )
+    assert total.tolist() == pytest.approx([11.0, 2.0, -2.0])
+    # The non-negative constraint is applied once, to the pooled total.
+    assert np.maximum(total, 0.0).tolist() == pytest.approx([11.0, 2.0, 0.0])
+
+
+def test_population_rate_does_not_truncate_negative_control_fluctuations_per_field():
+    import numpy as np
+    from chronos_population.rates import _add_signed_corrected_excess
+
+    signed_total = _add_signed_corrected_excess(
+        np.zeros(1), np.array([1.0]), np.array([8.0]), np.array([0.5])
+    )
+    signed_total = _add_signed_corrected_excess(
+        signed_total, np.array([15.0]), np.array([2.0]), np.array([0.5])
+    )
+    assert signed_total.item() == pytest.approx(12.0)
+    assert np.maximum(signed_total, 0.0).item() == pytest.approx(12.0)
