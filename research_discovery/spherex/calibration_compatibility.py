@@ -112,7 +112,7 @@ def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
     required_audit_checks = (
         "required_hdus", "image_2d", "native_full_frame", "image_unit",
         "release_psf_family", "flags_integer_type", "celestial_wcs",
-        "alternate_wcs_a", "cutout_parent_origin", "cwave_cband", "solid_angle",
+        "alternate_wcs_a", "cutout_parent_origin", "cwave_cband", "wavelength_units", "solid_angle",
         "variance_alignment", "zodi_alignment",
     )
     for key in required_audit_checks:
@@ -151,7 +151,7 @@ def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
             _sha256(Path(str(calibration.get("solid_angle_map_path")))).lower() == str(area.get("sha256")).lower() and
             area.get("shape") == [2040,2040] and
             _detector(area.get("detector")) == _detector(science.get("detector")) and
-            str(area.get("bunit","")).lower().replace(" ","") in {"arcsec2","arcsec**2","arcsec^2"}
+            str(area.get("bunit","")).lower().replace(" ","") in {"sr","arcsec2","arcsec**2","arcsec^2"}
         ) else "fail",
         "audit_uri": area.get("uri"),
         "manifest_uri": calibration.get("solid_angle_map_uri"),
