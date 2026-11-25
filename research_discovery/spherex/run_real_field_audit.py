@@ -339,17 +339,14 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
                                 science_sha: str, area_sha: str,
                                 out_dir: Path) -> dict:
     """Run deterministic Jy injections on one real DR1 MEF using native ePSF and pixel solid angle."""
-    x_ref, y_ref = 1020.25, 1019.75
-    stamp_path = out_dir / "native_epsf_stamp.fits"
-    epsf_meta = extract_epsf(
-        science_path, x=x_ref, y=y_ref, out=stamp_path, stamp_size=11
-    )
-    with fits.open(science_path, memmap=True) as science, fits.open(stamp_path) as psf_file, fits.open(area_path, memmap=True) as area_file:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    flag_bits, flag_names = policy_mask("conservative-photometry")
+    stamp_size = 11
+    with fits.open(science_path, memmap=True) as science, fits.open(area_path, memmap=True) as area_file:
         image = np.asarray(science["IMAGE"].data, dtype=float)
         variance = np.asarray(science["VARIANCE"].data, dtype=float)
         flags = np.asarray(science["FLAGS"].data)
         background = np.asarray(science["ZODI"].data, dtype=float)
-        psf = np.asarray(psf_file[0].data, dtype=float)
         area_hdu = next(h for h in area_file if h.data is not None and np.asarray(h.data).ndim == 2)
         area_values = np.asarray(area_hdu.data, dtype=float)
         area_unit = str(area_hdu.header.get("BUNIT", "")).strip().lower().replace(" ", "")
@@ -365,7 +362,45 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         if image.shape != variance.shape or image.shape != flags.shape or image.shape != omega_sr.shape:
             raise ValueError("IMAGE, VARIANCE, FLAGS and solid-angle map must be pixel-aligned")
 
-    flag_bits, flag_names = policy_mask("conservative-photometry")
+    # The first trial used a fixed geometric centre, which fell on a quality-mask
+    # boundary. Select the nearest valid native-detector location instead. The
+    # complete ePSF footprint and the 100-pixel injection zone are checked
+    # before extracting the position-dependent ePSF.
+    from scipy.ndimage import minimum_filter
+    quality = (
+        np.isfinite(variance) & (variance > 0)
+        & np.isfinite(omega_sr) & (omega_sr > 0)
+        & ((flags.astype(np.uint64) & np.uint64(flag_bits)) == 0)
+        & np.isfinite(background)
+    )
+    footprint_good = minimum_filter(
+        quality.astype(np.uint8), size=(stamp_size, stamp_size),
+        mode="constant", cval=0,
+    ) > 0
+    margin = stamp_size // 2 + 100 + 10
+    height, width = image.shape
+    y_grid, x_grid = np.indices(image.shape)
+    safe_zone = (
+        footprint_good
+        & (x_grid >= margin) & (x_grid < width - margin)
+        & (y_grid >= margin) & (y_grid < height - margin)
+    )
+    candidates = np.argwhere(safe_zone)
+    if not len(candidates):
+        raise ValueError("No fully valid native ePSF footprint with a 100-pixel injection zone exists.")
+    target_y, target_x = (height - 1) / 2.0, (width - 1) / 2.0
+    distance2 = (
+        (candidates[:, 0] - target_y) ** 2
+        + (candidates[:, 1] - target_x) ** 2
+    )
+    selected = candidates[int(np.argmin(distance2))]
+    y_ref, x_ref = float(selected[0]) + 0.75, float(selected[1]) + 0.25
+    stamp_path = out_dir / "native_epsf_stamp.fits"
+    epsf_meta = extract_epsf(
+        science_path, x=x_ref, y=y_ref, out=stamp_path, stamp_size=stamp_size
+    )
+    with fits.open(stamp_path) as psf_file:
+        psf = np.asarray(psf_file[0].data, dtype=float)
     half = psf.shape[0] // 2
     x0, y0 = int(np.floor(x_ref)) - half, int(np.floor(y_ref)) - half
     sl = (slice(y0, y0 + psf.shape[0]), slice(x0, x0 + psf.shape[1]))
@@ -378,7 +413,10 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         & ((local_flags & np.uint64(flag_bits)) == 0)
     )
     if not good.all():
-        raise ValueError("Reference PSF footprint touches invalid variance, solid-angle or flagged pixels")
+        raise ValueError(
+            "Selected PSF reference footprint unexpectedly failed the prior validity scan; "
+            "no interpolation or mask relaxation was applied."
+        )
     # In MJy/sr pixels the point-source template is ePSF / pixel-solid-angle.
     # Use that same template both for the local inverse-variance depth estimate
     # and for the SNR filter, rather than filtering surface brightness with a
@@ -410,6 +448,13 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         (np.max(local_omega) - np.min(local_omega)) / np.median(local_omega)
     )
     result["injection_flux_levels_jy"] = levels_jy
+    result["psf_reference_selection"] = {
+        "selection_method": "nearest-to-detector-centre position with a fully valid native ePSF footprint and 100-pixel injection zone",
+        "reference_x": x_ref, "reference_y": y_ref,
+        "quality_valid_fraction_in_image": float(quality.mean()),
+        "valid_reference_position_count": int(len(candidates)),
+        "footprint_shape": [int(psf.shape[0]), int(psf.shape[1])],
+    }
     result["science_provenance"] = {
         "science_native_uri": science_uri, "science_sha256": science_sha,
         "solid_angle_native_uri": area_uri, "solid_angle_sha256": area_sha,
