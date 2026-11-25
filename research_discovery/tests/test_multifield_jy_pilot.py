@@ -91,13 +91,63 @@ def _summary():
     }
 
 
+def _injection_report(summary):
+    injection = summary["calibrated_jy_injection_evaluation"]
+    science = summary["science"]
+    calibration = injection["electron_calibration_derivation"]["record"]
+    rows = []
+    for flux_bin in injection["flux_summary"]:
+        for index in range(int(flux_bin["n_injected"])):
+            baseline_snr = 4.0 + (index % 3) * 0.1
+            post_snr = baseline_snr + 1.0
+            rows.append({
+                "flux_level": flux_bin["flux_level"],
+                "x": 100.25 + index,
+                "y": 200.75 + index,
+                "recovered": int(index < int(flux_bin["n_recovered"])),
+                "baseline_local_max_snr_within_match_radius": baseline_snr,
+                "post_injection_local_max_snr_within_match_radius": post_snr,
+                "local_snr_delta_within_match_radius": post_snr - baseline_snr,
+                "post_injection_local_peak_offset_within_match_radius_px": 0.75,
+            })
+    return {
+        "threshold_snr": 5.0,
+        "science_provenance": {"science_sha256": science["sha256"]},
+        "source_photon_noise": {
+            "calibration_record": {
+                "calibration_sha256": calibration["calibration_sha256"]
+            }
+        },
+        "local_response_diagnostics": {
+            "available": True,
+            "match_radius_px": 2.5,
+            "extended_radius_px": 5.0,
+            "threshold_snr": 5.0,
+            "does_not_change_recovery_or_peak_matching": True,
+        },
+        "flux_summary": [dict(row) for row in injection["flux_summary"]],
+        "injections": rows,
+    }
+
+
+def _record(field, summary, **kwargs):
+    return summarize_field_record(
+        field,
+        summary,
+        injection_report=_injection_report(summary),
+        injection_report_path="data/calibrated_injection/calibrated_jy_injection_recovery.json",
+        injection_report_sha256="c" * 64,
+        **kwargs,
+    )
+
+
 def test_six_predeclared_fields_include_independent_control_region():
     assert len(FIELDS) == 6
     assert sum(field["role"] == "control" for field in FIELDS) == 1
 
 
 def test_field_summary_requires_all_provenance_and_jy_gates():
-    record = summarize_field_record(
+    record = _record(
         FIELDS[0], _summary(), return_code=0, log_path="field.log"
     )
     assert record["eligible_for_multi_field_pilot_summary"] is True
@@ -110,7 +160,7 @@ def test_field_summary_fails_closed_when_gain_link_or_injection_is_missing():
     summary = _summary()
     summary["archive_provenance"]["exact_product_links"]["absolute_gain"] = None
     summary["calibrated_jy_injection_evaluation"]["status"] = "failed"
-    record = summarize_field_record(
+    record = _record(
         FIELDS[0], summary, return_code=1, log_path="field.log",
         error="calibration failure",
     )
@@ -126,7 +176,7 @@ def test_aggregate_never_claims_blind_or_population_discovery():
         summary = _summary()
         summary["science"]["observation_id"] = f"obs-{index}"
         summary["science"]["sha256"] = f"{index:064x}"
-        records.append(summarize_field_record(
+        records.append(_record(
             field, summary, return_code=0, log_path=f"{field['name']}.log"
         ))
     report = aggregate_report(
@@ -151,7 +201,7 @@ def test_zero_recovery_at_all_flux_levels_is_explicitly_flagged_in_aggregate():
             for row in summary["calibrated_jy_injection_evaluation"]["flux_summary"]:
                 row["n_recovered"] = 0
                 row["completeness"] = 0.0
-        records.append(summarize_field_record(
+        records.append(_record(
             field, summary, return_code=0, log_path=f"{field['name']}.log"
         ))
     flagged = records[4]
@@ -170,7 +220,7 @@ def test_zero_recovery_at_all_flux_levels_is_explicitly_flagged_in_aggregate():
 def test_aggregate_rejects_duplicate_exposure_identity_from_multifield_gate():
     records = []
     for field in FIELDS:
-        records.append(summarize_field_record(
+        records.append(_record(
             field, _summary(), return_code=0, log_path=f"{field['name']}.log"
         ))
     report = aggregate_report(
@@ -188,7 +238,7 @@ def test_aggregate_rejects_duplicate_or_missing_predeclared_field():
         summary = _summary()
         summary["science"]["observation_id"] = f"obs-{index}"
         summary["science"]["sha256"] = f"{index + 1:064x}"
-        records.append(summarize_field_record(
+        records.append(_record(
             field, summary, return_code=0, log_path=f"{field['name']}.log"
         ))
     # Six rows are insufficient if one declared field was duplicated.
@@ -205,7 +255,7 @@ def test_aggregate_rejects_duplicate_or_missing_predeclared_field():
 
 def test_query_report_is_hashed_and_failures_remain_visible():
     records = [
-        summarize_field_record(
+        _record(
             field, _summary(), return_code=0, log_path="field.log"
         ) for field in FIELDS
     ]
@@ -221,7 +271,7 @@ def test_field_summary_preserves_exact_native_image_bunit():
     summary = _summary()
     summary["science"].pop("image_unit")
     summary["science"]["image_bunit"] = "MJy / sr"
-    record = summarize_field_record(
+    record = _record(
         FIELDS[0], summary, return_code=0, log_path="field.log"
     )
     assert record["science"]["image_unit"] == "MJy / sr"
@@ -233,7 +283,7 @@ def test_field_summary_requires_real_poisson_variance_diagnostics_for_all_flux_b
     summary["calibrated_jy_injection_evaluation"]["flux_summary"][1].pop(
         "source_poisson_variance_added_image_units2"
     )
-    record = summarize_field_record(
+    record = _record(
         FIELDS[0], summary, return_code=0, log_path="field.log"
     )
     assert record["eligible_for_multi_field_pilot_summary"] is False
@@ -251,7 +301,7 @@ def test_field_summary_rejects_gain_link_without_live_archive_md5():
     injection["electron_calibration_derivation"]["record"]["provenance_link"][
         "artifact_md5_status"
     ] = "not_checked"
-    record = summarize_field_record(
+    record = _record(
         FIELDS[0], summary, return_code=0, log_path="field.log"
     )
     assert record["eligible_for_multi_field_pilot_summary"] is False
@@ -263,7 +313,7 @@ def test_field_summary_requires_explicit_pending_review_not_human_signoff():
     summary["calibrated_jy_injection_evaluation"]["source_photon_noise"][
         "independent_human_reviewed"
     ] = True
-    record = summarize_field_record(
+    record = _record(
         FIELDS[0], summary, return_code=0, log_path="field.log"
     )
     assert record["eligible_for_multi_field_pilot_summary"] is False
@@ -276,7 +326,7 @@ def _complete_report():
         summary = _summary()
         summary["science"]["observation_id"] = f"obs-{index}"
         summary["science"]["sha256"] = f"{index + 1:064x}"
-        record = summarize_field_record(
+        record = _record(
             field, summary, return_code=0, log_path=f"{field['name']}.log"
         )
         record["summary_sha256"] = f"{index + 20:064x}"
@@ -318,3 +368,66 @@ def test_final_aggregate_gate_rejects_modified_or_incomplete_summary():
     result = validate_aggregate_report(report)
     assert result["valid"] is False
     assert any("not all predeclared fields completed" in error for error in result["errors"])
+
+
+def test_field_summary_requires_bound_per_injection_local_snr_report():
+    summary = _summary()
+    report = _injection_report(summary)
+    report["science_provenance"]["science_sha256"] = "f" * 64
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="d" * 64,
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["checks"]["injection_report_matches_science_and_calibration"] is False
+    assert record["checks"]["local_snr_diagnostics_complete_and_count_bound"] is False
+
+
+def test_field_summary_requires_all_60_local_snr_rows_and_bin_recovery_consistency():
+    summary = _summary()
+    report = _injection_report(summary)
+    report["injections"].pop()
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="d" * 64,
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["recovery_investigation"]["local_snr_diagnostics_complete"] is False
+
+    report = _injection_report(summary)
+    report["injections"][0]["recovered"] = 0
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="d" * 64,
+    )
+    assert record["eligible_for_multi_field_pilot_summary"] is False
+    assert record["recovery_investigation"]["injection_report_recovery_counts_match_rows"] is False
+
+
+def test_field_summary_retains_local_snr_diagnostics_as_diagnostic_not_recovery():
+    summary = _summary()
+    report = _injection_report(summary)
+    record = summarize_field_record(
+        FIELDS[0], summary, return_code=0, log_path="field.log",
+        injection_report=report, injection_report_sha256="d" * 64,
+    )
+    investigation = record["recovery_investigation"]
+    assert record["eligible_for_multi_field_pilot_summary"] is True
+    assert investigation["local_snr_diagnostics_complete"] is True
+    assert investigation["local_snr_diagnostic_rows"] == 60
+    assert len(investigation["local_snr_flux_bin_diagnostics"]) == 3
+    assert "does not replace peak-list recovery" in investigation["interpretation"]
+
+
+def test_final_aggregate_gate_rejects_missing_injection_report_digest_or_local_snr_rows():
+    report = _complete_report()
+    report["field_results"][0]["injection_report_sha256"] = None
+    result = validate_aggregate_report(report)
+    assert result["valid"] is False
+    assert any("per-injection report SHA-256" in error for error in result["errors"])
+
+    report = _complete_report()
+    report["field_results"][0]["recovery_investigation"]["local_snr_diagnostics_complete"] = False
+    result = validate_aggregate_report(report)
+    assert result["valid"] is False
+    assert any("local per-injection SNR diagnostics" in error for error in result["errors"])
