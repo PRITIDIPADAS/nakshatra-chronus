@@ -61,6 +61,22 @@ def validate_electron_calibration_record(record):
         raise ValueError("science_native_file_sha256 must match the native science MEF SHA-256")
     if not str(record.get("conversion_method","")).strip():
         raise ValueError("conversion_method must document the physical unit derivation")
+    from datetime import datetime
+    try:
+        verified_at = datetime.fromisoformat(str(record["verified_utc"]).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("verified_utc must be an ISO-8601 timestamp") from exc
+    if verified_at.tzinfo is None:
+        raise ValueError("verified_utc must include a timezone")
+    calibration_path = Path(str(record["calibration_file_path"]))
+    if not calibration_path.is_file():
+        raise FileNotFoundError(f"absolute-gain calibration bytes are unavailable: {calibration_path}")
+    digest = hashlib.sha256()
+    with calibration_path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    if digest.hexdigest().lower() != str(record["calibration_sha256"]).lower():
+        raise ValueError("absolute-gain calibration file SHA-256 does not match the signed-off record")
     return dict(record)
 
 
@@ -86,6 +102,10 @@ def inject_source_patch(image: np.ndarray, variance: np.ndarray, flags: np.ndarr
     if x0 < 0 or y0 < 0 or x1 > image.shape[1] or y1 > image.shape[0]:
         raise ValueError("full PSF footprint falls outside the image; edge clipping is prohibited")
     sl = (slice(y0, y1), slice(x0, x1))
+    image_patch = np.asarray(image[sl], dtype=float)
+    variance_patch = np.asarray(variance[sl], dtype=float)
+    if not np.isfinite(image_patch).all() or not np.isfinite(variance_patch).all() or np.any(variance_patch <= 0):
+        raise ValueError("full PSF footprint touches invalid IMAGE or VARIANCE pixels")
     if excluded_flag_bits and np.any((flags[sl].astype(np.uint64) & np.uint64(excluded_flag_bits)) != 0):
         raise ValueError("full PSF footprint touches an excluded flag pixel")
     if electrons_per_image_unit is None:
