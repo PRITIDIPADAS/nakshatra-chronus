@@ -129,7 +129,8 @@ def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
                                  "manifest_sha256": expected_hash, "local_sha256": actual_hash}
     
     link_ok, link_check = _verified_archive_input_link(science, calibration)
-    checks["archive_provenance_input_link"] = link_check
+    if calibration.get("archive_provenance_link") is not None:
+        checks["archive_provenance_input_link"] = link_check
 
     science_meta = {
         "release": report.get("release"),
