@@ -50,40 +50,45 @@ def plan_sources(rng, center, size, avoid, n, n_epochs, mags=(14.0, 18.5)):
 
 
 def _calibrated_gain(exposure, record):
-    """Check calibration provenance against the exact image bytes used by this exposure."""
-    required = ("verification_status", "electrons_per_image_unit", "science_file_sha256",
-                "science_observation_id", "science_source_uri", "detector", "image_unit",
-                "calibration_uri", "calibration_file_path", "calibration_sha256",
-                "conversion_method", "verified_by", "verified_utc")
+    """Derive this cutout conversion map from its verified SPHEREx abs_gain_matrix."""
+    required = ("verification_status", "science_file_sha256", "science_observation_id",
+                "science_source_uri", "detector", "image_unit", "exposure_time_s",
+                "calibration_product", "calibration_uri", "calibration_file_path",
+                "calibration_sha256", "calibration_bunit", "conversion_method",
+                "verified_by", "verified_utc")
     if not isinstance(record, Mapping):
         raise ValueError(f"{exposure.id}: calibration record must be an object")
     missing = [key for key in required if record.get(key) in (None, "")]
     if missing:
         raise ValueError(f"{exposure.id}: calibration record missing " + ", ".join(missing))
-    if record["verification_status"] != "verified":
-        raise ValueError(f"{exposure.id}: calibration conversion is not verified")
+    if record["verification_status"] != "verified" or record["calibration_product"] != "abs_gain_matrix":
+        raise ValueError(f"{exposure.id}: a verified abs_gain_matrix record is required")
     if str(record["science_observation_id"]) != str(getattr(exposure, "source_observation_id", "") or str(exposure.id).split("_D")[0]):
-        raise ValueError(f"{exposure.id}: observation identity mismatch")
+        raise ValueError(f"{exposure.id}: original OBSID mismatch")
     if str(record["science_file_sha256"]).lower() != str(exposure.source_sha256).lower():
-        raise ValueError(f"{exposure.id}: science cutout checksum mismatch")
+        raise ValueError(f"{exposure.id}: exact science cutout SHA-256 mismatch")
     if str(record["science_source_uri"]) != str(exposure.source_uri):
-        raise ValueError(f"{exposure.id}: science source URI mismatch")
+        raise ValueError(f"{exposure.id}: science archive URI mismatch")
     if str(record["detector"]).upper().replace("D", "") != str(exposure.det):
         raise ValueError(f"{exposure.id}: detector mismatch")
-    if str(record["image_unit"]).strip() != str(exposure.image_unit).strip() or not exposure.image_unit:
-        raise ValueError(f"{exposure.id}: IMAGE unit mismatch or unavailable")
+    if str(record["image_unit"]).strip() != str(exposure.image_unit).strip() or exposure.image_unit != "MJy/sr":
+        raise ValueError(f"{exposure.id}: IMAGE unit mismatch or unsupported")
+    exposure_time = float(getattr(exposure, "source_exposure_time_s", 0.0))
+    if not math.isfinite(exposure_time) or exposure_time <= 0:
+        raise ValueError(f"{exposure.id}: exact exposure time is unavailable")
+    if not math.isclose(float(record["exposure_time_s"]), exposure_time, rel_tol=0, abs_tol=1e-6):
+        raise ValueError(f"{exposure.id}: calibration record exposure time mismatch")
     if not str(record["calibration_uri"]).startswith("https://"):
         raise ValueError(f"{exposure.id}: calibration URI must be HTTPS")
-    calibration_path = Path(str(record["calibration_file_path"]))
-    if not calibration_path.is_file():
-        raise FileNotFoundError(f"{exposure.id}: calibration bytes unavailable: {calibration_path}")
-    digest = hashlib.sha256(calibration_path.read_bytes()).hexdigest()
-    if digest.lower() != str(record["calibration_sha256"]).lower():
-        raise ValueError(f"{exposure.id}: calibration file SHA-256 mismatch")
-    gain = float(record["electrons_per_image_unit"])
-    if not math.isfinite(gain) or gain <= 0:
-        raise ValueError(f"{exposure.id}: electrons_per_image_unit must be finite and positive")
-    return gain
+    origin = getattr(exposure, "detector_origin_xy", None)
+    if origin is None:
+        raise ValueError(f"{exposure.id}: native detector origin has not been verified")
+    from research_discovery.spherex.electron_conversion import derive_electrons_per_image_unit
+    return derive_electrons_per_image_unit(calibration_path=record["calibration_file_path"],
+        expected_sha256=record["calibration_sha256"], detector=exposure.det,
+        calibration_bunit=record["calibration_bunit"], exposure_time_s=exposure_time,
+        origin_xy=origin, image_shape=exposure.img.shape, science_image_unit=exposure.image_unit)
+
 
 
 def plant(exps, sources, pad=10, *, electron_calibration_records=None,
@@ -110,7 +115,7 @@ def plant(exps, sources, pad=10, *, electron_calibration_records=None,
             raise ValueError(f"{e.id}: IMAGE, VARIANCE and FLAGS are not aligned")
         yy, xx = np.mgrid[-pad:h + pad, -pad:w + pad]
         record = records.get(str(e.id))
-        gain = _calibrated_gain(e, record) if record is not None else None
+        conversion_map = _calibrated_gain(e, record) if record is not None else None
         for source in sources:
             fl = sky.flux_of(source, e.lam, e.mjd, ep[i])
             if not math.isfinite(float(fl)) or fl <= 0:
@@ -142,16 +147,24 @@ def plant(exps, sources, pad=10, *, electron_calibration_records=None,
             if np.any(footprint & invalid):
                 e.notes.append("Injection skipped: PSF footprint intersects invalid variance or a bad-flagged pixel.")
                 continue
-            if gain is None:
+            if conversion_map is None:
                 e.img = e.img + source_signal
-                e.notes.append("Injection source photon noise not modelled: deterministic source signal; no verified exposure calibration record.")
+                e.notes.append("Injection source photon noise not modelled: deterministic signal; no verified exposure-specific absolute-gain map.")
             else:
-                expected_electrons = source_signal * gain
-                if not np.isfinite(expected_electrons).all():
-                    raise ValueError(f"{e.id}: source electron expectation is non-finite")
-                e.img = e.img + rng.poisson(expected_electrons) / gain
-                e.var = e.var + expected_electrons / (gain * gain)
-                e.notes.append("Injection source photon noise and variance were simulated from the exposure-bound calibration record.")
+                active = source_signal > source_signal.max() * 1e-6
+                valid_conversion = np.isfinite(conversion_map) & (conversion_map > 0)
+                if np.any(active & ~valid_conversion):
+                    e.notes.append("Injection skipped: absolute-gain map is invalid inside the PSF footprint.")
+                    continue
+                expected_electrons = np.zeros_like(source_signal, dtype=float)
+                expected_electrons[active] = source_signal[active] / conversion_map[active]
+                source_realization = np.zeros_like(source_signal, dtype=float)
+                variance_increment = np.zeros_like(source_signal, dtype=float)
+                source_realization[active] = rng.poisson(expected_electrons[active]) * conversion_map[active]
+                variance_increment[active] = expected_electrons[active] * conversion_map[active] ** 2
+                e.img = e.img + source_realization
+                e.var = e.var + variance_increment
+                e.notes.append("Injection source photon noise and variance were simulated from the verified per-pixel absolute-gain matrix and exposure time.")
         out.append(e)
     return out
 
