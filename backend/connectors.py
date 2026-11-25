@@ -209,7 +209,8 @@ def load(row, ra, dec, size, coll):
     return Exp(str(hd.get("OBSID") or row.get("obs_id") or row["access_url"][-40:]) + (f"_D{det}" if det else ""), float(row["t_min"]), lam, bw, det,
                coll, "REAL SPHEREx", img, var, flags, zod, w, (x, y), psf=psf, bits=bits, lam_src=src, lam_ok=lam_ok, notes=notes,
                dxy=dxy, frame=f"{float(row['t_min']):.5f}", source_uri=str(row["access_url"]),
-               source_sha256=cutout_sha256, image_unit=str(hd.get("BUNIT", "")))
+               source_sha256=cutout_sha256, image_unit=str(hd.get("BUNIT", "")),
+               source_observation_id=str(hd.get("OBSID") or row.get("obs_id") or row.get("obs_publisher_did") or ""))
 
 
 @plugin("gaia")
