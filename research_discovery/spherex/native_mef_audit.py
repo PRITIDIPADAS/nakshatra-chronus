@@ -48,6 +48,33 @@ def science_wavelength_cutout(cwave, cband, image_header, image_shape):
             "valid_fraction": float(valid.mean())}
 
 
+def audit_alternate_wcs_a(image_header, image_shape):
+    """Validate the 2D alternate WCS A as an IMAGE-pixel to detector-coordinate transform."""
+    from astropy.wcs import WCS
+    alternate = WCS(image_header, key="A", relax=True)
+    if alternate.pixel_n_dim != 2 or alternate.world_n_dim != 2:
+        raise ValueError("alternate WCS A must be a two-dimensional pixel-to-detector mapping")
+    height, width = map(int, image_shape)
+    sample_pixels = np.asarray([
+        [0.0, 0.0], [float(max(width - 1, 0)), 0.0],
+        [0.0, float(max(height - 1, 0))],
+        [float(max(width - 1, 0)), float(max(height - 1, 0))],
+    ])
+    detector_world = np.asarray(alternate.all_pix2world(sample_pixels, 0), dtype=float)
+    if detector_world.shape != sample_pixels.shape or not np.isfinite(detector_world).all():
+        raise ValueError("alternate WCS A produced non-finite or mis-shaped detector coordinates")
+    return {
+        "wcsnamea": image_header.get("WCSNAMEA"),
+        "ctype": [str(value) for value in alternate.wcs.ctype],
+        "cunit": [str(value) for value in alternate.wcs.cunit],
+        "pixel_n_dim": alternate.pixel_n_dim,
+        "world_n_dim": alternate.world_n_dim,
+        "world_at_cutout_origin": detector_world[0].tolist(),
+        "world_at_image_corners": detector_world.tolist(),
+        "mapping": "IMAGE cutout pixels to detector-coordinate world axes; not a celestial WCS",
+    }
+
+
 def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle_uri=None,
           compatibility_evidence=None, science_uri=None, spectral_wcs_uri=None):
     try:
@@ -158,18 +185,16 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle
             report["checks"]["celestial_wcs"] = {"status": "fail", "error": str(exc)}
 
         try:
-            alternate = WCS(image_hdu.header, key="A")
-            if not alternate.has_celestial:
-                raise ValueError("alternate WCS A is not a celestial sky-to-detector transform")
+            alternate_report = audit_alternate_wcs_a(image_hdu.header, image.shape)
             origin = detector_origin_offset(image_header)
-            alternate_world_origin = alternate.all_pix2world([[0.0, 0.0]], 0)[0].tolist()
             report["alternate_wcs_a"] = {
-                "wcsnamea": image_hdu.header.get("WCSNAMEA"),
+                **alternate_report,
                 "crpix1a": image_hdu.header.get("CRPIX1A"),
-                "crpix2a": image_hdu.header.get("CRPIX2A"),
-                "world_at_cutout_origin": alternate_world_origin}
+                "crpix2a": image_hdu.header.get("CRPIX2A")}
             report["cutout_parent_origin_xy"] = list(origin)
-            report["checks"]["alternate_wcs_a"] = {"status": "pass"}
+            report["checks"]["alternate_wcs_a"] = {
+                "status": "pass", "pixel_n_dim": alternate_report["pixel_n_dim"],
+                "world_n_dim": alternate_report["world_n_dim"]}
             report["checks"]["cutout_parent_origin"] = {"status": "pass"}
         except Exception as exc:
             report["checks"]["alternate_wcs_a"] = {"status": "review_required", "error": str(exc)}
