@@ -66,6 +66,7 @@ def _propagate(row: Mapping[str, Any], target_epoch: float):
     if not -90 <= dec2 <= 90:
         raise ValueError("proper-motion propagation left the valid declination range")
 
+    parallax_was_supplied = row.get("parallax_mas") is not None
     parallax = row.get("parallax_mas")
     parallax_error = row.get("parallax_error_mas")
     if parallax is None:
@@ -79,7 +80,7 @@ def _propagate(row: Mapping[str, Any], target_epoch: float):
     if not math.isfinite(parallax_error) or parallax_error < 0:
         raise ValueError("parallax_error_mas must be finite and non-negative")
 
-    parallax_applied = parallax != 0.0 and dt != 0.0
+    parallax_applied = parallax_was_supplied and dt != 0.0
     if parallax_applied:
         east_shift, north_shift, baseline_norm = _parallax_shift_mas(
             ra, dec, parallax, epoch, float(target_epoch)
