@@ -18,6 +18,8 @@ on:
       - research_discovery/spherex/flag_policy.py
       - research_discovery/spherex/coordinate_transform.py
       - research_discovery/validation/injection_recovery.py
+      - research_discovery/spherex/electron_conversion.py
+      - research_discovery/spherex/electron_calibration_record.schema.json
   workflow_dispatch:
 
 permissions:
@@ -31,7 +33,7 @@ jobs:
       - name: Check out the requested branch
         uses: actions/checkout@v4
         with:
-          ref: chronos-5-causal-sky-twin
+          ref: ${{ github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
