@@ -1,7 +1,22 @@
 """Monte Carlo population-rate estimates with completeness and null controls."""
 from __future__ import annotations
 from typing import Any, Mapping, Sequence
+import math
+import math
 import numpy as np
+
+
+def _count(value: Any, label: str) -> int:
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{label} must be a non-negative integer count")
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} must be a non-negative integer count") from None
+    if not math.isfinite(number) or number < 0 or not number.is_integer():
+        raise ValueError(f"{label} must be a non-negative integer count")
+    return int(number)
+
 
 def estimate_event_rate(fields: Sequence[Mapping[str, Any]], *, minimum_completeness: float = 0.1,
                         draws: int = 10000, seed: int = 1) -> dict[str, Any]:
