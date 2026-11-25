@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
+import hashlib
+import json
 import math
 
 import numpy as np
@@ -9,6 +11,45 @@ from scipy.ndimage import map_coordinates
 
 from chronos_addons.forensics import diagnose_candidate
 from .runner import REQUIRED_METHODS
+
+
+
+def reference_wcs_sha256(reference_wcs) -> str:
+    """Hash the canonical FITS header of the registered field WCS."""
+    if reference_wcs is None or not hasattr(reference_wcs, "to_header"):
+        raise ValueError("a reference WCS with to_header() is required for sky-pixel matching")
+    header = reference_wcs.to_header(relax=True)
+    serialized = header.tostring(sep="\\n", endcard=True, padding=False)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def field_mask_sha256(state: Mapping[str, Any]) -> str:
+    """Hash the per-exposure union of bad flags, out-of-footprint and invalid image pixels.
+
+    Exposure masks are sorted by immutable exposure ID before hashing, making
+    the result independent of input list order while retaining exposure identity.
+    """
+    exposures = list(state.get("exps") or [])
+    if not exposures:
+        raise ValueError("state needs exposures to compute its mask checksum")
+    ids = [str(getattr(exposure, "id", "")) for exposure in exposures]
+    if any(not value for value in ids) or len(set(ids)) != len(ids):
+        raise ValueError("every exposure needs a unique non-empty id for mask hashing")
+    flags = np.asarray(state.get("RB"), dtype=bool)
+    inside = np.asarray(state.get("IN"), dtype=bool)
+    image = np.asarray(state.get("R"), dtype=float)
+    if flags.ndim != 3 or inside.shape != flags.shape or image.shape != flags.shape:
+        raise ValueError("RB, IN and R must have equal (exposure, y, x) shapes")
+    if flags.shape[0] != len(exposures):
+        raise ValueError("exposure count does not match prepared mask arrays")
+    digest = hashlib.sha256()
+    digest.update(b"chronos-field-mask/1\\0")
+    for index in sorted(range(len(ids)), key=lambda item: ids[item]):
+        mask = flags[index] | ~inside[index] | ~np.isfinite(image[index])
+        digest.update(ids[index].encode("utf-8") + b"\\0")
+        digest.update(np.asarray(mask.shape, dtype=np.int64).tobytes())
+        digest.update(np.packbits(mask.reshape(-1), bitorder="little").tobytes())
+    return digest.hexdigest()
 
 
 def _signature(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -86,9 +127,21 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
     """
     import pipeline
 
-    signature = _signature(input_signature)
     if not isinstance(state, Mapping) or not state.get("exps"):
         raise ValueError("state must contain the exposure list from one pipeline.run result")
+    signature = _signature(input_signature)
+    state_exposure_ids = sorted(str(getattr(exposure, "id", "")) for exposure in state["exps"])
+    if any(not value for value in state_exposure_ids) or len(set(state_exposure_ids)) != len(state_exposure_ids):
+        raise ValueError("prepared exposures need unique, non-empty IDs")
+    if sorted(signature["exposure_ids"]) != state_exposure_ids:
+        raise ValueError("input_signature exposure_ids do not match the prepared pipeline state")
+    actual_mask_digest = field_mask_sha256(state)
+    if actual_mask_digest != str(signature["mask_sha256"]).lower():
+        raise ValueError("input_signature mask_sha256 does not match the prepared pipeline masks")
+    if signature.get("coordinate_frame") == "sky" and signature.get("coordinate_unit") == "pixel":
+        actual_wcs_digest = reference_wcs_sha256(state.get("ref"))
+        if actual_wcs_digest != str(signature.get("pixel_wcs_sha256", "")).lower():
+            raise ValueError("input_signature pixel_wcs_sha256 does not match the registered field WCS")
     if "cands" not in state:
         raise ValueError("state must contain cands; call pipeline.run before building baselines")
     if not isinstance(score_thresholds, Mapping) or any(name not in score_thresholds for name in REQUIRED_METHODS):
@@ -211,6 +264,13 @@ def build_four_baseline_records(state: Mapping[str, Any], input_signature: Mappi
             "same_exposure_set": list(signature["exposure_ids"]),
             "same_mask_checksum": signature["mask_sha256"],
             "same_coordinate_frame": signature["coordinate_frame"],
+            "verified_exposure_ids": state_exposure_ids,
+            "verified_mask_sha256": actual_mask_digest,
+            "verified_pixel_wcs_sha256": (
+                reference_wcs_sha256(state.get("ref"))
+                if signature.get("coordinate_frame") == "sky" and signature.get("coordinate_unit") == "pixel"
+                else None
+            ),
             "snr_only_map": "DEEPS",
             "snr_detection_floor": detection_floor,
             "pda_source": "pipeline.run -> state.cands",
