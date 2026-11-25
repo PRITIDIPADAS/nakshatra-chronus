@@ -27,7 +27,7 @@ The research preview adds measurement-level sky/detector model competition, loca
 
 These are software capabilities, not completed real-sky results. The four-baseline acceptance gate still requires all four methods to be run on the same calibrated real held-out SPHEREx fields. The generic pixel model is not calibrated SPHEREx detector physics, and the conditional bootstrap is not a full Bayesian posterior-predictive analysis.
 
-This is a research preview. Relative BIC weights are not calibrated posterior probabilities. Generic detector experiments are not calibrated SPHEREx simulations. Synthetic challenge cases are not evidence of real-sky performance. A six-region SPLICES/DR1 catalogue reconnaissance is now recorded, and a six-region calibrated-Jy pilot workflow has been added. The blind-field benchmark, independent reproduction and validated-release gates remain mandatory.
+This is a research preview. Relative BIC weights are not calibrated posterior probabilities. Generic detector experiments are not calibrated SPHEREx simulations. Synthetic challenge cases are not evidence of real-sky performance. A six-region SPLICES/DR1 catalogue reconnaissance is now recorded, and a six-region calibrated-Jy pilot workflow has been added. The M101 source-Poisson rerun has passed CI with calibration derivation pending external review. The six-region SPLICES reconnaissance is complete as descriptive catalogue work. The blind-field benchmark, YSO population analysis, independent reproduction and validated-release gates remain mandatory.
 
 ## CHRONOS 4D: ten laboratories (new)
 
