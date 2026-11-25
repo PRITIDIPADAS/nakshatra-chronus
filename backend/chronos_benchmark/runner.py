@@ -339,7 +339,8 @@ def _select_operating_point(curve, target_metric, target):
 
 
 def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: int = 2000,
-                              seed: int = 20261125) -> dict[str, Any]:
+                              seed: int = 20261125,
+                              verified_blind_protocol: bool = False) -> dict[str, Any]:
     """Compare the four methods only after validating identical field inputs."""
     if package.get("schema") != SCHEMA:
         raise ValueError(f"package schema must be {SCHEMA}")
