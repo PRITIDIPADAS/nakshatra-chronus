@@ -458,7 +458,7 @@ This workflow turns the roadmap into twenty bounded ChatGPT development sessions
 
 ## Sessions 07–11 implementation status
 
-The implementation-to-evidence mapping, code entry points, test boundaries and outstanding scientific acceptance gates are tracked in [the Sessions 07–11 implementation status note](CHRONOS_5_SESSIONS_07_11_IMPLEMENTATION_STATUS_2026-11-25.md). Treat the note as a status snapshot, not as a substitute for the per-session acceptance criteria below.
+The implementation-to-evidence mapping, code entry points, test boundaries and outstanding scientific acceptance gates are tracked in [the Sessions 07–11 implementation status note](CHRONOS_5_SESSIONS_07_11_IMPLEMENTATION_STATUS_2026-11-25.md), [the Sessions 12–16 implementation note](CHRONOS_5_SESSIONS_12_16_IMPLEMENTATION.md), [the Sessions 12–20 implementation guide](CHRONOS_5_SESSIONS_12_20_IMPLEMENTATION.md) and the [canonical 20-session capability ledger](CHRONOS_5_CAPABILITY_LEDGER.md). Treat the ledger as an evidence-aware index, not as a substitute for the per-session acceptance criteria below.
 
 ## What must not be rushed
 
@@ -492,3 +492,12 @@ These runs do not satisfy independent gain-calibration review, the custodian-con
 The current successful SPLICES/DR1/QR3 workflow is [#38](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45648715196). Its checksummed artifact contains 2,421 candidate-source summaries, 924,443 geometric SIAv2 candidate–product polygon pairs, 6,214 Level-2 spectral-image metadata rows and 32 distinct All-Sky Cube metadata tiles across the six searched field cones. The local source matcher is spherical point-in-polygon over SIAv2 s_region metadata; these matches do not establish extracted flux, spectrum quality, validated epochs or cadence. The cube metadata are complete for the six selected cones only, not for the all-sky universe; no native cube data were downloaded.
 
 The latest combined test/M101 workflow [#896](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45648715416) passed 316 tests with 12 warnings, both JavaScript syntax checks and the M101 retrieval/native-audit/artifact-upload job. The test-only workflow [#897](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45648724365) passed 316 tests with 7 warnings and both JavaScript syntax checks. Independent gain-calibration review, blind four-method benchmark, selection-aware YSO population analysis, independent astronomical reproduction and validated release remain open.
+
+
+## Current evidence refresh — 25 November 2026
+
+The canonical [20-session capability ledger](CHRONOS_5_CAPABILITY_LEDGER.md) supersedes the older status snapshots below. The latest fully completed combined test/M101 run available when this refresh was written is [45652295910](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45652295910) on commit `f9f315bf35fcb0a46a69cc30b7c4a434ed165e1d`: 316 Python tests passed, both JavaScript syntax checks passed, and the native M101 DR1 D2 archive/calibration/hash validator passed. The six-region calibrated-Jy run [45639895735](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45639895735) also completed with six predeclared fields, zero incomplete fields, exact field-manifest verification and aggregate report SHA-256 `26e237fec2b0e1f5571dd5e527c009a5a2d3de44186c4a240bf63ac4b9bb64e6`.
+
+The current branch additionally tightens the Session 19 population gate: it requires feature and both continuum bands in the same repeated epochs, detects sources reused across fields, and requires the science-to-null-control exposure ratio before a rate is estimated. New tests are included. CI on the resulting branch head `63b800601a3a24372bf9426099d094eeba24bda9` was still running when this note was written; do not read that pending run as a pass.
+
+The M101 and six-region pilots remain exploratory and non-blind. Lupus III's 0/20 recovery in all three bins remains a critical anomaly. Gain-derived electron conversions still require independent calibration review. The blind four-method benchmark, source-level validated (F(\lambda,t)) YSO population analysis, external astronomical reproduction and validated scientific release remain unsatisfied.
