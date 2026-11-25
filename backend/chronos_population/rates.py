@@ -134,7 +134,8 @@ def estimate_event_rate(
 
         required = (
             "observed_events", "null_events", "area_deg2",
-            "baseline_days", "n_injected", "n_recovered",
+            "baseline_days", "null_control_area_deg2",
+            "null_control_baseline_days", "n_injected", "n_recovered",
             "null_control_to_science_exposure_ratio",
         )
         missing = [key for key in required if key not in row]
@@ -147,10 +148,19 @@ def estimate_event_rate(
         recovered = _count(row["n_recovered"], f"field {field_id} n_recovered")
         area = _positive_finite(row["area_deg2"], f"field {field_id} area_deg2")
         days = _positive_finite(row["baseline_days"], f"field {field_id} baseline_days")
+        null_area = _positive_finite(
+            row["null_control_area_deg2"], f"field {field_id} null_control_area_deg2"
+        )
+        null_days = _positive_finite(
+            row["null_control_baseline_days"], f"field {field_id} null_control_baseline_days"
+        )
         null_to_science_ratio = _positive_finite(
             row["null_control_to_science_exposure_ratio"],
             f"field {field_id} null_control_to_science_exposure_ratio",
         )
+        derived_null_ratio = (area * days) / (null_area * null_days)
+        if not math.isclose(null_to_science_ratio, derived_null_ratio, rel_tol=1e-6, abs_tol=1e-12):
+            raise ValueError(f"field {field_id} null-control exposure ratio disagrees with its area-time denominators")
         if recovered > injected or injected <= 0:
             raise ValueError(f"field {field_id} has invalid injection/recovery counts")
         if not str(row.get("null_control_id", "")).strip():
@@ -181,6 +191,8 @@ def estimate_event_rate(
             "null_events_in_control_exposure": null,
             "null_control_id": str(row["null_control_id"]),
             "null_control_to_science_exposure_ratio": null_to_science_ratio,
+            "null_control_area_deg2": null_area,
+            "null_control_baseline_days": null_days,
             "null_events_expected_in_science_exposure": null * null_to_science_ratio,
             "measured_completeness": completeness,
             "area_deg2": area,
