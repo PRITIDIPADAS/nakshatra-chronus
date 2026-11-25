@@ -53,15 +53,9 @@ def test_dr1_exposure_coverage_uses_centre_point_and_sia2_full_region_intersecti
         "spherex_dr1", "spherex_dr1_deep", "spherex_qr3", "spherex_qr3_deep"
     )
 
-    source_epoch = queries["candidate_source_exposure_matches"]
-    assert f"SELECT TOP {recon.SOURCE_EPOCH_ROW_LIMIT}" in source_epoch
-    assert "WHERE CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1" in source_epoch
-    assert source_epoch.count("CONTAINS(") == 1
-    assert "s.yso_pub IS NOT NULL" in source_epoch
-    assert "LOWER(a.uri) LIKE '%/dr1/level2/%'" in source_epoch
-    assert "LOWER(a.uri) LIKE '%/qr3/level2/%'" in source_epoch
-    assert "p.time_bounds_lower" in source_epoch
-    assert "CIRCLE(" not in source_epoch
+    # Source-to-product association is local against SIAv2 s_region polygons.
+    assert "candidate_source_exposure_matches" not in queries
+    assert recon.FOOTPRINT_MATCH_ALGORITHM == "spherical-gnomonic-pip/1.0"
 
 
 def test_irsa_sia2_region_footprints_use_pos_circle_and_collection(monkeypatch):
@@ -112,11 +106,15 @@ def test_dr1_all_sky_cube_query_is_separate_from_temporal_exposures(monkeypatch)
         return FakeTable()
 
     monkeypatch.setattr(recon.Irsa, "query_sia", fake_query_sia)
-    result = recon.query_dr1_all_sky_cube_sia()
+    region = recon.REGIONS[0]
+    result = recon.query_dr1_all_sky_cube_sia(region)
     assert calls == [{
+        "pos": (region["ra_deg"], region["dec_deg"], region["radius_deg"]),
         "collection": "spherex_dr1_cube",
         "maxrec": recon.CUBE_METADATA_ROW_LIMIT,
     }]
+    assert result["region"] == region["name"]
+    assert result["query_complete_below_row_cap"] is True
     assert result["product_role"] == "all_sky_spatial_spectral_cube"
     assert result["nominal_spectral_channels"] == 102
     assert result["nominal_wavelength_range_um"] == [0.75, 5.0]
@@ -196,32 +194,14 @@ def test_yso_like_detection_preserves_literature_and_both_class_sources():
 
 def test_local_catalogue_summary_reports_exact_counts_when_below_cap(monkeypatch):
     rows = [
-        {"source_id": 1, "class_1": "YSO", "yso_pub": 10, "stype_ml": "YSO"},
-        {"source_id": 2, "class_1": "STAR", "yso_pub": None, "stype_ml": "YSO"},
-        {"source_id": 3, "class_1": "STAR", "yso_pub": None, "stype_ml": "STAR"},
+        {"source_id": 1, "designation": "T1", "ra": 65.8, "dec": 26.1,
+         "class_1": "YSO", "yso_pub": 10, "stype_ml": "YSO"},
+        {"source_id": 2, "designation": "T2", "ra": 65.9, "dec": 26.2,
+         "class_1": "STAR", "yso_pub": None, "stype_ml": "YSO"},
+        {"source_id": 3, "designation": "T3", "ra": 66.0, "dec": 26.3,
+         "class_1": "STAR", "yso_pub": None, "stype_ml": "STAR"},
     ]
     def fake_query(sql):
-        if sql.startswith(f"SELECT TOP {recon.SOURCE_EPOCH_ROW_LIMIT} "):
-            return {
-                "query": sql,
-                "row_count": 2,
-                "rows": [
-                    {
-                        "source_id": 1, "designation": "T1", "ra": 65.8, "dec": 26.1,
-                        "yso_pub": 10, "class_1": "YSO", "stype_ml": "YSO",
-                        "planeid": "plane-a", "obsid": "obs-a", "uri": "a.fits",
-                        "energy_bandpassname": "SPHEREx-D2",
-                        "time_bounds_lower": 60000.0, "time_bounds_upper": 60000.1,
-                    },
-                    {
-                        "source_id": 2, "designation": "T2", "ra": 65.9, "dec": 26.2,
-                        "yso_pub": None, "class_1": "STAR", "stype_ml": "YSO",
-                        "planeid": "plane-b", "obsid": "obs-b", "uri": "b.fits",
-                        "energy_bandpassname": "SPHEREx-D1",
-                        "time_bounds_lower": 60001.0, "time_bounds_upper": 60001.1,
-                    },
-                ],
-            }
         if "spherex.splices" in sql and "stype_ml" in sql:
             if sql.startswith("SELECT TOP 5000 "):
                 return {"query": sql, "row_count": 2, "rows": rows[:2]}
@@ -237,12 +217,25 @@ def test_local_catalogue_summary_reports_exact_counts_when_below_cap(monkeypatch
             ],
         }
     monkeypatch.setattr(recon, "query_rows", fake_query)
-    monkeypatch.setattr(recon, "query_region_footprints_sia", lambda region, collection: {
-        "service": "IRSA SIAv2", "collection": collection,
-        "release": recon.SIA_COLLECTION_RELEASE[collection],
-        "maxrec": recon.COVERAGE_ROW_LIMIT, "row_count": 0,
-        "columns": [], "rows": [], "query_complete_below_row_cap": True,
-    })
+    product = {
+        "obs_id": "obs-a", "obs_publisher_did": "ivo:product-a",
+        "access_url": "https://irsa.example/dr1/level2/a.fits",
+        "s_region": "POLYGON ICRS 64.0 25.0 67.0 25.0 67.0 28.0 64.0 28.0 64.0 25.0",
+        "energy_bandpassname": "SPHEREx-D2", "t_min": 60000.0, "t_max": 60000.1,
+        "calib_level": "2", "dataproduct_type": "image",
+        "dataproduct_subtype": "science", "algorithm_name": "exposure",
+        "_chronos_collection": "spherex_dr1", "_chronos_release": "dr1",
+    }
+    def fake_sia(region, collection):
+        products = [product] if collection == "spherex_dr1" else []
+        return {
+            "service": "IRSA SIAv2", "collection": collection,
+            "release": recon.SIA_COLLECTION_RELEASE[collection],
+            "maxrec": recon.COVERAGE_ROW_LIMIT, "row_count": len(products),
+            "columns": list(product) if products else [],
+            "rows": products, "query_complete_below_row_cap": True,
+        }
+    monkeypatch.setattr(recon, "query_region_footprints_sia", fake_sia)
     result = recon.inspect_region(recon.REGIONS[0])
     assert result["query_errors"] == {}
     assert result["counts"]["total_catalogue_rows"] == 3
@@ -253,6 +246,7 @@ def test_local_catalogue_summary_reports_exact_counts_when_below_cap(monkeypatch
     assert result["counts"]["dr1_level2_exposure_rows_by_band"]["SPHEREx-D2"]["exposure_rows"] == 2
     assert result["counts"]["candidate_source_exposure_query_complete"] is True
     assert result["counts"]["candidate_source_exposure_match_rows"] == 2
+    assert result["counts"]["candidate_source_archive_product_pair_match_count"] == 2
     assert result["counts"]["candidate_unique_source_ids_with_level2_footprint_match"] == 2
     assert len(result["queries"]["candidate_source_epoch_summary"]["rows"]) == 2
     assert len(result["queries"]["class_distribution"]["rows"]) == 3
@@ -288,17 +282,50 @@ def test_query_failures_are_explicit_not_zero_detections(monkeypatch):
     assert set(result["query_errors"]) == {
         "catalogue_sources", "candidate_sources", "dr1_level2_exposures"
     }
-    assert set(result["optional_query_errors"]) == {
-        "candidate_source_exposure_matches"
-    }
+    assert result["optional_query_errors"] == {}
     assert set(result["optional_sia_errors"]) == set(recon.SIA_COLLECTIONS)
     assert result["counts"]["dr1_level2_exposures_intersecting_full_region_total"] is None
     assert result["counts"]["candidate_source_exposure_match_rows"] is None
+    assert result["counts"]["candidate_source_exposure_query_status"] == "unavailable"
     assert result["counts"]["candidate_source_footprint_matches_measured"] is False
     assert result["counts"]["dr1_level2_full_region_optional_query_error"] is not None
     assert result["counts"]["region_footprint_sia_collection_count_failed"] == len(recon.SIA_COLLECTIONS)
     assert result["counts"]["total_catalogue_rows"] is None
     assert result["counts"]["published_yso_label_rows"] is None
+
+
+
+
+def test_spherical_s_region_point_in_polygon_handles_ra_wrap():
+    polygon = recon.parse_sia_s_region_polygon(
+        "POLYGON ICRS 359.5 -0.5 0.5 -0.5 0.5 0.5 359.5 0.5 359.5 -0.5"
+    )
+    assert polygon is not None
+    assert recon.spherical_point_in_polygon(359.8, 0.1, polygon)
+    assert recon.spherical_point_in_polygon(0.5, 0.0, polygon)
+    assert not recon.spherical_point_in_polygon(2.0, 0.0, polygon)
+
+
+def test_sia_source_match_fails_closed_when_product_polygon_is_missing():
+    region = {"name": "Test_Field", "ra_deg": 65.7, "dec_deg": 26.0,
+              "radius_deg": 2.0, "role": "control"}
+    candidates = [{"source_id": "S1", "ra": 65.8, "dec": 26.1}]
+    product = {"obs_id": "OBS-1", "obs_publisher_did": "ivo:product-1",
+               "access_url": "https://irsa.example/dr1/level2/a.fits", "s_region": None}
+    collections = {
+        name: {"error": None, "query_complete_below_row_cap": True}
+        for name in recon.SIA_COLLECTIONS
+    }
+    matched, summaries, report = recon.match_candidates_to_sia_footprints(
+        region, candidates, [product], candidate_query_complete=True,
+        collection_results=collections,
+    )
+    assert matched == []
+    assert len(summaries) == 1
+    assert report["products_with_invalid_or_unsupported_s_region"] == 1
+    assert report["source_footprint_matching_complete"] is False
+    assert report["candidate_sources_without_archive_footprint_match"] is None
+    assert report["status"] == "observed_lower_bound"
 
 
 def test_query_hash_is_deterministic_for_equivalent_mappings():
