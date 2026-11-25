@@ -115,9 +115,14 @@ def test_isolated_source_only_snr_recovers_clean_injected_psf_without_native_sky
     assert row["source_only_local_max_snr_within_match_radius"] is not None
     assert row["source_only_peak_list_recovered"] == 1
     assert row["source_only_nearest_peak_distance_px"] <= 2.5
-    assert row["source_only_diagnostic_uses_original_variance"] is True
+    assert row["source_only_diagnostic_uses_injected_variance"] is True
+    assert row["source_only_reference_uses_preinjection_variance"] is True
+    assert row["source_only_local_max_snr_within_match_radius"] <= row[
+        "source_only_reference_local_max_snr_preinjection_variance"
+    ]
     assert result["local_response_diagnostics"]["isolated_source_response_available"] is True
-    assert result["local_response_diagnostics"]["source_only_uses_original_variance"] is True
+    assert result["local_response_diagnostics"]["source_only_uses_injected_variance"] is True
+    assert result["local_response_diagnostics"]["source_only_preinjection_variance_reference_available"] is True
 
 
 def test_nonnegative_psf_helper_clips_only_subthreshold_interpolation_overshoot():
