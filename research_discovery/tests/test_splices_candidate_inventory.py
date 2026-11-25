@@ -146,6 +146,59 @@ def _fixture(root):
     return rows
 
 
+def _fixture_sia_v11(root):
+    rows = _fixture(root)
+    path = root / "yso_population_recon.json"
+    report = json.loads(path.read_text(encoding="utf-8"))
+    for result in report["region_results"]:
+        region = result["region"]["name"]
+        result["optional_sia_errors"] = {}
+        result["optional_query_errors"] = {
+            "candidate_source_exposure_matches": "IRSA TAP rejected optional source-to-plane join"
+        }
+        result["counts"]["region_intersecting_spectral_image_rows_by_collection"] = {
+            "spherex_dr1": {"product_rows": 2, "query_complete_below_row_cap": True},
+            "spherex_dr1_deep": {"product_rows": 0, "query_complete_below_row_cap": True},
+            "spherex_qr3": {"product_rows": 1, "query_complete_below_row_cap": True},
+            "spherex_qr3_deep": {"product_rows": 0, "query_complete_below_row_cap": True},
+        }
+        for collection, release, count in (
+            ("spherex_dr1", "dr1", 2), ("spherex_dr1_deep", "dr1", 0),
+            ("spherex_qr3", "qr3", 1), ("spherex_qr3_deep", "qr3", 0),
+        ):
+            products = [{
+                "obs_id": f"{region}-{collection}-{i}",
+                "access_url": f"https://irsa.example/{region}/{collection}/{i}.fits",
+                "_chronos_collection": collection,
+                "_chronos_release": release,
+                "_chronos_dataset_class": "real",
+                "_chronos_region": region,
+            } for i in range(count)]
+            _write_csv(root / region / f"region_footprints_sia_{collection}.csv", products)
+    _write_csv(root / "dr1_all_sky_cube_sia_metadata.csv", [{
+        "obs_id": "DR1-ALLSKY-CUBE",
+        "access_url": "https://irsa.example/dr1/allsky-cube.fits",
+        "_chronos_collection": "spherex_dr1_cube",
+        "_chronos_product_role": "all_sky_spatial_spectral_cube",
+    }])
+    report["schema"] = "chronos-spllices-yso-recon/1.1"
+    report["dr1_all_sky_cube"] = {
+        "collection": "spherex_dr1_cube", "nominal_channels": 102,
+        "wavelength_range_um": [0.75, 5.0], "role": "all_sky_spatial_spectral_cube",
+        "queried_in_this_reconnaissance": True, "metadata_row_count": 1,
+        "metadata_only": True, "native_cube_downloaded": False,
+        "temporal_epoch_series": False,
+    }
+    report["dr1_all_sky_cube_inventory"] = {
+        "row_count": 1, "native_cube_downloaded": False, "temporal_epoch_series": False,
+    }
+    report["report_sha256"] = sha256_json({
+        key: value for key, value in report.items() if key != "report_sha256"
+    })
+    path.write_text(json.dumps(report), encoding="utf-8")
+    return rows
+
+
 def test_label_flags_keep_published_harmonised_and_ml_labels_separate():
     row = _candidate("x", "Taurus_Auriga", published=True, class_1=True, ml=False)
     assert label_flags(row) == {
@@ -202,6 +255,46 @@ def test_inventory_report_counts_label_patterns_duplicate_ids_and_region_exposur
     assert first_region["candidate_source_exposure_query_status"] == "complete_below_declared_row_cap"
     assert first_region["candidate_source_exposure_match_rows"] == 1
     assert first_region["candidate_sources_with_any_level2_footprint_match"] == 1
+
+
+
+def test_schema_1_1_siav2_products_and_cube_are_not_epochs(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    report = analyze(tmp_path)
+    first = report["regional_candidate_and_coverage_summaries"][0]
+    assert first["dr1_level2_full_region_spectral_image_product_rows"] == 2
+    assert first["qr3_level2_full_region_spectral_image_product_rows"] == 1
+    assert first["all_release_full_region_spectral_image_product_rows"] == 3
+    assert first["dr1_level2_full_region_intersection_exposure_rows"] is None
+    assert first["candidate_source_exposure_query_status"] == "unavailable"
+    assert first["candidate_source_exposure_match_rows"] is None
+    cube = report["dr1_all_sky_cube_inventory"]
+    assert cube["metadata_rows_verified_against_csv"] == 1
+    assert cube["metadata_access_uri_rows"] == 1
+    assert cube["native_cube_downloaded"] is False
+    assert cube["temporal_epoch_series"] is False
+    assert report["cross_region_spectral_image_product_overlap"]["product_rows_across_regions"] == 6
+
+
+def test_schema_1_1_failed_sia_collection_ignores_stale_csv(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    path = tmp_path / "yso_population_recon.json"
+    report = json.loads(path.read_text())
+    report["region_results"][0]["optional_sia_errors"] = {
+        "spherex_dr1": "temporary SIAv2 timeout"
+    }
+    report["report_sha256"] = sha256_json({
+        key: value for key, value in report.items() if key != "report_sha256"
+    })
+    path.write_text(json.dumps(report), encoding="utf-8")
+    audited = analyze(tmp_path)
+    first = audited["regional_candidate_and_coverage_summaries"][0]
+    collections = first["dr1_level2_full_region_spectral_image_products_by_collection"]
+    assert collections["spherex_dr1"]["query_status"] == "unavailable"
+    assert collections["spherex_dr1"]["product_rows"] is None
+    assert first["dr1_level2_full_region_spectral_image_product_rows"] is None
+    assert first["all_release_full_region_spectral_image_product_rows"] is None
+    assert first["dr1_level2_full_region_intersection_query_status"] == "partial_optional_queries_failed"
 
 
 def test_failed_optional_full_region_query_ignores_stale_csv_and_never_reports_zero(tmp_path):

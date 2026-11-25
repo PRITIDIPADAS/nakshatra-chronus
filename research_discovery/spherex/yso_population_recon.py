@@ -242,12 +242,11 @@ def build_region_queries(region: dict) -> dict[str, str]:
         f"SELECT TOP {SOURCE_EPOCH_ROW_LIMIT} s.source_id, s.designation, s.ra, s.dec, "
         "s.yso_pub, s.class_1, s.stype_ml, p.planeid, p.obsid, a.uri, "
         "p.energy_bandpassname, p.time_bounds_lower, p.time_bounds_upper "
-        "FROM spherex.splices s "
-        # Keep explicit joins so IRSA TAP's metadata resolver can resolve each
-        # schema-qualified table. The cross join is restricted by the single
-        # geometry predicate in WHERE plus a conservative RA/Dec bounding box.
-        "JOIN spherex.artifact a ON 1 = 1 "
+        # Begin with the archive artifact table used by the working M101 provenance query.
+        # Keep the single point-in-polygon expression in WHERE, never in a JOIN condition.
+        "FROM spherex.artifact a "
         "JOIN spherex.plane p ON p.planeid = a.planeid "
+        "JOIN spherex.splices s ON 1 = 1 "
         "WHERE CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1 "
         "AND ("
         f"{ra_condition} "

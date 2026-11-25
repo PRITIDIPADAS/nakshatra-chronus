@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit SPLICES candidate-label overlap, IDs, missingness and regional DR1 coverage.
+"""Audit SPLICES candidate-label overlap, IDs, missingness and DR1/QR3 footprints.
 
 This is a catalogue-integrity and candidate-inventory report. It does not infer
 physical YSO classes, a survey selection function, a population rate, or a
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA = "chronos-splices-candidate-inventory/1.0"
+SCHEMA = "chronos-splices-candidate-inventory/1.1"
 DEFAULT_ROOT = Path("data/yso_population_recon")
 NUMERIC_FIELDS = (
     "ra", "dec", "w1", "w1err", "w2", "w2err", "w3", "w3err",
@@ -233,12 +233,39 @@ def _summarize_exposure_rows(rows: list[dict]) -> tuple[dict, set[str]]:
     return band_summary, plane_ids
 
 
+def _summarize_sia_products(rows: list[dict]) -> dict:
+    """Summarize SIAv2 image-product metadata without treating products as epochs."""
+    by_collection: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        by_collection[str(row.get("_chronos_collection") or "UNKNOWN")].append(row)
+    result = {}
+    for collection, members in sorted(by_collection.items()):
+        identifiers = {
+            str(row.get("obs_id") or row.get("obsid") or row.get("access_url")
+                or row.get("uri") or row.get("ID") or "").strip()
+            for row in members
+        }
+        identifiers.discard("")
+        result[collection] = {
+            "release": next((str(row.get("_chronos_release")) for row in members
+                             if nonempty(row.get("_chronos_release"))), "unknown"),
+            "product_rows": len(members),
+            "unique_archive_product_ids": len(identifiers),
+            "products_with_access_uri": sum(
+                nonempty(row.get("access_url") or row.get("uri")) for row in members
+            ),
+        }
+    return result
+
+
 def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
     region_rows = []
     centre_point_exposures = []
-    full_region_exposures = []
+    full_region_products = []
     candidate_source_exposure_matches = []
     candidate_source_epoch_summaries = []
+    use_siav2 = report.get("schema") == "chronos-spllices-yso-recon/1.1"
+
     for result in report.get("region_results", []):
         region = result.get("region") or {}
         name = str(region.get("name") or "")
@@ -251,31 +278,106 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
         }
         flags_counter = Counter()
         for row in regional_candidates:
-            flags = label_flags(row)
-            flags_counter[pattern_key(flags)] += 1
+            flags_counter[pattern_key(label_flags(row))] += 1
 
         centre_path = root / name / "dr1_level2_exposures.csv"
-        full_region_path = root / name / "dr1_level2_exposures_full_region.csv"
         source_match_path = root / name / "candidate_source_exposure_matches.csv"
         source_summary_path = root / name / "candidate_source_epoch_summary.csv"
         exposures = read_csv(centre_path)
         optional_errors = result.get("optional_query_errors") or {}
-        full_region_error = optional_errors.get("dr1_level2_exposures_full_region")
         source_epoch_error = optional_errors.get("candidate_source_exposure_matches")
-        full_region_rows = read_csv(full_region_path)
         source_match_rows = read_csv(source_match_path)
         source_summary_rows = read_csv(source_summary_path)
 
-        # Never consume stale output files as current coverage after an optional
-        # query failure. The current report's query error is authoritative.
-        if full_region_error:
+        if use_siav2:
+            optional_sia_errors = result.get("optional_sia_errors") or {}
+            collections = (
+                "spherex_dr1", "spherex_dr1_deep",
+                "spherex_qr3", "spherex_qr3_deep",
+            )
+            collection_rows = {}
+            for collection in collections:
+                if optional_sia_errors.get(collection):
+                    # A current error always wins over any stale file on disk.
+                    collection_rows[collection] = []
+                else:
+                    collection_rows[collection] = read_csv(
+                        root / name / f"region_footprints_sia_{collection}.csv"
+                    )
             full_region_rows = []
+            collection_counts = {}
+            reported_counts = (
+                (result.get("counts") or {}).get("region_intersecting_spectral_image_rows_by_collection")
+                or {}
+            )
+            for collection, rows in collection_rows.items():
+                release = "dr1" if collection.startswith("spherex_dr1") else "qr3"
+                failed = bool(optional_sia_errors.get(collection))
+                reported = reported_counts.get(collection) or {}
+                collection_counts[collection] = {
+                    "release": release,
+                    "product_rows": None if failed else len(rows),
+                    "reported_product_rows": None if failed else reported.get("product_rows", len(rows)),
+                    "query_status": "unavailable" if failed else "returned",
+                    "query_error": optional_sia_errors.get(collection),
+                    "query_complete_below_row_cap": (
+                        False if failed else reported.get("query_complete_below_row_cap", False)
+                    ),
+                }
+                full_region_rows.extend({
+                    **row,
+                    "recon_region": name,
+                    "_chronos_collection": row.get("_chronos_collection") or collection,
+                    "_chronos_release": row.get("_chronos_release") or release,
+                } for row in rows)
+
+            dr1_failed = any(optional_sia_errors.get(key) for key in (
+                "spherex_dr1", "spherex_dr1_deep"
+            ))
+            qr3_failed = any(optional_sia_errors.get(key) for key in (
+                "spherex_qr3", "spherex_qr3_deep"
+            ))
+            any_sia_failed = dr1_failed or qr3_failed
+            dr1_rows = sum(len(collection_rows[key]) for key in (
+                "spherex_dr1", "spherex_dr1_deep"
+            ))
+            qr3_rows = sum(len(collection_rows[key]) for key in (
+                "spherex_qr3", "spherex_qr3_deep"
+            ))
+            full_region_error = {
+                key: value for key, value in optional_sia_errors.items()
+            } or None
+            full_query_status = (
+                "partial_optional_queries_failed" if any_sia_failed
+                else "all_four_collections_returned"
+            )
+            full_band_summary = _summarize_sia_products(full_region_rows)
+            full_plane_ids = set()
+        else:
+            full_region_path = root / name / "dr1_level2_exposures_full_region.csv"
+            full_region_error = optional_errors.get("dr1_level2_exposures_full_region")
+            full_region_rows = read_csv(full_region_path)
+            if full_region_error:
+                full_region_rows = []
+            full_band_summary, full_plane_ids = _summarize_exposure_rows(full_region_rows)
+            collection_counts = {}
+            dr1_rows = len(full_region_rows) if not full_region_error else None
+            qr3_rows = None
+            full_query_status = (
+                "unavailable" if full_region_error
+                else "returned_below_or_at_declared_row_cap"
+            )
+            optional_sia_errors = {}
+            if source_epoch_error:
+                source_match_rows = []
+                source_summary_rows = []
+
         if source_epoch_error:
             source_match_rows = []
             source_summary_rows = []
 
         centre_point_exposures.extend({**row, "recon_region": name} for row in exposures)
-        full_region_exposures.extend({**row, "recon_region": name} for row in full_region_rows)
+        full_region_products.extend(full_region_rows)
         candidate_source_exposure_matches.extend(
             {**row, "recon_region": name} for row in source_match_rows
         )
@@ -284,7 +386,6 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
         )
 
         centre_band_summary, centre_plane_ids = _summarize_exposure_rows(exposures)
-        full_band_summary, full_plane_ids = _summarize_exposure_rows(full_region_rows)
         source_band_summary, source_plane_ids = _summarize_exposure_rows(source_match_rows)
         matched_source_ids = {
             str(row.get("source_id") or "").strip()
@@ -311,20 +412,33 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
             "dr1_level2_region_centre_unique_plane_ids": len(centre_plane_ids),
             "dr1_level2_region_centre_by_band": centre_band_summary,
             "region_centre_query_semantics": "fixed_region_centre_point_inside_exposure_polygon",
-            "dr1_level2_full_region_intersection_query_status": (
-                "unavailable" if full_region_error else "returned_below_or_at_declared_row_cap"
-            ),
+            "dr1_level2_full_region_intersection_query_status": full_query_status,
             "dr1_level2_full_region_intersection_query_error": full_region_error,
             "dr1_level2_full_region_intersection_exposure_rows": (
-                None if full_region_error else len(full_region_rows)
+                None if use_siav2 or full_region_error else len(full_region_rows)
             ),
             "dr1_level2_full_region_intersection_unique_plane_ids": (
-                None if full_region_error else len(full_plane_ids)
+                None if use_siav2 or full_region_error else len(full_plane_ids)
             ),
             "dr1_level2_full_region_intersection_by_band": (
-                None if full_region_error else full_band_summary
+                None if use_siav2 or full_region_error else full_band_summary
             ),
-            "full_region_query_semantics": "region_circle_intersects_exposure_polygon",
+            "dr1_level2_full_region_spectral_image_products_by_collection": (
+                collection_counts if use_siav2 else None
+            ),
+            "dr1_level2_full_region_spectral_image_product_rows": (
+                None if not use_siav2 or dr1_failed else dr1_rows
+            ),
+            "qr3_level2_full_region_spectral_image_product_rows": (
+                None if not use_siav2 or qr3_failed else qr3_rows
+            ),
+            "all_release_full_region_spectral_image_product_rows": (
+                None if not use_siav2 or any_sia_failed else dr1_rows + qr3_rows
+            ),
+            "full_region_query_semantics": (
+                "IRSA SIAv2 POS-circle product-footprint overlap; metadata rows, not epoch counts"
+                if use_siav2 else "region_circle_intersects_exposure_polygon"
+            ),
             "candidate_source_exposure_query_status": source_match_status,
             "candidate_source_exposure_query_error": source_epoch_error,
             "candidate_source_exposure_match_rows": (
@@ -354,10 +468,12 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
     return (
         region_rows,
         centre_point_exposures,
-        full_region_exposures,
+        full_region_products,
         candidate_source_exposure_matches,
         candidate_source_epoch_summaries,
     )
+
+
 
 def _field_quality(rows: list[dict]) -> dict:
     availability = {}
@@ -405,6 +521,22 @@ def analyze(root: Path) -> dict:
     candidates = read_csv(candidate_path)
     input_validation = _check_input_report(report, candidates)
     source_ids = _source_id_audit(candidates)
+    cube_metadata_path = root / "dr1_all_sky_cube_sia_metadata.csv"
+    cube_metadata_rows = (
+        read_csv(cube_metadata_path)
+        if report.get("schema") == "chronos-spllices-yso-recon/1.1" and cube_metadata_path.is_file()
+        else []
+    )
+    cube_raw = report.get("dr1_all_sky_cube_inventory") or {}
+    cube_summary = {
+        **(report.get("dr1_all_sky_cube") or {}),
+        "metadata_rows_verified_against_csv": len(cube_metadata_rows),
+        "metadata_access_uri_rows": sum(
+            nonempty(row.get("access_url") or row.get("uri")) for row in cube_metadata_rows
+        ),
+        "native_cube_downloaded": cube_raw.get("native_cube_downloaded", False),
+        "temporal_epoch_series": cube_raw.get("temporal_epoch_series", False),
+    } if report.get("schema") == "chronos-spllices-yso-recon/1.1" else None
     label_overlap = _label_overlap(candidates)
     (
         regional,
@@ -415,6 +547,34 @@ def analyze(root: Path) -> dict:
     ) = _region_summaries(root, report, candidates)
 
     def overlap_summary(exposures: list[dict], semantics: str) -> dict:
+        if any(row.get("_chronos_collection") for row in exposures):
+            products = defaultdict(set)
+            unidentified = 0
+            for row in exposures:
+                product_id = str(
+                    row.get("obs_id") or row.get("obsid") or row.get("access_url")
+                    or row.get("uri") or row.get("ID") or ""
+                ).strip()
+                if product_id:
+                    products[product_id].add(str(row.get("recon_region") or ""))
+                else:
+                    unidentified += 1
+            cross_region = {
+                product_id: sorted(regions)
+                for product_id, regions in products.items() if len(regions) > 1
+            }
+            return {
+                "product_rows_across_regions": len(exposures),
+                "unique_archive_product_ids_across_regions": len(products),
+                "products_with_unidentified_archive_id": unidentified,
+                "archive_products_in_multiple_region_queries": len(cross_region),
+                "archive_product_region_memberships": cross_region,
+                "query_semantics": semantics,
+                "interpretation": (
+                    "SIAv2 rows are archive spectral-image products returned by regional POS-circle queries. "
+                    "Repeated product IDs are reported across region searches; rows are not epoch counts."
+                ),
+            }
         plane_membership = defaultdict(set)
         for row in exposures:
             plane_id = str(row.get("planeid") or "").strip()
@@ -478,6 +638,11 @@ def analyze(root: Path) -> dict:
         "regional_candidate_and_coverage_summaries": regional,
         "cross_region_exposure_overlap": centre_overlap,
         "cross_region_full_region_exposure_overlap": full_region_overlap,
+        "cross_region_spectral_image_product_overlap": (
+            full_region_overlap if report.get("schema") == "chronos-spllices-yso-recon/1.1"
+            else None
+        ),
+        "dr1_all_sky_cube_inventory": cube_summary,
         "candidate_source_exposure_coverage": {
             "match_row_count": len(candidate_source_exposure_matches),
             "source_summary_row_count": len(candidate_source_epoch_summaries),
@@ -502,8 +667,14 @@ def analyze(root: Path) -> dict:
             "Published YSO, harmonised CLASS_1 and STYPE_ML labels remain separate fields.",
             "The report's candidate label overlaps are not independent validation.",
             "No completeness, contamination, selection function, population rate or star-formation rate is estimated.",
-            "Regional exposure rows count exposures whose footprint contains the fixed region-centre coordinate; they do not enumerate all exposures intersecting the full region cone.",
+            "Centre-point TAP rows count exposures whose polygon contains the fixed region-centre coordinate; they are not a full-region product inventory.",
+            (
+                "SIAv2 POS-circle rows are archive spectral-image products whose footprints overlap the region; they are not per-source epoch counts."
+                if report.get("schema") == "chronos-spllices-yso-recon/1.1"
+                else "Legacy full-region TAP rows count exposure polygons intersecting the region circle; they are not per-source epoch counts."
+            ),
             "The optional source-coordinate join measures candidate-to-Level-2 exposure polygon matches within the exact cone; it is not a validated spectral time series.",
+            "The DR1 All-Sky Cube is a separate spatial-spectral archive product; its wavelength channels are not time epochs.",
             "No extracted spectra, image quality flags, flux measurements, completeness or usable-epoch cadence are evaluated in this inventory audit.",
             "The six-region high-latitude cone is a comparison region, not a matched control sample.",
         ],
