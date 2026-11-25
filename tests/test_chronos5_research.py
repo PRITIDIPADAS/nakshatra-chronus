@@ -126,6 +126,7 @@ def test_real_mef_injection_records_when_source_shot_noise_is_enabled():
         "electrons_per_image_unit": 250.0,
         "science_file_sha256": "a" * 64,
         "science_observation_id": "SYNTHETIC-FIXTURE",
+        "science_source_uri": "https://example.invalid/science.fits",
         "detector": "D2",
         "image_unit": "MJy/sr",
         "calibration_uri": "https://example.invalid/calibration.fits",
