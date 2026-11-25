@@ -618,8 +618,10 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
         and all(row["split"] in {"blind_test", "held_out"} for row in per_field)
     )
     unblind_record = blind_record.get("unblinding_record") or {}
+    custodian_attestation_valid = blind_record.get("custodian_attestation_verified") is True
     scientifically_eligible = bool(
-        verified_blind_protocol and real_heldout and preregistration_valid
+        verified_blind_protocol and custodian_attestation_valid
+        and real_heldout and preregistration_valid
         and blind_record.get("configuration_freeze_verified") is True
         and blind_record.get("truth_released_after_run_freeze") is True
         and bool(unblind_record.get("encrypted_truth_store_sha256"))
@@ -628,6 +630,8 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
     eligibility_reasons = []
     if not verified_blind_protocol:
         eligibility_reasons.append("blind_unblinding_not_verified_by_custodian_path")
+    if not custodian_attestation_valid:
+        eligibility_reasons.append("independent_custodian_attestation_missing_or_invalid")
     if not real_heldout:
         eligibility_reasons.append("requires_only_real_heldout_fields")
     if not preregistration_valid:
