@@ -10,7 +10,7 @@ from .schema import normalize_observations
 from .noise_model import fit_gaussian_linear, bic
 from .coordinates import coordinate_diagnostics
 
-def _transient_fit(rows):
+def _transient_fit(rows, covariance=None):
     times = np.asarray([r["mjd"] for r in rows], dtype=float)
     unique = np.unique(times)
     if unique.size < 4:
@@ -28,7 +28,7 @@ def _transient_fit(rows):
                 continue
             design = np.column_stack([np.ones(times.size), event.astype(float)])
             try:
-                fit = fit_gaussian_linear(flux, sigma, design)
+                fit = fit_gaussian_linear(flux, sigma, design, covariance=covariance)
             except ValueError:
                 continue
             trials += 1
@@ -67,7 +67,8 @@ def _designs(rows):
         designs["mixed_sky_detector"] = (np.column_stack([np.ones(len(rows)), dt, template]), "sky", "A time-varying sky signal and a detector-template contribution coexist.")
     return designs, has_template
 
-def investigate(observations, *, min_relative_support: float = 0.65, min_delta_bic: float = 6.0):
+def investigate(observations, *, min_relative_support: float = 0.65, min_delta_bic: float = 6.0,
+                flux_covariance=None):
     rows = normalize_observations(observations)
     if not 0 < min_relative_support <= 1 or min_delta_bic < 0:
         raise ValueError("invalid abstention thresholds")
@@ -83,11 +84,11 @@ def investigate(observations, *, min_relative_support: float = 0.65, min_delta_b
         try:
             transient = None
             if name == "transient":
-                transient = _transient_fit(rows)
+                transient = _transient_fit(rows, covariance=flux_covariance)
                 flux_fit = transient["fit"]
                 search_penalty = transient["search_penalty"]
             else:
-                flux_fit = fit_gaussian_linear(flux, sigma, design)
+                flux_fit = fit_gaussian_linear(flux, sigma, design, covariance=flux_covariance)
                 search_penalty = 0.0
             if position_kind == "moving_sky":
                 pos = coordinates["sky_linear_motion"]
@@ -159,12 +160,16 @@ def investigate(observations, *, min_relative_support: float = 0.65, min_delta_b
             "n_detectors": int(len({r["detector_id"] for r in rows})),
             "template_score_available": has_template,
         },
+        "flux_noise_model": (
+            "supplied full covariance" if flux_covariance is not None
+            else "independent Gaussian errors from supplied sigma"
+        ),
         "interpretation_note": "Relative BIC weights are comparative model scores, not calibrated probabilities or proof of causation.",
         "limitations": [
             "This is a measurement-level model, not a pixel-level SPHEREx forward model.",
             "The transient search penalty approximates the interval search cost; it is not a substitute for independent calibration.",
             "Astrometric coordinate diagnostics do not replace a validated per-exposure detector-to-sky transform.",
-            "The Gaussian likelihood assumes supplied uncertainties are meaningful and independent; covariance is not modelled.",
+            "Flux likelihood accepts a supplied covariance matrix whose diagonal must agree with sigma. Coordinate likelihoods remain independent per axis and use supplied positional uncertainties.",
             "Wavelength and time sampling can be confounded. A chromatic model is not identifiable when the design matrix is rank deficient.",
             "No claim of real-data performance is made until blind, field-held-out tests are run on calibrated archive observations.",
         ],

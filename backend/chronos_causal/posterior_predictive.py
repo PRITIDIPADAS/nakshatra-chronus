@@ -113,6 +113,10 @@ def parametric_bootstrap_checks(observed, predicted, sigma, *, groups=None,
         cov = np.asarray(covariance, dtype=float)
         if cov.shape != (y.size, y.size) or np.any(~np.isfinite(cov)):
             raise ValueError("covariance must be finite and square with one row per measurement")
+        if not np.allclose(cov, cov.T, rtol=1e-10, atol=1e-12):
+            raise ValueError("covariance must be symmetric")
+        if not np.allclose(np.diag(cov), s ** 2, rtol=1e-5, atol=1e-10):
+            raise ValueError("covariance diagonal must agree with sigma squared")
         try:
             lower = np.linalg.cholesky(cov)
         except np.linalg.LinAlgError as exc:
@@ -191,24 +195,33 @@ def parametric_bootstrap_checks(observed, predicted, sigma, *, groups=None,
     }
 
 
-def _weighted_chi2(values, sigma, design):
-    root = 1.0 / sigma
-    xw = design * root[:, None]
-    yw = values * root
+def _weighted_chi2(values, sigma, design, covariance=None):
+    if covariance is None:
+        root = 1.0 / sigma
+        xw = design * root[:, None]
+        yw = values * root
+    else:
+        lower = np.linalg.cholesky(covariance)
+        xw = np.linalg.solve(lower, design)
+        yw = np.linalg.solve(lower, values)
     beta, _, rank, _ = np.linalg.lstsq(xw, yw, rcond=None)
     if rank < design.shape[1]:
         return None, None
     prediction = design @ beta
-    residual = (values - prediction) / sigma
+    residual = values - prediction
+    if covariance is None:
+        residual = residual / sigma
+    else:
+        residual = np.linalg.solve(lower, residual)
     return float(residual @ residual), prediction
 
 
-def _transient_scan_statistic(values, sigma, times):
+def _transient_scan_statistic(values, sigma, times, covariance=None):
     unique = np.unique(times)
     if unique.size < 4:
         return None, 0
     base_design = np.ones((values.size, 1))
-    base_chi2, baseline_prediction = _weighted_chi2(values, sigma, base_design)
+    base_chi2, baseline_prediction = _weighted_chi2(values, sigma, base_design, covariance=covariance)
     if base_chi2 is None:
         return None, 0
     best = 0.0
@@ -219,7 +232,7 @@ def _transient_scan_statistic(values, sigma, times):
             if int(np.count_nonzero(~event)) < 2 or not np.any(event):
                 continue
             design = np.column_stack([np.ones(values.size), event.astype(float)])
-            chi2, _ = _weighted_chi2(values, sigma, design)
+            chi2, _ = _weighted_chi2(values, sigma, design, covariance=covariance)
             if chi2 is None:
                 continue
             trials += 1
@@ -228,7 +241,7 @@ def _transient_scan_statistic(values, sigma, times):
 
 
 def transient_scan_bootstrap(observed, null_prediction, sigma, times, *,
-                             draws: int = 1000, seed: int = 1) -> dict[str, Any]:
+                             covariance=None, draws: int = 1000, seed: int = 1) -> dict[str, Any]:
     """Family-wise null calibration for the full scanned transient-window search."""
     y, mu, s = _validate_vectors(observed, null_prediction, sigma)
     t = np.asarray(times, dtype=float).reshape(-1)
@@ -238,14 +251,28 @@ def transient_scan_bootstrap(observed, null_prediction, sigma, times, *,
         return {"status": "not_testable", "reason": "at least four distinct epochs are required"}
     if int(draws) < 100:
         raise ValueError("draws must be at least 100")
-    observed_stat, trials = _transient_scan_statistic(y, s, t)
+    lower = None
+    if covariance is not None:
+        cov = np.asarray(covariance, dtype=float)
+        if cov.shape != (y.size, y.size) or np.any(~np.isfinite(cov)):
+            raise ValueError("covariance must be finite and square with one row per measurement")
+        if not np.allclose(cov, cov.T, rtol=1e-10, atol=1e-12):
+            raise ValueError("covariance must be symmetric")
+        if not np.allclose(np.diag(cov), s ** 2, rtol=1e-5, atol=1e-10):
+            raise ValueError("covariance diagonal must agree with sigma squared")
+        try:
+            lower = np.linalg.cholesky(cov)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError("covariance must be positive definite") from exc
+    observed_stat, trials = _transient_scan_statistic(y, s, t, covariance=covariance)
     if observed_stat is None:
         return {"status": "not_testable", "reason": "transient scan is rank deficient"}
     rng = np.random.default_rng(int(seed))
     null_stats = []
     for _ in range(int(draws)):
-        sample = mu + rng.normal(0.0, s)
-        value, _ = _transient_scan_statistic(sample, s, t)
+        noise = rng.normal(0.0, s) if lower is None else lower @ rng.normal(size=y.size)
+        sample = mu + noise
+        value, _ = _transient_scan_statistic(sample, s, t, covariance=covariance)
         null_stats.append(float(value or 0.0))
     p_value = _tail_probability(null_stats, observed_stat)
     return {
@@ -254,6 +281,7 @@ def transient_scan_bootstrap(observed, null_prediction, sigma, times, *,
         "searched_interval_count": int(trials),
         "bootstrap_draws": int(draws),
         "seed": int(seed),
+        "noise_model": "independent Gaussian errors" if covariance is None else "full supplied covariance",
         "family_wise_false_alarm_probability": p_value,
         "null_95_interval": [
             float(np.percentile(null_stats, 2.5)), float(np.percentile(null_stats, 97.5))
