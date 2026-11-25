@@ -357,8 +357,9 @@ def match_candidates_to_sia_footprints(
     centre_ra, centre_dec, radius = (
         float(region["ra_deg"]), float(region["dec_deg"]), float(region["radius_deg"])
     )
-    candidate_by_id = {}
+    candidate_rows_by_id = {}
     invalid_candidate_coordinates = 0
+    invalid_candidate_source_ids = set()
     for row in candidate_rows:
         source_id = str(row.get("source_id") or "").strip()
         if not source_id:
@@ -366,13 +367,37 @@ def match_candidates_to_sia_footprints(
             continue
         try:
             ra, dec = float(row.get("ra")), float(row.get("dec"))
-            if not (math.isfinite(ra) and math.isfinite(dec)):
-                raise ValueError("non-finite coordinate")
+            if (
+                not math.isfinite(ra) or not math.isfinite(dec)
+                or not 0.0 <= ra < 360.0 or not -90.0 <= dec <= 90.0
+            ):
+                raise ValueError("coordinate outside valid ICRS bounds")
         except (TypeError, ValueError):
             invalid_candidate_coordinates += 1
+            invalid_candidate_source_ids.add(source_id)
             continue
-        if great_circle_separation_deg(ra, dec, centre_ra, centre_dec) <= radius + 1e-9:
-            candidate_by_id.setdefault(source_id, {**row, "ra": ra, "dec": dec})
+        candidate_rows_by_id.setdefault(source_id, []).append(
+            {**row, "ra": ra, "dec": dec}
+        )
+
+    # Never let a duplicate catalogue identity silently select whichever
+    # coordinate happened to appear first in the TAP result.
+    ambiguous_source_coordinate_ids = []
+    candidate_by_id = {}
+    for source_id, rows in sorted(candidate_rows_by_id.items()):
+        if source_id in invalid_candidate_source_ids:
+            continue
+        coordinate_keys = {
+            (round(row["ra"], 7), round(row["dec"], 7)) for row in rows
+        }
+        if len(coordinate_keys) != 1:
+            ambiguous_source_coordinate_ids.append(source_id)
+            continue
+        candidate = rows[0]
+        if great_circle_separation_deg(
+            candidate["ra"], candidate["dec"], centre_ra, centre_dec
+        ) <= radius + 1e-9:
+            candidate_by_id[source_id] = candidate
 
     prepared_products = []
     invalid_product_polygons = 0
@@ -494,7 +519,10 @@ def match_candidates_to_sia_footprints(
         and complete_collections == len(SIA_COLLECTIONS)
     )
     polygons_complete = invalid_product_polygons == 0 and products_without_archive_identity == 0
-    coordinates_complete = invalid_candidate_coordinates == 0
+    coordinates_complete = (
+        invalid_candidate_coordinates == 0
+        and not ambiguous_source_coordinate_ids
+    )
     complete = candidate_query_complete and all_collections_complete and polygons_complete and coordinates_complete
     baselines = sorted(
         row["metadata_time_baseline_days"] for row in all_summaries
@@ -522,6 +550,8 @@ def match_candidates_to_sia_footprints(
         "products_with_invalid_or_unsupported_s_region": invalid_product_polygons,
         "products_without_archive_identity": products_without_archive_identity,
         "candidate_rows_with_invalid_coordinates": invalid_candidate_coordinates,
+        "candidate_sources_with_conflicting_coordinates": len(ambiguous_source_coordinate_ids),
+        "conflicting_source_coordinate_ids": ambiguous_source_coordinate_ids,
         "candidate_query_complete": candidate_query_complete,
         "siav2_collection_count_requested": len(SIA_COLLECTIONS),
         "siav2_collection_count_complete_below_cap": complete_collections,
