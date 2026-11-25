@@ -227,20 +227,28 @@ def _aggregate_point(field_points: Sequence[Mapping[str, Any]]) -> dict[str, Any
 
 
 def _field_bootstrap(field_points, *, draws: int, seed: int) -> dict[str, Any]:
-    if len(field_points) < 2:
+    grouped = {}
+    for index, row in enumerate(field_points):
+        group_id = str(row.get("independence_group_id") or row.get("field_id") or f"field-{index}")
+        grouped.setdefault(group_id, []).append(row)
+    group_ids = sorted(grouped)
+    if len(group_ids) < 2:
         return {
             "draws": 0,
             "seed": int(seed),
+            "independent_group_count": len(group_ids),
             "intervals_95": None,
-            "warning": "At least two independent fields are required for field-level bootstrap intervals.",
+            "warning": "At least two independent sky-field groups are required for field-level bootstrap intervals.",
         }
     rng = np.random.default_rng(seed)
     names = ("precision", "completeness", "false_candidates_per_field")
     samples = {name: [] for name in names}
-    n = len(field_points)
+    n_groups = len(group_ids)
     for _ in range(int(draws)):
-        picked = rng.integers(0, n, size=n)
-        block = [field_points[int(index)] for index in picked]
+        picked = rng.integers(0, n_groups, size=n_groups)
+        block = []
+        for index in picked:
+            block.extend(grouped[group_ids[int(index)]])
         point = _aggregate_point(block)
         for name in names:
             value = point[name]
@@ -249,6 +257,7 @@ def _field_bootstrap(field_points, *, draws: int, seed: int) -> dict[str, Any]:
     return {
         "draws": int(draws),
         "seed": int(seed),
+        "independent_group_count": n_groups,
         "intervals_95": {
             name: (
                 [float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))]
@@ -256,7 +265,7 @@ def _field_bootstrap(field_points, *, draws: int, seed: int) -> dict[str, Any]:
             )
             for name, values in samples.items()
         },
-        "resampling_unit": "whole sky field",
+        "resampling_unit": "independent sky-field group (related observing periods resampled together)",
     }
 
 
@@ -377,8 +386,12 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
             )
             curve = _evaluate_field_method(truth, detections, threshold_map[method], radius)
             method_curves[method] = curve
+        independence_group_id = str(field.get("independence_group_id") or field_id)
+        if not independence_group_id:
+            raise ValueError(f"field {field_id}: independence_group_id cannot be blank")
         per_field.append({
             "field_id": field_id,
+            "independence_group_id": independence_group_id,
             "dataset_class": signature["dataset_class"],
             "split": field["split"],
             "input_signature": signature,
@@ -411,9 +424,12 @@ def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: in
         bootstrap_by_threshold = {}
         for index, threshold in enumerate(threshold_map[method]):
             bootstrap_by_threshold[str(threshold)] = _field_bootstrap(
-                [next(row for row in report["method_curves"][method]
-                      if row["threshold"] == threshold)
-                 for report in per_field],
+                [{
+                    "field_id": report["field_id"],
+                    "independence_group_id": report["independence_group_id"],
+                    **next(row for row in report["method_curves"][method]
+                           if row["threshold"] == threshold),
+                } for report in per_field],
                 draws=bootstrap_draws, seed=seed + index,
             )
         aggregate[method] = {
