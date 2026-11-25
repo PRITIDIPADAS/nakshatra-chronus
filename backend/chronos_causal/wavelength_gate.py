@@ -80,8 +80,11 @@ def validate_spectral_epoch(epoch: Mapping[str, Any], *, index: int | None = Non
     try:
         wavelength = list(epoch["wavelength_um"])
         flux = list(epoch["flux"])
-    except (KeyError, TypeError):
-        raise ValueError(prefix + "wavelength_um and flux arrays are required") from None
+        mjd = float(epoch["mjd"])
+    except (KeyError, TypeError, ValueError):
+        raise ValueError(prefix + "finite mjd, wavelength_um and flux arrays are required") from None
+    if not math.isfinite(mjd):
+        raise ValueError(prefix + "mjd must be finite")
     if not wavelength or len(wavelength) != len(flux):
         raise ValueError(prefix + "wavelength and flux arrays must be non-empty and equal length")
     valid = epoch.get("valid")
@@ -89,12 +92,27 @@ def validate_spectral_epoch(epoch: Mapping[str, Any], *, index: int | None = Non
         valid = [True] * len(wavelength)
     if len(valid) != len(wavelength):
         raise ValueError(prefix + "valid mask must align with wavelength and flux arrays")
-    for position, (value, is_valid) in enumerate(zip(wavelength, valid)):
+    sigma = epoch.get("sigma")
+    if sigma is not None:
+        sigma = list(sigma)
+        if len(sigma) != len(wavelength):
+            raise ValueError(prefix + "sigma must align with wavelength and flux arrays")
+    for position, (value, flux_value, is_valid) in enumerate(zip(wavelength, flux, valid)):
         if not is_valid:
             continue
         try:
             number = float(value)
+            flux_number = float(flux_value)
         except (TypeError, ValueError):
-            raise ValueError(prefix + f"valid wavelength pixel {position} is not numeric") from None
+            raise ValueError(prefix + f"valid wavelength and flux pixel {position} must be numeric") from None
         if not math.isfinite(number) or not (number > 0):
             raise ValueError(prefix + f"valid wavelength pixel {position} must be finite and positive")
+        if not math.isfinite(flux_number):
+            raise ValueError(prefix + f"valid flux pixel {position} must be finite")
+        if sigma is not None:
+            try:
+                sigma_number = float(sigma[position])
+            except (TypeError, ValueError):
+                raise ValueError(prefix + f"valid sigma pixel {position} must be numeric") from None
+            if not math.isfinite(sigma_number) or sigma_number <= 0:
+                raise ValueError(prefix + f"valid sigma pixel {position} must be finite and positive")
