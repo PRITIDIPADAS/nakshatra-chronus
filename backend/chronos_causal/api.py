@@ -91,6 +91,7 @@ class ObservationPlanRequest(BaseModel):
     candidates: list[dict[str, Any]]
     priors: dict[str, float] | None = None
     measurement_sigma: float = 1.0
+    alternative_priors: dict[str, dict[str, float]] = Field(default_factory=dict)
 
 class PopulationRateRequest(BaseModel):
     fields: list[dict[str, Any]]
@@ -272,6 +273,7 @@ def observations_plan(request: ObservationPlanRequest):
     from chronos_addons.planner import plan_observations
     return guarded(lambda: plan_observations(
         request.candidates, request.priors, request.measurement_sigma,
+        alternative_priors=request.alternative_priors,
     ))
 
 @router.post("/population/rate")
