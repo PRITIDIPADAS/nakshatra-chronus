@@ -38,6 +38,8 @@ def test_dr1_coverage_query_is_spatially_joined_and_detector_band_specific():
     assert "spherex.plane" in query
     assert "p.poly" in query
     assert "CONTAINS" in query
+    assert "POINT(65.70000000, 26.00000000)" in query
+    assert query.index("CONTAINS(") < query.index(" = 1")
     assert "/dr1/level2/" in query
     for band in DR1_BANDS:
         assert f"'{band}'" in query
@@ -46,8 +48,7 @@ def test_dr1_coverage_query_is_spatially_joined_and_detector_band_specific():
 def test_region_predicate_uses_explicit_icrs_center_and_radius():
     region = {"ra_deg": 65.7, "dec_deg": 26.0, "radius_deg": 2.0}
     predicate = region_predicate(region)
-    assert "POINT('ICRS', ra, dec)" in predicate
-    assert "CIRCLE('ICRS', 65.70000000, 26.00000000, 2.00000)" in predicate
+    assert predicate == "CONTAINS(POINT(ra, dec), CIRCLE(65.70000000, 26.00000000, 2.00000)) = 1"
 
 
 def test_query_hash_is_deterministic_for_equivalent_mappings():
