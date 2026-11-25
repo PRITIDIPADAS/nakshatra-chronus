@@ -2,6 +2,7 @@
 from __future__ import annotations
 import math
 from typing import Any, Mapping, Sequence
+from .wavelength_gate import validate_science_wavelength
 
 _REQUIRED = (
     "mjd", "wavelength_um", "flux", "sigma",
@@ -33,6 +34,7 @@ def normalize_observations(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, 
             row[key] = value
         if row["wavelength_um"] <= 0:
             raise ValueError(f"observation {index}: wavelength_um must be positive")
+        validate_science_wavelength(row, index=index)
         if row["sigma"] <= 0 or row["sky_sigma"] <= 0 or row["detector_sigma"] <= 0:
             raise ValueError(f"observation {index}: all supplied uncertainties must be positive")
         row["detector_id"] = str(row["detector_id"])
