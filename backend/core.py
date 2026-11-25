@@ -59,6 +59,8 @@ class Exp:
     source_observation_id: str = ""
     source_sha256: str = ""
     image_unit: str = "MJy/sr"
+    source_exposure_time_s: float = 0.0
+    detector_origin_xy: tuple | None = None
 
 
     @property
