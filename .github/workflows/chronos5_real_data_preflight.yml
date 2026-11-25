@@ -35,7 +35,7 @@ jobs:
         run: python -m py_compile research_discovery/spherex/run_chronos5_real_preflight.py
       - name: Retrieve and evaluate predeclared real SPHEREx DR1 fields
         run: |
-          python research_discovery/spherex/run_chronos5_real_preflight.py \
+          python -m research_discovery.spherex.run_chronos5_real_preflight \
             --out data/chronos5_real_preflight
       - name: Upload checksummed provenance and evaluation reports
         if: always()
