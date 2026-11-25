@@ -126,13 +126,22 @@ def wavelength(h, hd, x, y):
 def pick_psf(h, hd, x, y):
     """PSF zone nearest to cutout pixel x, y. Returns the prepared PSF and a note, or None and the reason.
     QR3 files hold an EPSF table (one 33 by 33 ePSF per detector zone, with XCENTER and YCENTER); QR2 files hold a PSF cube."""
-    # WCS A is the complete cutout-pixel to native-detector transform.
-    from research_discovery.spherex.coordinate_transform import image_to_detector
+    # Prefer complete alternate WCS A. Some older ePSF-only fixtures do not
+    # carry detector identity or a typed WCS-A definition; for those, retain
+    # the original CRPIX/CRVAL linear mapping solely for zone selection.
     detector_id = str(hd.get("DETECTOR", hd.get("DETID", "")))
-    xd, yd = image_to_detector(
-        float(x), float(y), dict(hd),
-        science_detector=detector_id, requested_detector=detector_id)
-    xd, yd = float(xd), float(yd)
+    if not detector_id and not (hd.get("CTYPE1A") and hd.get("CTYPE2A")):
+        required = ("CRPIX1A", "CRPIX2A", "CRVAL1A", "CRVAL2A")
+        if any(hd.get(key) is None for key in required):
+            return None, "Detector identity and complete alternate WCS A are missing; ePSF zone is unresolved."
+        xd = float(hd["CRVAL1A"]) + float(x) + 1.0 - float(hd["CRPIX1A"])
+        yd = float(hd["CRVAL2A"]) + float(y) + 1.0 - float(hd["CRPIX2A"])
+    else:
+        from research_discovery.spherex.coordinate_transform import image_to_detector
+        xd, yd = image_to_detector(
+            float(x), float(y), dict(hd),
+            science_detector=detector_id, requested_detector=detector_id)
+        xd, yd = float(xd), float(yd)
     if "EPSF" in h and hasattr(h["EPSF"], "columns"):
         try:
             t, ph = h["EPSF"].data, h["EPSF"].header
@@ -217,7 +226,7 @@ def load(row, ra, dec, size, coll):
     except Exception as err:
         lo, hi, R = core.BANDS.get(det, (0.75, 5.0, 40))
         lam, bw = math.sqrt(lo * hi), math.sqrt(lo * hi) / R
-        lam_ok, src = False, "nominal band centre for display only"
+        lam_ok, src = False, "band center only"
         notes.append(f"WCS-WAVE unavailable for display ({type(err).__name__}); no science wavelength assigned.")
     psf, pnote = pick_psf(h, hd, x, y)
     if psf is None or "not found" in pnote:
