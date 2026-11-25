@@ -196,7 +196,8 @@ def simulate_spectral_exposure(*, shape: Sequence[int], mjd: float,
     measured = poisson_realisation + read_realisation
     variance = expected + read ** 2
     residual = measured - expected
-    for array in (source_by_wavelength, source_expected, background_expected, dark_expected,
+    source_by_wavelength[:, mask] = np.nan
+    for array in (source_expected, background_expected, dark_expected,
                   detector_fixed_expected, expected, poisson_realisation, read_realisation,
                   measured, variance, residual):
         array[mask] = np.nan
