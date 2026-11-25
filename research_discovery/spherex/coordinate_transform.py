@@ -46,7 +46,7 @@ def detector_origin_offset(image_header, native_shape=NATIVE_SHAPE):
     rounded=(int(round(x0)),int(round(y0)))
     if abs(x0-rounded[0])>1e-6 or abs(y0-rounded[1])>1e-6:
         raise ValueError("alternate-WCS cutout origin is not an integer parent-detector pixel; refusing interpolation or guess")
-    if rounded[0]<0 or rounded[1]<0 or rounded[0]+n1>native_shape[1] or rounded[1]+n2>native_shape[0]:
+    if n1 > 0 and n2 > 0 and (rounded[0]<0 or rounded[1]<0 or rounded[0]+n1>native_shape[1] or rounded[1]+n2>native_shape[0]):
         raise ValueError("cutout bounds fall outside the native detector grid")
     return rounded
 
