@@ -217,7 +217,11 @@ def test_calibration_pair_without_native_audit_is_not_compatible():
 
 def test_coordinate_cutout_offset_and_round_trip():
     from research_discovery.spherex.coordinate_transform import detector_origin_offset, image_to_detector, detector_to_image
-    header = {"NAXIS1": 20, "NAXIS2": 12, "CRPIX1A": -99.0, "CRPIX2A": -49.0}
+    header = {"NAXIS1": 20, "NAXIS2": 12, "DETECTOR": "D2",
+              "CTYPE1A": "LINEAR", "CTYPE2A": "LINEAR", "WCSAXESA": 2,
+              "CRPIX1A": -99.0, "CRPIX2A": -49.0,
+              "CRVAL1A": 0.0, "CRVAL2A": 0.0,
+              "CDELT1A": 1.0, "CDELT2A": 1.0}
     assert detector_origin_offset(header) == (100, 50)
     x, y = image_to_detector(np.array([0.0, 4.5]), np.array([0.0, 6.5]), header,
                              science_detector="D2", requested_detector="2")
@@ -267,7 +271,11 @@ def test_rotated_wcs_conversion_and_uncertainty_propagation():
     scale = 1.7 / 3600.0
     w.wcs.cd = np.array([[-scale*np.cos(a), scale*np.sin(a)],
                          [scale*np.sin(a), scale*np.cos(a)]])
-    header = {"NAXIS1": 40, "NAXIS2": 30, "CRPIX1A": -99.0, "CRPIX2A": -49.0}
+    header = {"NAXIS1": 40, "NAXIS2": 30, "DETECTOR": "D2",
+              "CTYPE1A": "LINEAR", "CTYPE2A": "LINEAR", "WCSAXESA": 2,
+              "CRPIX1A": -99.0, "CRPIX2A": -49.0,
+              "CRVAL1A": 0.0, "CRVAL2A": 0.0,
+              "CDELT1A": 1.0, "CDELT2A": 1.0}
     sky = w.pixel_to_world(12.25, 10.75)
     result = sky_to_detector(sky.ra.deg, sky.dec.deg, image_wcs=w, image_header=header,
         science_detector="D2", requested_detector="D2", positional_covariance_arcsec2=np.eye(2)*0.04)
@@ -466,3 +474,97 @@ def test_injection_rejects_nonfinite_gain():
     with pytest.raises(ValueError,match="absolute-gain conversion is invalid"):
         inject_source_patch(np.zeros((10,10)),np.ones((10,10)),np.zeros((10,10),dtype=np.uint16),
             np.ones((3,3)),5,5,rng=np.random.default_rng(1),electrons_per_image_unit=float("nan"))
+
+
+
+def test_alternate_wcs_a_is_a_detector_frame_mapping_not_a_celestial_wcs():
+    pytest.importorskip("astropy")
+    from astropy.io import fits
+    from research_discovery.spherex.native_mef_audit import audit_alternate_wcs_a
+    header = fits.Header()
+    header["CTYPE1A"] = "LINEAR"
+    header["CTYPE2A"] = "LINEAR"
+    header["CRPIX1A"] = 1.0
+    header["CRPIX2A"] = 1.0
+    header["CRVAL1A"] = 500.0
+    header["CRVAL2A"] = 800.0
+    header["CDELT1A"] = 1.0
+    header["CDELT2A"] = -1.0
+    header["WCSAXESA"] = 2
+    result = audit_alternate_wcs_a(header, (12, 20))
+    assert result["pixel_n_dim"] == 2
+    assert result["world_n_dim"] == 2
+    assert result["world_at_cutout_origin"] == pytest.approx([500.0, 800.0])
+    assert "not a celestial WCS" in result["mapping"]
+
+
+def test_alternate_wcs_a_rotation_and_axis_flip_are_used_in_both_directions():
+    pytest.importorskip("astropy")
+    from research_discovery.spherex.coordinate_transform import image_to_detector, detector_to_image
+    header = {
+        "NAXIS1": 40, "NAXIS2": 30, "DETECTOR": "D2",
+        "CTYPE1A": "LINEAR", "CTYPE2A": "LINEAR", "WCSAXESA": 2,
+        "CRPIX1A": 1.0, "CRPIX2A": 1.0,
+        "CRVAL1A": 100.0, "CRVAL2A": 200.0,
+        "CDELT1A": 1.0, "CDELT2A": 1.0,
+        "PC1_1A": 0.0, "PC1_2A": -1.0,
+        "PC2_1A": 1.0, "PC2_2A": 0.0,
+    }
+    detector_x, detector_y = image_to_detector(
+        3.0, 4.0, header, science_detector="D2", requested_detector="2")
+    assert detector_x == pytest.approx(96.0)
+    assert detector_y == pytest.approx(203.0)
+    image_x, image_y = detector_to_image(
+        detector_x, detector_y, header, science_detector="2", requested_detector="D2")
+    assert image_x == pytest.approx(3.0)
+    assert image_y == pytest.approx(4.0)
+
+
+def test_injection_rejects_invalid_image_and_variance_inside_full_psf_patch():
+    from research_discovery.validation.injection_recovery import inject_source_patch
+    image = np.zeros((12, 12), dtype=float)
+    variance = np.ones_like(image)
+    flags = np.zeros_like(image, dtype=np.uint16)
+    signal = np.ones((3, 3), dtype=float)
+    variance[5, 5] = 0.0
+    with pytest.raises(ValueError, match="invalid IMAGE or VARIANCE"):
+        inject_source_patch(image, variance, flags, signal, 5.0, 5.0,
+                            rng=np.random.default_rng(1), electrons_per_image_unit=10.0)
+    variance[:] = 1.0
+    image[5, 5] = np.nan
+    with pytest.raises(ValueError, match="invalid IMAGE or VARIANCE"):
+        inject_source_patch(image, variance, flags, signal, 5.0, 5.0,
+                            rng=np.random.default_rng(1))
+
+
+def test_electron_calibration_record_rehashes_file_and_requires_timezone(tmp_path):
+    from research_discovery.validation.injection_recovery import validate_electron_calibration_record
+    calibration = tmp_path / "abs_gain_fixture.fits"
+    calibration.write_bytes(b"fixture abs_gain bytes")
+    import hashlib
+    record = {
+        "verification_status": "verified",
+        "science_file_sha256": "a" * 64,
+        "science_observation_id": "OBS-FIXTURE",
+        "science_source_uri": "https://irsa.ipac.caltech.edu/fixture/science.fits",
+        "detector": "D2",
+        "image_unit": "MJy/sr",
+        "exposure_time_s": 10.0,
+        "calibration_product": "abs_gain_matrix",
+        "calibration_uri": "https://irsa.ipac.caltech.edu/fixture/abs_gain.fits",
+        "calibration_file_path": str(calibration),
+        "calibration_sha256": hashlib.sha256(calibration.read_bytes()).hexdigest(),
+        "calibration_bunit": "(MJy/sr)/(e-/s)",
+        "conversion_method": "exposure_time_s divided by the matching absolute-gain map",
+        "verified_by": "independent unit-test fixture",
+        "verified_utc": "2026-11-25T00:00:00Z",
+    }
+    assert validate_electron_calibration_record(record)["verification_status"] == "verified"
+    tampered = dict(record)
+    calibration.write_bytes(b"changed calibration bytes")
+    with pytest.raises(ValueError, match="SHA-256"):
+        validate_electron_calibration_record(tampered)
+    calibration.write_bytes(b"fixture abs_gain bytes")
+    no_zone = dict(record, verified_utc="2026-11-25T00:00:00")
+    with pytest.raises(ValueError, match="timezone"):
+        validate_electron_calibration_record(no_zone)
