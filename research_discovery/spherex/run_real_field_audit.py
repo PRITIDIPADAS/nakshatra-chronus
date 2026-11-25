@@ -490,6 +490,9 @@ def main():
     if provenance["science"].get("contentlength") and science_path.stat().st_size != int(provenance["science"]["contentlength"]):
         raise RuntimeError("Science MEF byte count does not match the exact IRSA artifact record")
     science["archive_planeid"] = provenance["science_planeid"]
+    science["pipeline_version"] = (
+        science.get("pipeline_version") or provenance["science"].get("provenance_version")
+    )
     filename_processing = re.search(
         r"-v[0-9.]+-(20[0-9]{2}-[0-9]{3})\.fits$",
         science_path.name, re.I,
