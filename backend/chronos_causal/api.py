@@ -222,6 +222,8 @@ def status():
             "generic pixel-level spectral forward experiments with parameter provenance",
             "forward-model Jacobian identifiability and nuisance-degeneracy analysis",
             "grouped residuals and conditional parametric-bootstrap challenges",
+            "exact Gaussian posterior and posterior-predictive checks for explicitly specified linear measurement models",
+            "Bayesian model probabilities from proper-prior Gaussian marginal likelihoods (not BIC)",
             "predeclared measurement-level sky, detector and mixed interventions",
             "synthetic challenge fixtures",
         ],
@@ -229,7 +231,7 @@ def status():
             "calibrated posterior probabilities",
             "calibrated SPHEREx pixel-level detector modelling",
             "validated SPHEREx detector coefficients",
-            "full Bayesian posterior-predictive inference",
+            "full Bayesian posterior predictive inference for the complete joint sky, detector and calibration model",
             "real-data performance improvement",
             "automated telescope scheduling",
         ],
@@ -637,6 +639,22 @@ class FalsificationRequest(BaseModel):
     min_relative_support: float = 0.65
     min_delta_bic: float = 6.0
 
+class BayesianPosteriorPredictiveRequest(BaseModel):
+    observed: list[float]
+    design_matrix: list[list[float]]
+    covariance: list[list[float]]
+    prior_mean: list[float]
+    prior_covariance: list[list[float]]
+    draws: int = 4000
+    seed: int = 1
+
+class BayesianModelComparisonRequest(BaseModel):
+    observed: list[float]
+    covariance: list[list[float]]
+    models: dict[str, list[list[float]]]
+    coefficient_priors: dict[str, dict[str, Any]]
+    model_priors: dict[str, float]
+
 @router.post("/benchmark/compare-package")
 def benchmark_compare_package(request: BenchmarkPackageRequest):
     from chronos_benchmark.runner import compare_benchmark_package
@@ -703,4 +721,28 @@ def causal_falsify(request: FalsificationRequest):
         maximum_predictive_p_value=request.maximum_predictive_p_value,
         min_relative_support=request.min_relative_support,
         min_delta_bic=request.min_delta_bic,
+    ))
+
+@router.post("/causal/bayesian/posterior-predictive")
+def causal_bayesian_posterior_predictive(request: BayesianPosteriorPredictiveRequest):
+    from .bayesian import gaussian_linear_posterior_predictive
+    return guarded(lambda: gaussian_linear_posterior_predictive(
+        request.observed,
+        request.design_matrix,
+        request.covariance,
+        request.prior_mean,
+        request.prior_covariance,
+        draws=request.draws,
+        seed=request.seed,
+    ))
+
+@router.post("/causal/bayesian/model-comparison")
+def causal_bayesian_model_comparison(request: BayesianModelComparisonRequest):
+    from .bayesian import bayesian_linear_model_comparison
+    return guarded(lambda: bayesian_linear_model_comparison(
+        request.observed,
+        request.covariance,
+        request.models,
+        request.coefficient_priors,
+        request.model_priors,
     ))
