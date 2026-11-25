@@ -456,6 +456,10 @@ This workflow turns the roadmap into twenty bounded ChatGPT development sessions
 | After 18 | Real-data performance is measured against all four baselines |
 | After 20 | An independent researcher can reproduce the stated result |
 
+## Sessions 07–11 implementation status
+
+The implementation-to-evidence mapping, code entry points, test boundaries and outstanding scientific acceptance gates are tracked in [the Sessions 07–11 implementation status note](CHRONOS_5_SESSIONS_07_11_IMPLEMENTATION_STATUS_2026-11-25.md). Treat the note as a status snapshot, not as a substitute for the per-session acceptance criteria below.
+
 ## What must not be rushed
 
 The user interface can be built while the scientific backend is being validated, but an attractive visual cannot substitute for calibration or empirical evidence. The highest-risk work is exact archive/calibration compatibility, source-noise conversion, detector-coordinate transform and blind real-field benchmark. If these are not complete, the website should say so plainly.
