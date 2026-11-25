@@ -1,6 +1,6 @@
 # SPHEREx DR1 / SPLICES regional catalogue reconnaissance — 2026-11-25
 
-**Scope:** predeclared query of the public IRSA `spherex.splices` catalogue and spatial SPHEREx DR1 Level-2 exposure footprints across five star-forming regions and one high-latitude control. This is catalogue reconnaissance, not source reclassification or a YSO population discovery.
+**Scope:** predeclared query of the public IRSA `spherex.splices` catalogue and SPHEREx DR1 Level-2 exposures whose detector footprint contains each predeclared region-centre coordinate, across five star-forming regions and one high-latitude control. This is catalogue reconnaissance, not source reclassification or a YSO population discovery.
 
 ## Reproducible run
 
@@ -17,7 +17,7 @@ The query plan is archived per region, with catalogue rows, candidate rows, clas
 
 ## Predeclared regions and returned rows
 
-| Region | Radius | Catalogue rows | YSO_PUB not null | CLASS_1 containing YSO | STYPE_ML containing YSO | Candidate union rows | DR1 footprint rows |
+| Region | Radius | Catalogue rows | YSO_PUB not null | CLASS_1 containing YSO | STYPE_ML containing YSO | Candidate union rows | DR1 exposures covering region centre |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Taurus / Auriga | 2.00° | 4,176 | 58 | 58 | 208 | 237 | 242 |
 | Perseus / NGC 1333 | 0.85° | 849 | 130 | 130 | 120 | 189 | 241 |
@@ -31,7 +31,7 @@ All catalogue query results were below the 50,000-row cap; all candidate rows we
 
 The total row is a sum of regional query returns, not a count of unique objects across the whole sky. Regions are predeclared cones, and any catalogue source lying in overlapping cones would be counted in each regional result. The high-latitude control is a comparison region, not a matched control sample with identical extinction, completeness or observing history.
 
-The 1,540 Level-2 footprint rows are likewise **not** claimed to be 1,540 unique exposures: spatial overlap between regions has not been deduplicated here. The rows describe archive footprint coverage, not source-level extracted spectra, visits for each candidate, or epoch completeness.
+The 1,540 Level-2 rows are exposures whose native footprints contain the single predeclared region-centre coordinate used by each query. They are **not** all exposures intersecting each circular region: the query does not test overlap with the full cone. They are also not claimed to be 1,540 unique exposures; the same exposure can cover more than one region centre, and cross-region plane-ID deduplication is handled by the separate candidate-inventory audit. These centre-point counts do not establish which individual catalogue source lies in an exposure, source-level visits, or epoch completeness. A row count below the declared 20,000-row cap means only that the centre-point query completed below that cap, not that full survey coverage is complete.
 
 ## Labels were not merged into a single truth class
 
@@ -51,7 +51,7 @@ The first live query iteration used a spatial aggregate form rejected by the IRS
 - uses an IRSA-compatible spatial predicate for the SPLICES cone query;
 - retrieves a bounded row table and computes label counts locally instead of relying on unsupported geometric `COUNT()` / `GROUP BY` aggregation;
 - keeps candidate details, full catalogue rows, and exposure-footprint rows separate;
-- uses the published SPHEREx exposure-polygon pattern to test whether each exposure footprint intersects the predeclared region;
+- uses the published SPHEREx exposure-polygon pattern to test whether the fixed predeclared region-centre coordinate lies inside each returned exposure footprint;
 - records per-query errors and returns a non-zero exit status if any required query fails;
 - records whether the query cap was reached; counts are described as exact for a completed query below the cap and as lower bounds if the cap is reached.
 
@@ -59,8 +59,8 @@ The candidate table includes source identifiers, coordinates, published/harmonis
 
 ## What this does and does not establish
 
-**Established:** the current IRSA TAP service returned the archived catalogue and Level-2 footprint rows for all six predeclared regions under the recorded query definitions; the live query completed without errors; the region-level returned counts are below their declared caps.
+**Established:** the current IRSA TAP service returned the archived catalogue rows and Level-2 exposure rows covering each of the six fixed region-centre coordinates under the recorded query definitions; the live query completed without errors; the returned counts are below their declared row caps.
 
-**Not established:** an unbiased YSO census, physical classification of every candidate, independent verification of machine-learning classifications, completeness or contamination rates, a regional YSO formation rate, unique exposure counts after spatial overlap removal, source-level temporal coverage, or any new astronomical discovery.
+**Not established:** an unbiased YSO census, physical classification of every candidate, independent verification of machine-learning classifications, completeness or contamination rates, a regional YSO formation rate, all exposures intersecting each full region cone, unique exposure counts after cross-region overlap removal, source-level temporal coverage, or any new astronomical discovery.
 
 Before a population estimate, the project still needs a frozen source inclusion rule, independent validation of candidate classes, a selection function, source-level epoch coverage, completeness and contamination estimates, null/control modelling, overlap deduplication, and a preregistered statistical analysis. Any later discovery claim needs independent astronomical reproduction and review.
