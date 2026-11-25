@@ -55,7 +55,7 @@ def test_session13_feature_measurement_reports_depth_continuum_and_resolution():
     assert result["continuum_model"]["type"]=="weighted_constant"
     assert result["resolution_diagnostics"]["lsf_fwhm_um"]==pytest.approx(.02)
     assert result["blend_diagnostics"]
-    assert any("molecular identification" in x for x in result["limitations"])
+    assert any("no molecule is identified" in x for x in result["limitations"])
 
 
 def test_session15_planner_needs_structured_external_feasibility_record():
