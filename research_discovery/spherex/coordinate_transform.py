@@ -30,19 +30,45 @@ def _assert_detector(science_detector, requested_detector):
     b=str(requested_detector or "").strip().upper().replace("D","")
     if not a or not b or a!=b: raise ValueError(f"detector mismatch or missing detector identity: science={science_detector!r}, requested={requested_detector!r}")
 
-def image_to_detector(x,y,image_header,*,science_detector,requested_detector):
-    _assert_detector(science_detector,requested_detector)
-    ox,oy=detector_origin_offset(image_header)
-    xx,yy=np.asarray(x,float),np.asarray(y,float)
-    if xx.shape!=yy.shape: raise ValueError("x and y arrays must have equal shape")
-    return xx+ox,yy+oy
+def _alternate_detector_wcs(image_header, *, science_detector, requested_detector):
+    """Build the archive-declared two-dimensional IMAGE-pixel -> detector WCS A."""
+    from astropy.wcs import WCS
+    _assert_detector(science_detector, requested_detector)
+    try:
+        transform = WCS(image_header, key="A", relax=True)
+    except Exception as exc:
+        raise ValueError(f"alternate WCS A is unavailable: {exc}") from exc
+    if transform.pixel_n_dim != 2 or transform.world_n_dim != 2:
+        raise ValueError("alternate WCS A must be a two-dimensional pixel-to-detector transform")
+    return transform
 
-def detector_to_image(x,y,image_header,*,science_detector,requested_detector):
-    _assert_detector(science_detector,requested_detector)
-    ox,oy=detector_origin_offset(image_header)
-    xx,yy=np.asarray(x,float),np.asarray(y,float)
-    if xx.shape!=yy.shape: raise ValueError("x and y arrays must have equal shape")
-    return xx-ox,yy-oy
+
+def image_to_detector(x, y, image_header, *, science_detector, requested_detector):
+    """Map cutout IMAGE pixels through alternate WCS A into native detector coordinates."""
+    transform = _alternate_detector_wcs(
+        image_header, science_detector=science_detector, requested_detector=requested_detector)
+    xx, yy = np.broadcast_arrays(np.asarray(x, float), np.asarray(y, float))
+    if not np.isfinite(xx).all() or not np.isfinite(yy).all():
+        raise ValueError("IMAGE pixel coordinates must be finite")
+    points = np.column_stack((xx.ravel(), yy.ravel()))
+    detector = np.asarray(transform.all_pix2world(points, 0), dtype=float)
+    if detector.shape != points.shape or not np.isfinite(detector).all():
+        raise ValueError("alternate WCS A produced invalid detector coordinates")
+    return detector[:, 0].reshape(xx.shape), detector[:, 1].reshape(yy.shape)
+
+
+def detector_to_image(x, y, image_header, *, science_detector, requested_detector):
+    """Invert alternate WCS A from native detector coordinates to cutout IMAGE pixels."""
+    transform = _alternate_detector_wcs(
+        image_header, science_detector=science_detector, requested_detector=requested_detector)
+    dx, dy = np.broadcast_arrays(np.asarray(x, float), np.asarray(y, float))
+    if not np.isfinite(dx).all() or not np.isfinite(dy).all():
+        raise ValueError("detector coordinates must be finite")
+    points = np.column_stack((dx.ravel(), dy.ravel()))
+    pixels = np.asarray(transform.all_world2pix(points, 0), dtype=float)
+    if pixels.shape != points.shape or not np.isfinite(pixels).all():
+        raise ValueError("alternate WCS A inverse produced invalid IMAGE coordinates")
+    return pixels[:, 0].reshape(dx.shape), pixels[:, 1].reshape(dy.shape)
 
 def _skycoord(ra_deg,dec_deg):
     from astropy.coordinates import SkyCoord
@@ -68,11 +94,15 @@ def sky_to_detector(ra_deg,dec_deg,*,image_wcs,image_header,science_detector,req
             raise ValueError("positional_covariance_arcsec2 must be a finite symmetric 2x2 covariance")
         if np.linalg.eigvalsh(cov).min() < -1e-10: raise ValueError("positional covariance must be positive semidefinite")
         import astropy.units as u
+        if np.size(x) != 1:
+            raise ValueError("positional covariance propagation currently accepts one sky position per call")
         east=sky.spherical_offsets_by(step_arcsec*u.arcsec,0*u.arcsec)
         north=sky.spherical_offsets_by(0*u.arcsec,step_arcsec*u.arcsec)
         xe,ye=image_wcs.celestial.world_to_pixel(east); xn,yn=image_wcs.celestial.world_to_pixel(north)
-        j=np.array([[(np.asarray(xe)-x)/step_arcsec,(np.asarray(xn)-x)/step_arcsec],
-                    [(np.asarray(ye)-y)/step_arcsec,(np.asarray(yn)-y)/step_arcsec]],dtype=float)
+        dxe,dye=image_to_detector(xe,ye,image_header,science_detector=science_detector,requested_detector=requested_detector)
+        dxn,dyn=image_to_detector(xn,yn,image_header,science_detector=science_detector,requested_detector=requested_detector)
+        j=np.array([[(float(dxe)-float(dx))/step_arcsec,(float(dxn)-float(dx))/step_arcsec],
+                    [(float(dye)-float(dy))/step_arcsec,(float(dyn)-float(dy))/step_arcsec]],dtype=float)
         detector_cov=j@cov@j.T
         result["positional_covariance_detector_px2"]=detector_cov
         result["jacobian_detector_px_per_tangent_arcsec"]=j
