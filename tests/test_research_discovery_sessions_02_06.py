@@ -646,6 +646,7 @@ def test_archive_provenance_link_allows_distinct_science_and_calibration_build_i
         "native_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2.fits",
         "release": "dr1", "detector": "D2", "pipeline_version": "7.0.0b6",
         "processing_date": "2026-191", "coordinate_frame": "native_detector",
+        "sha256": "b" * 64,
         "archive_provenance_link": {
             "input_table": "spherex.provenance_input",
             "science_planeid": "science-plane-1",
