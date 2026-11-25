@@ -101,13 +101,13 @@ The legacy backend/inject.py path now carries the loaded cutout's original archi
 
 | Gate | Software | Real-data evidence |
 |---|---|---|
-| S02 manifest and retrieval | Implemented | Not populated in this development run; no original MEF downloads or complete archive records available |
-| S03 native-MEF audit | Implemented | Blocked until an actual native MEF and matching calibration are retrieved |
-| S04 calibration compatibility | Implemented | No exposure/calibration pair has been marked compatible |
+| S02 manifest and retrieval | Implemented | M101 DR1 D2 native science and calibration archive identities, URIs, byte counts and SHA-256 hashes are retained in the live audit artifact; broader field manifests remain to be populated |
+| S03 native-MEF audit | Implemented | M101 native 2040 × 2040 MEF, IMAGE/VARIANCE/FLAGS/ZODI alignment and structure audit passed |
+| S04 calibration compatibility | Implemented | M101 spectral-WCS and absolute-gain direct provenance links passed; compatibility reported `compatible` for this one exposure |
 | S05 coordinate transform | Implemented | Unit-tested coordinate math; no independent real detector-landmark residual report |
-| S06 photon-noise injection | Implemented with strict provenance gate | Deterministic mode is the only defensible mode until an exposure-specific calibration record and calibration bytes are supplied |
+| S06 photon-noise injection | Implemented with strict provenance gate | M101 and six-region D2 exploratory Jy pilots completed with gain-derived source-Poisson; independent gain-to-electron calibration review remains pending |
 
-A synthetic FITS fixture or unit test can test the code path, but it does not pass the real-file acceptance gate. Do not publish a real-data validation claim from this software-only tranche.
+The M101 result is a bounded real-data validation for one science/calibration set, not survey-wide calibration approval. Six-region injection/recovery is exploratory and non-blind. A synthetic FITS fixture or unit test does not pass the real-file gate; conversely, one real MEF audit does not validate every detector, field or product family. Do not generalise beyond the verified evidence.
 
 
 ## Official archive references checked for this implementation
