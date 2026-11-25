@@ -674,7 +674,7 @@ def test_population_event_rate_scales_null_control_to_science_exposure():
     included = result["included_fields"][0]
     assert included["null_control_to_science_exposure_ratio"] == pytest.approx(0.25)
     assert included["null_events_expected_in_science_exposure"] == pytest.approx(2.0)
-    assert result["event_rate_per_sqdeg_day"]["median"] >= 0
+    assert result["event_rate_per_sqdeg_day"]["median"] > 0
     assert result == estimate_event_rate(
         [field], coverage_audit=audit, draws=1000, seed=19
     )
@@ -761,6 +761,7 @@ def test_population_event_rate_pools_counts_over_total_area_time_exposure():
     )
 
     assert single["total_science_exposure_sqdeg_days"] == pytest.approx(10.0)
+    assert single["event_rate_per_sqdeg_day"]["median"] > 0
     assert combined["total_science_exposure_sqdeg_days"] == pytest.approx(20.0)
     assert [row["science_exposure_sqdeg_days"] for row in combined["included_fields"]] == [10.0, 10.0]
     # Adding an equally representative independent field doubles exposure and
