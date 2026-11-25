@@ -43,6 +43,9 @@ def _whiten_jacobian(jacobian: np.ndarray, covariance: Any):
         return jacobian / np.sqrt(cov)[:, None], "diagonal variance supplied", True
     if cov.shape != (n, n) or np.any(~np.isfinite(cov)):
         raise ValueError("measurement covariance must be a finite square matrix matching the Jacobian")
+    covariance_scale = max(float(np.max(np.abs(cov))), 1.0)
+    if not np.allclose(cov, cov.T, rtol=1e-10, atol=1e-12 * covariance_scale):
+        raise ValueError("measurement covariance must be symmetric")
     try:
         lower = np.linalg.cholesky(cov)
     except np.linalg.LinAlgError as exc:
