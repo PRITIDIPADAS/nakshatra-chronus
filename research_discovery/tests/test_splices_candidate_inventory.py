@@ -659,3 +659,66 @@ def test_schema_1_1_cross_region_source_product_overlap_uses_exact_archive_produ
     assert overlap["source_archive_product_region_memberships"]["source-a|ivo://irsa.example/shared-product"] == [
         "Perseus_NGC1333", "Taurus_Auriga"
     ]
+
+
+def test_schema_1_1_missing_candidate_source_summary_id_fails_closed(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    path = tmp_path / "Taurus_Auriga" / "candidate_source_epoch_summary.csv"
+    rows = read_csv(path)
+    # source-b intentionally has zero archive product pairs; it still needs an
+    # explicit per-source summary row so "zero matches" cannot mean "missing".
+    rows = [row for row in rows if row["source_id"] != "source-b"]
+    _write_csv(path, rows)
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    audit = first["candidate_source_product_manifest_audit"]
+    assert audit["source_summary_ids_missing_from_matcher_output"] == 1
+    assert audit["valid"] is False
+    assert first["candidate_source_product_manifest_integrity_error"]
+    assert first["candidate_source_exposure_query_status"] == "unavailable"
+
+
+def test_schema_1_1_source_product_manifest_rejects_wrong_collection_or_release(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    path = tmp_path / "Taurus_Auriga" / "candidate_source_product_matches.csv"
+    rows = read_csv(path)
+    rows[0]["collection"] = "spherex_qr3"
+    rows[0]["data_release"] = "qr3"
+    _write_csv(path, rows)
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    audit = first["candidate_source_product_manifest_audit"]
+    assert audit["valid"] is False
+    assert audit["pair_rows_with_product_metadata_mismatches"] > 0
+    assert first["candidate_source_product_manifest_integrity_error"]
+
+
+def test_schema_1_1_source_product_manifest_rejects_conflicting_duplicate_inventory_metadata(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    path = tmp_path / "Taurus_Auriga" / "region_footprints_sia_spherex_dr1.csv"
+    rows = read_csv(path)
+    matched = next(row for row in rows if row.get("obs_publisher_did"))
+    duplicate = dict(matched)
+    duplicate["access_url"] = "https://irsa.example/Taurus_Auriga/conflicting-copy.fits"
+    rows.append(duplicate)
+    _write_csv(path, rows)
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    audit = first["candidate_source_product_manifest_audit"]
+    assert audit["valid"] is False
+    assert audit["pair_rows_with_product_metadata_mismatches"] > 0
+    assert first["candidate_source_product_manifest_integrity_error"]
+
+
+def test_schema_1_1_source_product_manifest_requires_archive_identity_fields(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    path = tmp_path / "Taurus_Auriga" / "candidate_source_product_matches.csv"
+    rows = read_csv(path)
+    rows[0].pop("data_release")
+    _write_csv(path, rows)
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    audit = first["candidate_source_product_manifest_audit"]
+    assert audit["valid"] is False
+    assert audit["pair_rows_with_missing_required_archive_metadata"] > 0
+    assert first["candidate_source_product_manifest_integrity_error"]
