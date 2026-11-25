@@ -229,16 +229,22 @@ def _summarize_exposure_rows(rows: list[dict]) -> tuple[dict, set[str]]:
     return band_summary, plane_ids
 
 
-def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
     region_rows = []
     centre_point_exposures = []
     full_region_exposures = []
+    candidate_source_exposure_matches = []
+    candidate_source_epoch_summaries = []
     for result in report.get("region_results", []):
         region = result.get("region") or {}
         name = str(region.get("name") or "")
         regional_candidates = [
             row for row in candidate_rows if str(row.get("recon_region") or "") == name
         ]
+        candidate_ids = {
+            str(row.get("source_id") or "").strip()
+            for row in regional_candidates if nonempty(row.get("source_id"))
+        }
         flags_counter = Counter()
         for row in regional_candidates:
             flags = label_flags(row)
@@ -246,28 +252,53 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> t
 
         centre_path = root / name / "dr1_level2_exposures.csv"
         full_region_path = root / name / "dr1_level2_exposures_full_region.csv"
+        source_match_path = root / name / "candidate_source_exposure_matches.csv"
+        source_summary_path = root / name / "candidate_source_epoch_summary.csv"
         exposures = read_csv(centre_path)
         optional_errors = result.get("optional_query_errors") or {}
         full_region_error = optional_errors.get("dr1_level2_exposures_full_region")
+        source_epoch_error = optional_errors.get("candidate_source_exposure_matches")
         full_region_rows = read_csv(full_region_path)
-        # Never consume a stale output file as current coverage after a failed
-        # optional query. The per-region error is authoritative for this run.
+        source_match_rows = read_csv(source_match_path)
+        source_summary_rows = read_csv(source_summary_path)
+
+        # Never consume stale output files as current coverage after an optional
+        # query failure. The current report's query error is authoritative.
         if full_region_error:
             full_region_rows = []
+        if source_epoch_error:
+            source_match_rows = []
+            source_summary_rows = []
+
         centre_point_exposures.extend({**row, "recon_region": name} for row in exposures)
         full_region_exposures.extend({**row, "recon_region": name} for row in full_region_rows)
+        candidate_source_exposure_matches.extend(
+            {**row, "recon_region": name} for row in source_match_rows
+        )
+        candidate_source_epoch_summaries.extend(
+            {**row, "recon_region": name} for row in source_summary_rows
+        )
 
         centre_band_summary, centre_plane_ids = _summarize_exposure_rows(exposures)
         full_band_summary, full_plane_ids = _summarize_exposure_rows(full_region_rows)
+        source_band_summary, source_plane_ids = _summarize_exposure_rows(source_match_rows)
+        matched_source_ids = {
+            str(row.get("source_id") or "").strip()
+            for row in source_match_rows if nonempty(row.get("source_id"))
+        }
+        source_counts = result.get("counts") or {}
+        source_query_complete = source_counts.get("candidate_source_exposure_query_complete")
+        source_match_status = (
+            "unavailable" if source_epoch_error
+            else "complete_below_declared_row_cap" if source_query_complete is True
+            else "lower_bound_or_candidate_query_incomplete"
+        )
         region_rows.append({
             "region": name,
             "role": region.get("role"),
-            "catalogue_rows": (result.get("counts") or {}).get("catalogue_rows_returned"),
+            "catalogue_rows": source_counts.get("catalogue_rows_returned"),
             "candidate_rows": len(regional_candidates),
-            "candidate_unique_source_ids": len({
-                str(row.get("source_id") or "").strip()
-                for row in regional_candidates if nonempty(row.get("source_id"))
-            }),
+            "candidate_unique_source_ids": len(candidate_ids),
             "label_patterns": [
                 {"pattern": key, "rows": count}
                 for key, count in sorted(flags_counter.items(), key=lambda item: (-item[1], item[0]))
@@ -290,9 +321,39 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]) -> t
                 None if full_region_error else full_band_summary
             ),
             "full_region_query_semantics": "region_circle_intersects_exposure_polygon",
-            "source_level_epoch_coverage": "not measured by either regional footprint query",
+            "candidate_source_exposure_query_status": source_match_status,
+            "candidate_source_exposure_query_error": source_epoch_error,
+            "candidate_source_exposure_match_rows": (
+                None if source_epoch_error else len(source_match_rows)
+            ),
+            "candidate_sources_with_any_level2_footprint_match": (
+                None if source_epoch_error else len(matched_source_ids)
+            ),
+            "candidate_sources_without_level2_footprint_match": (
+                None if source_epoch_error
+                else max(0, len(candidate_ids) - len(matched_source_ids))
+            ),
+            "candidate_source_exposure_unique_plane_ids": (
+                None if source_epoch_error else len(source_plane_ids)
+            ),
+            "candidate_source_exposure_by_band": (
+                None if source_epoch_error else source_band_summary
+            ),
+            "candidate_source_epoch_summary_rows": (
+                None if source_epoch_error else len(source_summary_rows)
+            ),
+            "source_coverage_interpretation": (
+                "Geometric source-coordinate to Level-2 exposure-polygon matches only. "
+                "Extracted flux validity, spectrum quality and usable epoch cadence are not assessed."
+            ),
         })
-    return region_rows, centre_point_exposures, full_region_exposures
+    return (
+        region_rows,
+        centre_point_exposures,
+        full_region_exposures,
+        candidate_source_exposure_matches,
+        candidate_source_epoch_summaries,
+    )
 
 def _field_quality(rows: list[dict]) -> dict:
     availability = {}
@@ -341,9 +402,13 @@ def analyze(root: Path) -> dict:
     input_validation = _check_input_report(report, candidates)
     source_ids = _source_id_audit(candidates)
     label_overlap = _label_overlap(candidates)
-    regional, centre_point_exposures, full_region_exposures = _region_summaries(
-        root, report, candidates
-    )
+    (
+        regional,
+        centre_point_exposures,
+        full_region_exposures,
+        candidate_source_exposure_matches,
+        candidate_source_epoch_summaries,
+    ) = _region_summaries(root, report, candidates)
 
     def overlap_summary(exposures: list[dict], semantics: str) -> dict:
         plane_membership = defaultdict(set)
@@ -376,6 +441,29 @@ def analyze(root: Path) -> dict:
         full_region_exposures,
         "region_circle_intersects_exposure_polygon",
     )
+    source_pair_membership = defaultdict(set)
+    for row in candidate_source_exposure_matches:
+        source_id = str(row.get("source_id") or "").strip()
+        plane_id = str(row.get("planeid") or "").strip()
+        if source_id and plane_id:
+            source_pair_membership[(source_id, plane_id)].add(
+                str(row.get("recon_region") or "")
+            )
+    cross_region_source_pairs = {
+        f"{source_id}|{plane_id}": sorted(regions)
+        for (source_id, plane_id), regions in source_pair_membership.items()
+        if len(regions) > 1
+    }
+    candidate_source_footprint_overlap = {
+        "source_exposure_match_rows": len(candidate_source_exposure_matches),
+        "unique_source_plane_pairs": len(source_pair_membership),
+        "source_plane_pairs_in_multiple_region_queries": len(cross_region_source_pairs),
+        "source_plane_pair_region_memberships": cross_region_source_pairs,
+        "interpretation": (
+            "Rows are exact cone-filtered source-coordinate to Level-2 exposure-polygon matches. "
+            "Repeated source-plane pairs across region queries are reported, not collapsed."
+        ),
+    }
     result = {
         "schema": SCHEMA,
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -386,6 +474,20 @@ def analyze(root: Path) -> dict:
         "regional_candidate_and_coverage_summaries": regional,
         "cross_region_exposure_overlap": centre_overlap,
         "cross_region_full_region_exposure_overlap": full_region_overlap,
+        "candidate_source_exposure_coverage": {
+            "match_row_count": len(candidate_source_exposure_matches),
+            "source_summary_row_count": len(candidate_source_epoch_summaries),
+            "regions_with_completed_query": sum(
+                row.get("candidate_source_exposure_query_status") == "complete_below_declared_row_cap"
+                for row in regional
+            ),
+            "regions_with_unavailable_query": sum(
+                row.get("candidate_source_exposure_query_status") == "unavailable"
+                for row in regional
+            ),
+            "interpretation": "Geometric matches only; not extracted spectra or usable-epoch validation.",
+        },
+        "cross_region_candidate_source_exposure_overlap": candidate_source_footprint_overlap,
         "candidate_selection_definition": (
             "Candidate union rows satisfy at least one of YSO_PUB non-null, CLASS_1 containing YSO, "
             "or STYPE_ML containing YSO in the archived region query. This is a catalogue query "
@@ -397,8 +499,8 @@ def analyze(root: Path) -> dict:
             "The report's candidate label overlaps are not independent validation.",
             "No completeness, contamination, selection function, population rate or star-formation rate is estimated.",
             "Regional exposure rows count exposures whose footprint contains the fixed region-centre coordinate; they do not enumerate all exposures intersecting the full region cone.",
-            "Regional exposure-polygon rows do not establish which individual candidate has source-level epoch coverage.",
-            "No spectra were extracted or reclassified in this inventory audit.",
+            "The optional source-coordinate join measures candidate-to-Level-2 exposure polygon matches within the exact cone; it is not a validated spectral time series.",
+            "No extracted spectra, image quality flags, flux measurements, completeness or usable-epoch cadence are evaluated in this inventory audit.",
             "The six-region high-latitude cone is a comparison region, not a matched control sample.",
         ],
     }
