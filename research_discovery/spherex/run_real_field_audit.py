@@ -335,16 +335,30 @@ def provenance_link_for_uri(provenance: dict, science_uri: str, calibration_uri:
     }
 
 
-def run_calibrated_jy_injection(science_path: Path, science_uri: str,
-                                area_path: Path, area_uri: str,
-                                science_sha: str, area_sha: str,
-                                out_dir: Path) -> dict:
-    """Run deterministic Jy injections on one real DR1 MEF using native ePSF and pixel solid angle."""
+def run_calibrated_jy_injection(
+    science_path: Path, science_uri: str,
+    area_path: Path, area_uri: str,
+    gain_path: Path, gain_uri: str,
+    science_sha: str, area_sha: str, gain_sha: str,
+    gain_provenance_link: dict, science_metadata: dict,
+    out_dir: Path,
+) -> dict:
+    """Run real-data Jy injection with photon noise derived from the linked abs-gain map.
+
+    The provenance-derived conversion is explicitly pending independent human
+    review. This exploratory opt-in is never labelled human-verified.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     flag_bits, flag_names = policy_mask("conservative-photometry")
     stamp_size = 11
-    with fits.open(science_path, memmap=True) as science, fits.open(area_path, memmap=True) as area_file:
-        image = np.asarray(science["IMAGE"].data, dtype=float)
+    with (
+        fits.open(science_path, memmap=True) as science,
+        fits.open(area_path, memmap=True) as area_file,
+        fits.open(gain_path, memmap=True, checksum=True) as gain_file,
+    ):
+        image_hdu = science["IMAGE"]
+        image = np.asarray(image_hdu.data, dtype=float)
+        image_header = image_hdu.header.copy()
         variance = np.asarray(science["VARIANCE"].data, dtype=float)
         flags = np.asarray(science["FLAGS"].data)
         background = np.asarray(science["ZODI"].data, dtype=float)
@@ -352,7 +366,6 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         area_values = np.asarray(area_hdu.data, dtype=float)
         area_unit = str(area_hdu.header.get("BUNIT", "")).strip().lower().replace(" ", "")
         if area_unit in {"arcsec2", "arcsec**2", "arcsec^2"}:
-            # 1 arcsec = pi/(180*3600) radians; square for pixel solid angle.
             omega_sr = area_values * (np.pi / (180.0 * 3600.0)) ** 2
         elif area_unit in {"sr", "steradian", "steradians"}:
             omega_sr = area_values
@@ -362,17 +375,77 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
             )
         if image.shape != variance.shape or image.shape != flags.shape or image.shape != omega_sr.shape:
             raise ValueError("IMAGE, VARIANCE, FLAGS and solid-angle map must be pixel-aligned")
+        gain_hdu = next(
+            h for h in gain_file
+            if h.data is not None and np.asarray(h.data).ndim == 2
+        )
+        gain_bunit = str(gain_hdu.header.get("BUNIT", "")).strip()
+        gain_detector = normal_detector(
+            gain_hdu.header.get("DETECTOR", gain_file[0].header.get("DETECTOR"))
+        )
+        if gain_detector != science_metadata.get("detector"):
+            raise ValueError("absolute-gain detector does not match the science detector")
+        if not gain_bunit:
+            raise ValueError("absolute-gain map does not declare BUNIT")
+        if not gain_provenance_link:
+            raise ValueError("source Poisson modelling requires an exact provenance_input link")
+
+    exposure_time_s = float(science_metadata.get("exposure_time_s"))
+    if not np.isfinite(exposure_time_s) or exposure_time_s <= 0:
+        raise ValueError("science archive metadata does not provide a valid exposure time")
+    if not science_metadata.get("observation_id"):
+        raise ValueError("science MEF is missing OBSID required to bind the electron calibration")
+
+    from research_discovery.spherex.coordinate_transform import detector_origin_offset
+    from research_discovery.spherex.electron_conversion import derive_electrons_per_image_unit
+    origin_xy = detector_origin_offset(image_header)
+    electrons_per_image_unit = derive_electrons_per_image_unit(
+        calibration_path=gain_path,
+        expected_sha256=gain_sha,
+        detector=science_metadata["detector"],
+        calibration_bunit=gain_bunit,
+        exposure_time_s=exposure_time_s,
+        origin_xy=origin_xy,
+        image_shape=image.shape,
+        science_image_unit=str(image_header.get("BUNIT", "")),
+    )
+    electron_record = {
+        "verification_status": "derived_pending_independent_review",
+        "review_status": "pending",
+        "derived_by": "CHRONOS provenance-aware automated evaluation",
+        "derived_utc": datetime.now(timezone.utc).isoformat(),
+        "calibration_product": "abs_gain_matrix",
+        "calibration_bunit": gain_bunit,
+        "exposure_time_s": exposure_time_s,
+        "science_file_sha256": science_sha,
+        "science_native_file_sha256": science_sha,
+        "science_observation_id": str(science_metadata["observation_id"]),
+        "science_source_uri": science_uri,
+        "detector": str(science_metadata["detector"]),
+        "image_unit": str(image_header.get("BUNIT", "")),
+        "calibration_uri": gain_uri,
+        "calibration_file_path": str(gain_path),
+        "calibration_sha256": gain_sha,
+        "conversion_method": (
+            "G_abs has units (MJy/sr)/(electron/s). For each valid detector "
+            "pixel, electrons per MJy/sr IMAGE unit = exposure_time_s / G_abs. "
+            "Source Poisson draws are divided by this conversion map; variance "
+            "is updated in IMAGE units. Non-positive or non-finite gain pixels "
+            "remain invalid and are excluded, never interpolated."
+        ),
+        "provenance_link": gain_provenance_link,
+    }
 
     # The first trial used a fixed geometric centre, which fell on a quality-mask
-    # boundary. Select the nearest valid native-detector location instead. The
-    # complete ePSF footprint and the 100-pixel injection zone are checked
-    # before extracting the position-dependent ePSF.
+    # boundary. Select the nearest valid native-detector location instead.
     from scipy.ndimage import minimum_filter
     quality = (
         np.isfinite(variance) & (variance > 0)
         & np.isfinite(omega_sr) & (omega_sr > 0)
         & ((flags.astype(np.uint64) & np.uint64(flag_bits)) == 0)
         & np.isfinite(background)
+        & np.isfinite(electrons_per_image_unit)
+        & (electrons_per_image_unit > 0)
     )
     footprint_good = minimum_filter(
         quality.astype(np.uint8), size=(stamp_size, stamp_size),
@@ -388,7 +461,7 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
     )
     candidates = np.argwhere(safe_zone)
     if not len(candidates):
-        raise ValueError("No fully valid native ePSF footprint with a 100-pixel injection zone exists.")
+        raise ValueError("No full native ePSF footprint with valid image, area, flags and gain exists.")
     target_y, target_x = (height - 1) / 2.0, (width - 1) / 2.0
     distance2 = (
         (candidates[:, 0] - target_y) ** 2
@@ -419,20 +492,15 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
     local_var = variance[sl]
     local_omega = omega_sr[sl]
     local_flags = flags[sl].astype(np.uint64)
+    local_conversion = electrons_per_image_unit[sl]
     good = (
         np.isfinite(local_var) & (local_var > 0)
         & np.isfinite(local_omega) & (local_omega > 0)
         & ((local_flags & np.uint64(flag_bits)) == 0)
+        & np.isfinite(local_conversion) & (local_conversion > 0)
     )
     if not good.all():
-        raise ValueError(
-            "Selected PSF reference footprint unexpectedly failed the prior validity scan; "
-            "no interpolation or mask relaxation was applied."
-        )
-    # In MJy/sr pixels the point-source template is ePSF / pixel-solid-angle.
-    # Use that same template both for the local inverse-variance depth estimate
-    # and for the SNR filter, rather than filtering surface brightness with a
-    # flux-normalized ePSF alone.
+        raise ValueError("Selected PSF reference footprint failed the strict calibration validity scan.")
     detection_template = psf / local_omega
     matched_filter_information = float(np.sum((detection_template ** 2) / local_var))
     if not np.isfinite(matched_filter_information) or matched_filter_information <= 0:
@@ -447,10 +515,13 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         solid_angle_sr_map=omega_sr, flux_unit="Jy",
         psf_reference_xy=(x_ref, y_ref), psf_region_radius=100.0,
         background=background, detection_psf=detection_template,
+        electrons_per_image_unit=electrons_per_image_unit,
+        electron_calibration_record=electron_record,
+        allow_unreviewed_electron_calibration=True,
     )
     result["evaluation_type"] = (
-        "real Level-2 single-exposure Jy injection/recovery using an archive-linked ePSF "
-        "and a detector-matched solid-angle calibration product"
+        "real Level-2 single-exposure Jy injection/recovery with position-dependent ePSF, "
+        "pixel solid angle and provenance-derived source Poisson noise"
     )
     result["calibrated_flux_definition"] = "Integrated source flux density in Jy; IMAGE is MJy/sr and pixel solid angle is converted from arcsec^2 to sr."
     result["local_reference_5sigma_sensitivity_jy"] = five_sigma_jy
@@ -467,8 +538,18 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         "corrected_stamp_sha256": sha256(physical_psf_path),
     })
     result["psf_interpolation_correction"] = psf_correction
+    result["electron_calibration_derivation"] = {
+        "record": electron_record,
+        "absolute_gain_uri": gain_uri,
+        "absolute_gain_sha256": gain_sha,
+        "gain_bunit": gain_bunit,
+        "conversion_map_shape": list(electrons_per_image_unit.shape),
+        "conversion_map_valid_fraction": float(np.mean(np.isfinite(electrons_per_image_unit) & (electrons_per_image_unit > 0))),
+        "independent_review_status": "pending",
+        "explicit_exploratory_opt_in": True,
+    }
     result["psf_reference_selection"] = {
-        "selection_method": "nearest-to-detector-centre position with a fully valid native ePSF footprint and 100-pixel injection zone",
+        "selection_method": "nearest-to-detector-centre position with fully valid native ePSF, area, gain and 100-pixel injection zone",
         "reference_x": x_ref, "reference_y": y_ref,
         "quality_valid_fraction_in_image": float(quality.mean()),
         "valid_reference_position_count": int(len(candidates)),
@@ -478,31 +559,36 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         "science_native_uri": science_uri, "science_sha256": science_sha,
         "solid_angle_native_uri": area_uri, "solid_angle_sha256": area_sha,
         "solid_angle_provenance_status": "detector-matched auxiliary calibration product; not represented as a direct input-plane link",
+        "absolute_gain_native_uri": gain_uri, "absolute_gain_sha256": gain_sha,
+        "absolute_gain_provenance_link": gain_provenance_link,
         "epsf_extraction": epsf_meta,
     }
     result["flag_policy"] = {"name": "conservative-photometry", "excluded_flag_names": list(flag_names), "excluded_flag_mask": int(flag_bits)}
     result["limits"] = [
-        "One real M101 D2 DR1 exposure; this is not a multi-field or time-domain benchmark.",
-        "Deterministic injected source signals are added to the measured real image; source Poisson noise is not added because an independently signed electron-conversion record is absent.",
+        "One real D2 DR1 exposure; this is not a multi-field or time-domain benchmark.",
+        "Source Poisson noise is simulated from a per-pixel conversion derived from the exact provenance-linked absolute-gain map; the derivation remains pending independent human review.",
         "The injected sources are visible to this evaluation and the seed is not held by an independent custodian; this is not a blind benchmark.",
-        "Sensitivity is computed locally from the observed VARIANCE, native ePSF and detector pixel solid-angle map.",
+        "Sensitivity is computed locally from observed VARIANCE, the native ePSF and the detector pixel solid-angle map; it is a pre-injection nominal sensitivity.",
         "This is an exploratory standalone matched-filter test, not the Session 07 DEEPS SNR baseline and not the four-method CHRONOS comparison.",
         "The solid-angle map is a detector-matched archive calibration product; it is not asserted to be a direct spherex.provenance_input child of this science plane.",
-        "The position-dependent matched filter uses the pixel-area map at each tested source location; its validity is limited to the selected local PSF zone.",
+        "Invalid absolute-gain pixels remain non-finite in the conversion map and are excluded; no calibration pixel is interpolated or filled.",
     ]
-    out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / "calibrated_jy_injection_recovery.json"
     output.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
     return {
-        "status": "completed", "output": str(output),
+        "status": "completed",
+        "output": str(output),
         "five_sigma_sensitivity_jy": five_sigma_jy,
         "flux_levels_jy": levels_jy,
         "flux_summary": result.get("flux_summary"),
         "new_unmatched_peak_summary": result.get("new_unmatched_peak_summary"),
         "n_baseline_detections": result.get("n_baseline_detections"),
         "psf_sha256": epsf_meta.get("output_sha256"),
+        "source_photon_noise": result.get("source_photon_noise"),
+        "electron_calibration_derivation": result.get("electron_calibration_derivation"),
         "limitations": result["limits"],
     }
+
 
 
 def candidate_sort_key(uri: str, wanted_date: str | None):
@@ -792,7 +878,9 @@ def main():
             calibrated_injection = run_calibrated_jy_injection(
                 science_path, science_uri,
                 Path(chosen_area["local_path"]), chosen_area["uri"],
-                science["sha256"], chosen_area["sha256"],
+                Path(chosen_gain["local_path"]), chosen_gain["uri"],
+                science["sha256"], chosen_area["sha256"], chosen_gain["sha256"],
+                provenance_links["absolute_gain"], science,
                 args.out / "calibrated_injection",
             )
         except Exception as exc:
@@ -860,6 +948,10 @@ def main():
     # A REVIEW_REQUIRED scientific pairing is retained as an explicit, auditable outcome.
     if not chosen_wcs or not chosen_area or not chosen_gain:
         raise SystemExit("One or more required detector calibration families were not retrieved; see artifact manifest.")
+    if (audit_report.get("calibration_compatibility") or {}).get("status") != "compatible":
+        raise SystemExit("Native MEF calibration compatibility did not pass; see audit report.")
+    if calibrated_injection.get("status") != "completed":
+        raise SystemExit("Calibrated Jy injection/recovery did not complete; see field summary.")
 
 
 if __name__ == "__main__":
