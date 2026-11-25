@@ -238,3 +238,83 @@ def test_native_source_photometry_rejects_tampered_audit_file_bytes(tmp_path):
             code_commit="1" * 40, output_dir=tmp_path / "tampered-audit",
             epsf_extractor=_fake_epsf_extractor,
         )
+
+
+
+def test_native_source_photometry_batch_assembles_two_real_product_epochs(tmp_path):
+    from research_discovery.spherex.source_photometry import (
+        assemble_source_photometry_series,
+        extract_source_photometry,
+    )
+
+    files, product, source, compatibility = _photometry_inputs(tmp_path)
+    first = extract_source_photometry(
+        **files, product_record=product, source_record=source,
+        native_mef_audit_sha256="b" * 64,
+        compatibility_decision=compatibility,
+        code_commit="1" * 40, output_dir=tmp_path / "out-1",
+        epsf_extractor=_fake_epsf_extractor,
+    )
+
+    science_2_path = tmp_path / "science-epoch-2.fits"
+    with fits.open(files["science_file"]["local_path"], memmap=False) as hdul:
+        hdul["IMAGE"].header["OBSID"] = "OBS-2"
+        hdul.writeto(science_2_path)
+    files_2 = dict(files)
+    files_2["science_file"] = _record(science_2_path)
+    product_2 = {
+        **product,
+        "archive_product_id": product["archive_product_id"] + "-epoch-2",
+        "observation_id": "OBS-2",
+        "mjd": 60001.0,
+    }
+    compatibility_2 = {
+        **compatibility,
+        "sha256": "c" * 64,
+        "science_sha256": files_2["science_file"]["sha256"],
+    }
+    second = extract_source_photometry(
+        **files_2, product_record=product_2, source_record=source,
+        native_mef_audit_sha256="d" * 64,
+        compatibility_decision=compatibility_2,
+        code_commit="1" * 40, output_dir=tmp_path / "out-2",
+        epsf_extractor=_fake_epsf_extractor,
+    )
+
+    combined = assemble_source_photometry_series(
+        [first, second],
+        minimum_epochs=2,
+        verify_files=True,
+        output_path=tmp_path / "verified-series.json",
+    )
+    assert combined["series_status"] == "verified_multi_epoch_series"
+    assert combined["accepted_measurement_count"] == 2
+    assert combined["excluded_measurement_count"] == 0
+    series = combined["verified_source_timeseries"]["sources"][0]
+    summary = series["time_series_summary"]
+    assert summary["epoch_count"] == 2
+    assert summary["distinct_mjd_count"] == 2
+    assert summary["baseline_days"] == pytest.approx(1.0)
+    assert summary["usable_multi_epoch_series"] is True
+    assert len(combined["input_extraction_results"]) == 2
+    assert Path(combined["output_path"]).is_file()
+
+
+def test_native_source_photometry_batch_rejects_mixed_source_identity(tmp_path):
+    from research_discovery.spherex.source_photometry import (
+        assemble_source_photometry_series,
+        extract_source_photometry,
+    )
+
+    files, product, source, compatibility = _photometry_inputs(tmp_path)
+    result = extract_source_photometry(
+        **files, product_record=product, source_record=source,
+        native_mef_audit_sha256="b" * 64,
+        compatibility_decision=compatibility,
+        code_commit="1" * 40, output_dir=tmp_path / "out",
+        epsf_extractor=_fake_epsf_extractor,
+    )
+    other = json.loads(json.dumps(result))
+    other["sources"][0]["source_id"] = "OTHER-SOURCE"
+    with pytest.raises(ValueError, match="different source identities"):
+        assemble_source_photometry_series([result, other])

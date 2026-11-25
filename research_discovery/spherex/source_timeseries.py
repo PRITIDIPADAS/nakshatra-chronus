@@ -591,6 +591,14 @@ def assemble_source_timeseries(
         }
         if n_pixels is not None:
             row["n_pixels"] = n_pixels
+        if measurement.get("extraction_configuration_sha256") is not None:
+            measurement_config_sha = _require_sha(
+                measurement.get("extraction_configuration_sha256"),
+                f"measurement {measurement_id} extraction configuration SHA-256",
+            )
+            if measurement_config_sha != extraction_config_sha:
+                raise ValueError(f"measurement {measurement_id} uses a different extraction configuration")
+            row["extraction_configuration_sha256"] = measurement_config_sha
         if "quality_policy_sha256" in measurement:
             row["quality_policy_sha256"] = measurement["quality_policy_sha256"]
         validate_science_wavelength(row, index=index)

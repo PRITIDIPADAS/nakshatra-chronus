@@ -10,7 +10,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -389,7 +389,11 @@ def extract_source_photometry(
         "variance_model": "delivered_Level2_VARIANCE_as_known_diagonal_covariance",
         "solid_angle_conversion": "arcsec2_to_sr_before_integrated_Jy_fit",
         "max_reduced_chi2": float(max_reduced_chi2),
-        "psf_physicality": psf_physicality,
+        "psf_physicality_policy": {
+            "method": "clip_bounded_negative_interpolation_overshoot_then_renormalize",
+            "max_negative_peak_fraction": 1.0e-3,
+            "max_negative_total_flux_fraction": 1.0e-3,
+        },
     }
     config_sha = hashlib.sha256(json.dumps(configuration, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     measurement_seed = "|".join((source_id, product_id, observation_id, detector, str(pixel_x), str(pixel_y)))
@@ -405,6 +409,7 @@ def extract_source_photometry(
         "flux_unit": "Jy",
         "fit_status": "success" if valid else "review_required",
         "n_pixels": fit["n_pixels"],
+        "extraction_configuration_sha256": config_sha,
         "valid": valid,
         "pixel_valid": True,
         "pixel_index": {"x": pixel_x, "y": pixel_y},
@@ -481,3 +486,187 @@ def extract_source_photometry(
     result["output_path"] = str(output_path)
     output_path.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
     return result
+
+
+def assemble_source_photometry_series(
+    extraction_results: Sequence[Mapping[str, Any]],
+    *,
+    minimum_epochs: int = 2,
+    verify_files: bool = True,
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Combine native per-exposure fits into one provenance-verified source series.
+
+    Each input must be the complete result from extract_source_photometry for
+    the same catalogue source. Failed fits remain in an explicit exclusion list;
+    only successful, quality-passing measurements enter the assembled series.
+    The assembler never turns a single exposure into a multi-epoch time series.
+    """
+    if not isinstance(extraction_results, (list, tuple)) or not extraction_results:
+        raise ValueError("at least one native source-photometry result is required")
+    if (
+        isinstance(minimum_epochs, bool)
+        or int(minimum_epochs) != minimum_epochs
+        or minimum_epochs < 2
+    ):
+        raise ValueError("minimum_epochs must be an integer of at least two")
+
+    accepted_products: list[dict[str, Any]] = []
+    accepted_measurements: list[dict[str, Any]] = []
+    excluded_measurements: list[dict[str, Any]] = []
+    result_bindings: list[dict[str, Any]] = []
+    product_ids: set[str] = set()
+    measurement_ids: set[str] = set()
+    observation_keys: set[tuple[str, str, str]] = set()
+
+    first_source: dict[str, Any] | None = None
+    first_catalogue: dict[str, Any] | None = None
+    first_extractor: dict[str, Any] | None = None
+
+    for index, raw in enumerate(extraction_results):
+        if not isinstance(raw, Mapping):
+            raise ValueError(f"extraction result {index} must be an object")
+        if raw.get("schema") != "chronos-spherex-source-photometry/1.0":
+            raise ValueError(f"extraction result {index} has an unsupported source-photometry schema")
+        if str(raw.get("dataset_class", "")).lower() != "real":
+            raise ValueError(f"extraction result {index} is not explicitly labelled real")
+
+        sources = raw.get("sources")
+        products = raw.get("products")
+        measurements = raw.get("measurements")
+        if not isinstance(sources, list) or len(sources) != 1:
+            raise ValueError(f"extraction result {index} must contain exactly one source")
+        if not isinstance(products, list) or len(products) != 1:
+            raise ValueError(f"extraction result {index} must contain exactly one native product")
+        if not isinstance(measurements, list) or len(measurements) != 1:
+            raise ValueError(f"extraction result {index} must contain exactly one measurement")
+        source = dict(sources[0])
+        product = dict(products[0])
+        measurement = dict(measurements[0])
+        catalogue = raw.get("source_catalogue")
+        extractor = raw.get("extraction_method")
+        if not isinstance(catalogue, Mapping) or not isinstance(extractor, Mapping):
+            raise ValueError(f"extraction result {index} is missing catalogue or extractor provenance")
+
+        if first_source is None:
+            first_source = source
+            first_catalogue = dict(catalogue)
+            first_extractor = dict(extractor)
+        else:
+            if source != first_source:
+                raise ValueError("cannot combine measurements for different source identities or catalogue records")
+            if dict(catalogue) != first_catalogue:
+                raise ValueError("source-photometry results do not share one exact source-catalogue file record")
+            for key in ("name", "version", "code_commit", "configuration_sha256"):
+                if extractor.get(key) != first_extractor.get(key):
+                    raise ValueError(f"source-photometry results use different extraction {key} values")
+
+        product_id = str(product.get("archive_product_id", "")).strip()
+        observation_id = str(product.get("observation_id", "")).strip()
+        detector = str(product.get("detector", "")).upper().strip()
+        release = str(product.get("release", "")).upper().strip()
+        measurement_id = str(measurement.get("measurement_id", "")).strip()
+        if not all((product_id, observation_id, detector, release, measurement_id)):
+            raise ValueError(f"extraction result {index} lacks product, observation, detector, release or measurement identity")
+        if product_id in product_ids:
+            raise ValueError(f"duplicate archive product in source-photometry batch: {product_id}")
+        if measurement_id in measurement_ids:
+            raise ValueError(f"duplicate measurement ID in source-photometry batch: {measurement_id}")
+        observation_key = (observation_id, detector, release)
+        if observation_key in observation_keys:
+            raise ValueError(f"duplicate observation/detector/release in source-photometry batch: {observation_key}")
+        if measurement.get("source_id") != first_source.get("source_id"):
+            raise ValueError(f"measurement {measurement_id} does not belong to the batch source")
+        if measurement.get("archive_product_id") != product_id:
+            raise ValueError(f"measurement {measurement_id} does not reference its enclosing archive product")
+
+        claimed_digest = str(raw.get("output_manifest_sha256", "")).lower()
+        digest_payload = dict(raw)
+        digest_payload.pop("output_manifest_sha256", None)
+        digest_payload.pop("output_path", None)
+        actual_digest = hashlib.sha256(
+            json.dumps(
+                digest_payload, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False, default=str,
+            ).encode("utf-8")
+        ).hexdigest()
+        if len(claimed_digest) != 64 or claimed_digest != actual_digest:
+            raise ValueError(f"extraction result {index} output manifest digest does not match its contents")
+
+        product_ids.add(product_id)
+        measurement_ids.add(measurement_id)
+        observation_keys.add(observation_key)
+        result_bindings.append({
+            "archive_product_id": product_id,
+            "measurement_id": measurement_id,
+            "output_manifest_sha256": actual_digest,
+        })
+        if measurement.get("valid") is True and measurement.get("fit_status") == "success":
+            accepted_products.append(product)
+            accepted_measurements.append(measurement)
+        else:
+            excluded_measurements.append({
+                "archive_product_id": product_id,
+                "observation_id": observation_id,
+                "measurement_id": measurement_id,
+                "quality_flags": list(measurement.get("quality_flags") or []),
+                "fit_diagnostics": measurement.get("fit_diagnostics"),
+                "reason": "native source fit did not pass its frozen quality checks",
+                "output_manifest_sha256": actual_digest,
+            })
+
+    if first_source is None or first_catalogue is None or first_extractor is None:
+        raise ValueError("source-photometry batch contains no usable provenance records")
+
+    verified_series = None
+    series_status = "no_usable_measurements"
+    if accepted_measurements:
+        manifest = {
+            "schema": "chronos-spherex-source-photometry/1.0",
+            "dataset_class": "real",
+            "extraction_method": first_extractor,
+            "source_catalogue": first_catalogue,
+            "sources": [first_source],
+            "products": accepted_products,
+            "measurements": accepted_measurements,
+        }
+        verified_series = assemble_source_timeseries(
+            manifest, minimum_epochs=minimum_epochs, verify_files=verify_files
+        )
+        source_summary = verified_series["sources"][0]["time_series_summary"]
+        series_status = (
+            "verified_multi_epoch_series"
+            if source_summary["usable_multi_epoch_series"]
+            else "verified_measurements_but_insufficient_independent_epochs"
+        )
+
+    combined = {
+        "schema": "chronos-spherex-source-photometry-batch/1.0",
+        "dataset_class": "real",
+        "source_id": first_source["source_id"],
+        "extraction_method": first_extractor,
+        "source_catalogue": first_catalogue,
+        "input_extraction_results": result_bindings,
+        "accepted_measurement_count": len(accepted_measurements),
+        "excluded_measurement_count": len(excluded_measurements),
+        "excluded_measurements": excluded_measurements,
+        "series_status": series_status,
+        "verified_source_timeseries": verified_series,
+        "scientific_boundary": [
+            "Each accepted measurement is bound to its exact native science, spectral-WCS, ePSF and solid-angle product bytes.",
+            "A series is usable only when the assembled source has the requested number of distinct observation/MJD epochs.",
+            "This assembler verifies submitted photometry and provenance; it does not independently rerun the pixel extractor or validate source classification.",
+        ],
+    }
+    combined["batch_manifest_sha256"] = hashlib.sha256(
+        json.dumps(
+            combined, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False, default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+    if output_path is not None:
+        destination = Path(output_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        combined["output_path"] = str(destination)
+        destination.write_text(json.dumps(combined, indent=2, default=str), encoding="utf-8")
+    return combined
