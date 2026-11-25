@@ -67,7 +67,7 @@ The research_discovery/validation/injection_recovery.py path normalizes the supp
 
 A numeric gain by itself is rejected. The signed-off electron-calibration-record must identify the exact science-file SHA-256, OBSID, detector, IMAGE unit, exact calibration URI and local calibration-file path/hash, plus the derivation method and sign-off metadata. The CLI checks the science identity and re-hashes the local calibration bytes before allowing source Poisson noise.
 
-Required record fields:
+The machine-readable contract is research_discovery/spherex/electron_calibration_record.schema.json. Required record fields:
 
     {
       "verification_status": "verified",
