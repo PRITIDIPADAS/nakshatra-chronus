@@ -171,6 +171,10 @@ def _audit_proof(science: Mapping[str, Any], calibration: Mapping[str, Any]):
         "calibration_audit_metadata": cal_meta,
         "solid_angle_uri": area.get("uri"),
         "warning": "This is metadata and file-integrity compatibility, not proof of empirical detector performance.",
+        "review_reasons": [
+            {"check": name, "status": item.get("status"), "reason": item.get("reason")}
+            for name, item in checks.items() if item.get("status") != "pass"
+        ],
     }
 
 
