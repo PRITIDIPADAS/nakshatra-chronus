@@ -268,7 +268,7 @@ def test_observation_planner_labels_unverified_feasibility_and_prior_sensitivity
     assert result["recommended"]["measurement"]["wavelength_um"] == 3.0
 
 
-def test_observation_planner_preserves_verified_external_feasibility_record():
+def test_observation_planner_does_not_promote_unsigned_external_feasibility_record():
     from chronos_addons.planner import plan_observations
 
     candidate = {
@@ -286,13 +286,17 @@ def test_observation_planner_preserves_verified_external_feasibility_record():
             "checked_utc": "2026-11-25T10:00:00Z",
             "window_start_utc": "2027-02-01T00:00:00Z",
             "window_end_utc": "2027-02-01T00:30:00Z",
+            "calculator": "visibility-service-v2",
+            "query_id": "VIS-123",
+            "query_parameters": {"target": "candidate-123", "instrument": "D2"},
+            "evidence_sha256": "c" * 64,
             "constraints": {"target_altitude_deg": 35.0},
         },
     }
     result = plan_observations([candidate])
-    assert result["recommendation_status"] == "forecast_ranked_feasibility_verified"
-    assert result["recommended"]["feasibility"]["source_uri"] == candidate["feasibility"]["source_uri"]
-    assert result["recommended"]["feasibility"]["window"]["end_utc"] > result["recommended"]["feasibility"]["window"]["start_utc"]
+    assert result["recommendation_status"] == "forecast_ranked_feasibility_unverified"
+    assert result["recommended"]["feasibility"]["status"] == "unverified"
+    assert result["recommended"]["feasibility"]["attestation_verification"]["valid"] is False
 
 
 def test_observation_planner_rejects_malformed_verified_feasibility_timestamp():
