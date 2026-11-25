@@ -174,15 +174,29 @@ async function featureEvolution(){
 async function identity(){
  try{
   needAPI();
-  const x=await call("/identity/associate",{candidate:parse("identity-candidate","Candidate"),catalogue_rows:parse("identity-catalogue","Catalogue"),search_radius_arcsec:10,background_density_per_arcsec2:.001,prior_match_probability:.9});
+  const x=await call("/identity/associate",{
+   candidate:parse("identity-candidate","Candidate"),
+   catalogue_rows:parse("identity-catalogue","Catalogue"),
+   search_radius_arcsec:10,
+   background_density_per_arcsec2:.001,
+   prior_match_probability:.9
+  });
   const cards=x.matches.map(m=>{
    const motion=m.proper_motion_and_parallax||{},survey=m.survey_metadata||{};
-   const astrometry=(motion.proper_motion_interval_years==null?"":fmt(motion.proper_motion_interval_years,2)+" yr baseline · ")+
-    (motion.parallax_applied?"parallax applied":"parallax not applied");
-   const uncertainty="σ position "+fmt(m.combined_sigma_arcsec,3)+" arcsec · parallax σ "+fmt(m.parallax_sigma_arcsec,4)+" arcsec";
-   const surveyLine=[survey.survey,survey.bandpass,survey.angular_resolution_arcsec==null?null:fmt(survey.angular_resolution_arcsec,2)+" arcsec resolution"].filter(Boolean).join(" · ");
-   return '<article class="identity-match"><div class="counter-row"><span>'+esc(m.source_id)+'<small>'+fmt(m.separation_arcsec,2)+' arcsec separation</small></span><b>'+(100*m.association_probability).toFixed(1)+'%</b></div>'+
-    '<p>'+esc(astrometry)+'</p><p>'+esc(uncertainty)+'</p>'+(surveyLine?'<small>'+esc(surveyLine)+'</small>':"")+'</article>';
+   const baseline=motion.proper_motion_interval_years==null?"":fmt(motion.proper_motion_interval_years,2)+" yr epoch baseline";
+   const correction=motion.parallax_applied?
+    "Parallax correction: east "+fmt(motion.parallax_shift_east_mas,3)+" mas, north "+fmt(motion.parallax_shift_north_mas,3)+" mas; Earth baseline "+fmt(motion.parallax_baseline_au,3)+" AU":
+    "No parallax correction applied";
+   const uncertainty="Position σ "+fmt(m.combined_sigma_arcsec,3)+" arcsec; proper-motion σ "+fmt(m.proper_motion_sigma_arcsec,4)+" arcsec; parallax σ "+fmt(m.parallax_sigma_arcsec,4)+" arcsec";
+   const surveyLine=[survey.survey,survey.bandpass,survey.wavelength_range_um,
+    survey.angular_resolution_arcsec==null?null:fmt(survey.angular_resolution_arcsec,2)+" arcsec resolution"].filter(Boolean).join(" · ");
+   const reference=typeof survey.reference_uri==="string"&&survey.reference_uri.startsWith("https://")?
+    '<p><a href="'+esc(survey.reference_uri)+'" target="_blank" rel="noopener">Catalogue reference</a></p>':"";
+   return '<article class="identity-match">'+
+    '<div class="counter-row"><span>'+esc(m.source_id)+'<small>'+fmt(m.separation_arcsec,2)+' arcsec separation · likelihood ratio '+fmt(m.likelihood_ratio,3)+'</small></span><b>'+(100*m.association_probability).toFixed(1)+'%</b></div>'+
+    '<p>'+esc(baseline)+'</p><p>'+esc(correction)+'</p><p>'+esc(uncertainty)+'</p>'+
+    (surveyLine?'<small>'+esc(surveyLine)+'</small>':"")+reference+
+    '</article>';
   }).join("");
   $("identity-result").innerHTML=
    '<div class="counter-row"><span>Association status</span><b>'+esc(x.status)+'</b></div>'+
