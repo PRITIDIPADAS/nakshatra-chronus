@@ -5,7 +5,7 @@ The PSF stamp must be extracted from the matching DR1 ePSF product and
 normalized to unit sum. This tool does not create a fake instrument PSF.
 """
 from __future__ import annotations
-import argparse, csv, json, hashlib
+import argparse, csv, json, hashlib, re
 from pathlib import Path
 import numpy as np
 from scipy.signal import fftconvolve
@@ -109,7 +109,6 @@ def validate_electron_calibration_record(record, *, allow_unreviewed: bool = Fal
     exposure_time = float(record["exposure_time_s"])
     if not np.isfinite(exposure_time) or exposure_time <= 0:
         raise ValueError("calibration record exposure_time_s must be finite and positive")
-    import re
     for key in ("science_file_sha256", "calibration_sha256"):
         if not re.fullmatch(r"[0-9a-fA-F]{64}", str(record[key])):
             raise ValueError(f"{key} must be a 64-character SHA-256 hex digest")
