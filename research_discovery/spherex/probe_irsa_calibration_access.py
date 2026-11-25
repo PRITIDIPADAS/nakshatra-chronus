@@ -109,6 +109,62 @@ def main():
                 "error": f"{type(exc).__name__}: {exc}",
             })
 
+    # IRSA catalogue registry: the guide calls this a TAP "collection",
+    # which may not be the physical ADQL table name.
+    try:
+        catalogues = Irsa.list_catalogs(filter="spherex")
+        report["irsa_catalogues_spherex"] = [str(x) for x in catalogues]
+    except Exception as exc:
+        report["irsa_catalogues_spherex_error"] = f"{type(exc).__name__}: {exc}"
+    try:
+        columns = Irsa.list_columns("spherex_dr1_cal")
+        report["spherex_dr1_cal_columns"] = [
+            {"name": str(getattr(row, "name", "")),
+             "type": str(getattr(row, "type", "")),
+             "description": str(getattr(row, "description", ""))}
+            for row in columns
+        ]
+    except Exception as exc:
+        report["spherex_dr1_cal_columns_error"] = f"{type(exc).__name__}: {exc}"
+
+    # Inspect all artifact classes and the calibration URI families directly.
+    # This detects whether calibrations are exposed by the standard artifact
+    # table even when the separate collection label is not an ADQL table.
+    artifact_queries = {
+        "artifact_product_release_counts": (
+            "SELECT producttype, releasetype, COUNT(*) AS n "
+            "FROM spherex.artifact GROUP BY producttype, releasetype"
+        ),
+        "artifact_spectral_wcs": (
+            "SELECT TOP 20 artifactid, uri, producttype, releasetype, contenttype, "
+            "contentlength, contentchecksum FROM spherex.artifact "
+            "WHERE LOWER(uri) LIKE '%spectral_wcs%'"
+        ),
+        "artifact_solid_angle": (
+            "SELECT TOP 20 artifactid, uri, producttype, releasetype, contenttype, "
+            "contentlength, contentchecksum FROM spherex.artifact "
+            "WHERE LOWER(uri) LIKE '%solid_angle%'"
+        ),
+        "artifact_absolute_gain": (
+            "SELECT TOP 20 artifactid, uri, producttype, releasetype, contenttype, "
+            "contentlength, contentchecksum FROM spherex.artifact "
+            "WHERE LOWER(uri) LIKE '%abs_gain_matrix%'"
+        ),
+        "artifact_calibration_type": (
+            "SELECT TOP 50 artifactid, uri, producttype, releasetype, contenttype, "
+            "contentlength, contentchecksum FROM spherex.artifact "
+            "WHERE LOWER(producttype) LIKE '%cal%' OR LOWER(releasetype) LIKE '%cal%'"
+        ),
+    }
+    report["artifact_queries"] = {}
+    for key, query in artifact_queries.items():
+        try:
+            report["artifact_queries"][key] = table_rows(query)
+        except Exception as exc:
+            report["artifact_queries"][key] = {
+                "query": query, "error": f"{type(exc).__name__}: {exc}"
+            }
+
     report["finished_utc"] = datetime.now(timezone.utc).isoformat()
     (out / "irsa_calibration_probe.json").write_text(
         json.dumps(report, indent=2, default=str), encoding="utf-8"
@@ -125,6 +181,17 @@ def main():
              "columns": item.get("columns"), "error": item.get("error")}
             for item in report["tap_table_probes"]
         ],
+        "irsa_catalogues_spherex": report.get("irsa_catalogues_spherex"),
+        "irsa_catalogues_spherex_error": report.get("irsa_catalogues_spherex_error"),
+        "spherex_dr1_cal_columns": report.get("spherex_dr1_cal_columns"),
+        "spherex_dr1_cal_columns_error": report.get("spherex_dr1_cal_columns_error"),
+        "artifact_query_results": {
+            key: {"row_count": value.get("row_count"),
+                  "columns": value.get("columns"),
+                  "rows": value.get("rows", [])[:3],
+                  "error": value.get("error")}
+            for key, value in report.get("artifact_queries", {}).items()
+        },
         "errors": report["errors"],
         "output": str(out / "irsa_calibration_probe.json"),
     }, indent=2))
