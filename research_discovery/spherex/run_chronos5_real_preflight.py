@@ -74,8 +74,8 @@ def header_info(science_path: Path, table_row: dict) -> dict:
         h = image.header
         primary = hdul[0].header
         detector = str(h.get("DETECTOR", filename.get("det", ""))).strip()
-        version = str(h.get("VERSION", primary.get("VERSION", filename.get("version", ""))).strip()
-        process_date = str(h.get("PROCDATE", primary.get("PROCDATE", filename.get("date", ""))).strip()
+        version = str(h.get("VERSION", primary.get("VERSION", filename.get("version", ""))) or "").strip()
+        process_date = str(h.get("PROCDATE", primary.get("PROCDATE", filename.get("date", ""))) or "").strip()
         obs_id = str(h.get("OBSID", primary.get("OBSID", ""))).strip() or None
         bunit = str(h.get("BUNIT", "")).strip()
         return {
@@ -486,7 +486,8 @@ def main() -> None:
         "archive_manifest_sha256": sha256(manifest_path),
         "archive_manifest_validation": manifest_validation,
         "acceptance_gates": {
-            "calibration_compatible_real_data_sample": "satisfied" if compatible_fields >= 1 and completed_injections >= 1 else "not_satisfied",
+            "calibration_compatible_real_data_pilot": "preliminary_pilot_completed_not_acceptance" if compatible_fields >= 1 and completed_injections >= 1 else "not_satisfied",
+            "full_calibration_compatible_real_data_acceptance_gate": "not_satisfied: this pilot selects one exposure per field and runs a single-band matched-filter check; multi-epoch, multi-field selection-function and four-baseline validation remain required",
             "four_baseline_benchmark": "not_satisfied: this run evaluates the matched-filter SNR baseline only",
             "independently_controlled_blind_benchmark": "not_satisfied: external independent custody of the sealed truth catalogue is absent",
             "population_level_yso_discovery": "not_satisfied: this field preflight does not provide a complete selection function, population denominator, contamination audit or independent catalogue validation",
