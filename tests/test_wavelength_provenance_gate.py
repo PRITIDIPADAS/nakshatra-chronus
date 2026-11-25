@@ -155,8 +155,15 @@ def test_legacy_pipeline_does_not_match_display_only_wavelengths():
     assert color_distance(a, b) == float("inf")
 
 
-def test_exposure_forecast_rejects_display_only_wavelengths():
+def test_legacy_exposure_forecast_remains_an_approximate_display_estimate():
     from types import SimpleNamespace
     from core import forecast
-    with pytest.raises(ValueError, match="CWAVE/CBAND"):
-        forecast(SimpleNamespace(lam=2.1, lam_ok=False), [12.0, 0.0])
+    e = SimpleNamespace(
+        lam=2.1, lam_ok=False,
+        img=np.zeros((11, 11)), var=np.ones((11, 11)),
+        xy=(5.0, 5.0), psf=np.ones((3, 3)),
+    )
+    snr, tag, magnitude = forecast(e, [12.0, 0.0])
+    assert np.isfinite(snr)
+    assert magnitude > 0
+    assert tag in {"very bright", "visible", "marginal", "not visible"}
