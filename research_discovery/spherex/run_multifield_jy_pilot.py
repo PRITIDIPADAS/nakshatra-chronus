@@ -157,11 +157,42 @@ def summarize_field_record(field: dict, summary: dict | None, *, return_code: in
     }
 
 
+def audit_predeclared_field_manifest(records: list[dict]) -> dict:
+    """Require every predeclared field and role exactly once in the aggregate."""
+    expected = {row["name"]: row["role"] for row in FIELDS}
+    names = [str((row.get("field") or {}).get("name") or "") for row in records]
+    counts = {name: names.count(name) for name in set(names)}
+    duplicates = sorted(name for name, count in counts.items() if count > 1)
+    missing = sorted(name for name in expected if counts.get(name, 0) == 0)
+    unexpected = sorted(name for name in counts if name not in expected)
+    role_mismatches = sorted(
+        name for name, role in expected.items()
+        if counts.get(name) == 1
+        and next((row.get("field") or {}).get("role") for row in records
+                 if (row.get("field") or {}).get("name") == name) != role
+    )
+    valid = (
+        len(records) == len(FIELDS)
+        and not duplicates and not missing and not unexpected and not role_mismatches
+    )
+    return {
+        "valid": valid,
+        "expected_field_count": len(FIELDS),
+        "returned_field_count": len(records),
+        "missing_fields": missing,
+        "duplicate_fields": duplicates,
+        "unexpected_fields": unexpected,
+        "role_mismatches": role_mismatches,
+        "field_order": names,
+    }
+
+
 def aggregate_report(records: list[dict], *, started_utc: str,
                      finished_utc: str, code_revision: str | None) -> dict:
     """Aggregate field-level completeness without assuming equal flux thresholds."""
     completed = [row for row in records if row["eligible_for_multi_field_pilot_summary"]]
     failed = [row for row in records if not row["eligible_for_multi_field_pilot_summary"]]
+    field_manifest = audit_predeclared_field_manifest(records)
     results = {
         "schema": SCHEMA,
         "started_utc": started_utc,
@@ -171,6 +202,8 @@ def aggregate_report(records: list[dict], *, started_utc: str,
         "requested_detector": "D2",
         "predeclared_fields": list(FIELDS),
         "field_count_requested": len(FIELDS),
+        "field_count_returned": len(records),
+        "field_manifest_audit": field_manifest,
         "field_count_completed": len(completed),
         "field_count_incomplete": len(failed),
         "field_results": records,
@@ -190,6 +223,7 @@ def aggregate_report(records: list[dict], *, started_utc: str,
             "Flux levels are field-specific multiples of each field's measured local 5-sigma sensitivity; do not pool them as identical absolute flux bins.",
             "Each injection/recovery result is local to one detector position and one native exposure.",
             "Region centers are predeclared and widely separated, but survey overlap and statistical independence are not independently custodian-attested.",
+            "Every predeclared field name and role must appear exactly once; duplicate, missing, unexpected or role-mismatched fields invalidate the aggregate.",
             "Injection truth and random seed are visible to this evaluation; this is not a blind benchmark.",
             "The four CHRONOS methods are not run by this workflow; no comparative advantage is measured.",
             "No source classification or YSO population estimate is produced by a completeness injection test.",
@@ -199,8 +233,11 @@ def aggregate_report(records: list[dict], *, started_utc: str,
         "scientific_gate_status": {
             "single_field_real_data_pilot": "completed" if completed else "not_completed",
             "multi_field_calibrated_jy_evaluation": (
-                "completed_exploratory_for_predeclared_regions" if len(completed) == len(FIELDS)
-                and results_unique_placeholder(completed) else "not_satisfied"
+                "completed_exploratory_for_predeclared_regions"
+                if len(completed) == len(FIELDS)
+                and field_manifest["valid"]
+                and results_unique_placeholder(completed)
+                else "not_satisfied"
             ),
             "independent_blind_four_baseline_benchmark": "not_satisfied",
             "population_level_yso_discovery": "not_satisfied",

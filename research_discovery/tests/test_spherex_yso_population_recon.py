@@ -37,7 +37,7 @@ def test_candidate_query_is_bounded_and_deterministic():
     assert "ORDER BY source_id" in query
 
 
-def test_dr1_exposure_coverage_uses_centre_point_and_optional_full_region_intersection():
+def test_dr1_exposure_coverage_uses_centre_point_and_sia2_full_region_intersection():
     queries = recon.build_region_queries(recon.REGIONS[0])
     query = queries["dr1_level2_exposures"]
     assert "spherex.artifact" in query
@@ -48,28 +48,52 @@ def test_dr1_exposure_coverage_uses_centre_point_and_optional_full_region_inters
     assert "COUNT(" not in query.upper()
     assert "GROUP BY" not in query.upper()
 
-    full_region = queries["dr1_level2_exposures_full_region"]
-    assert "spherex.artifact" in full_region
-    assert "spherex.plane" in full_region
-    assert "1 = INTERSECTS(CIRCLE('ICRS', 65.70000000, 26.00000000, 2.00000), p.poly)" in full_region
-    assert "AND (LOWER(a.uri) LIKE" in full_region
-    for band in recon.DR1_BANDS:
-        assert f"'{band}'" in query
-        assert f"'{band}'" in full_region
+    assert "dr1_level2_exposures_full_region" not in queries
+    assert recon.SIA_COLLECTIONS == (
+        "spherex_dr1", "spherex_dr1_deep", "spherex_qr3", "spherex_qr3_deep"
+    )
 
     source_epoch = queries["candidate_source_exposure_matches"]
     assert f"SELECT TOP {recon.SOURCE_EPOCH_ROW_LIMIT}" in source_epoch
-    assert "FROM spherex.splices s " in source_epoch
-    assert "JOIN spherex.artifact a ON 1 = 1" in source_epoch
-    assert "JOIN spherex.plane p ON p.planeid = a.planeid" in source_epoch
     assert "WHERE CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1" in source_epoch
     assert source_epoch.count("CONTAINS(") == 1
-    assert "AND (" in source_epoch
     assert "s.yso_pub IS NOT NULL" in source_epoch
     assert "LOWER(a.uri) LIKE '%/dr1/level2/%'" in source_epoch
+    assert "LOWER(a.uri) LIKE '%/qr3/level2/%'" in source_epoch
     assert "p.time_bounds_lower" in source_epoch
-    assert "CIRCLE(" not in source_epoch  # Exact cone filtering is performed locally.
+    assert "CIRCLE(" not in source_epoch
 
+
+def test_irsa_sia2_region_footprints_use_pos_circle_and_collection(monkeypatch):
+    calls = []
+    class FakeTable:
+        colnames = ["obs_id", "access_url"]
+        def __iter__(self):
+            return iter([{"obs_id": "OBS-1", "access_url": "https://irsa.example/a.fits"}])
+
+    def fake_query_sia(**kwargs):
+        calls.append(kwargs)
+        return FakeTable()
+
+    monkeypatch.setattr(recon.Irsa, "query_sia", fake_query_sia)
+    region = recon.REGIONS[0]
+    result = recon.query_region_footprints_sia(region, "spherex_dr1_deep")
+    assert calls == [{
+        "pos": (region["ra_deg"], region["dec_deg"], region["radius_deg"]),
+        "collection": "spherex_dr1_deep",
+        "maxrec": recon.COVERAGE_ROW_LIMIT,
+    }]
+    assert result["service"] == "IRSA SIAv2"
+    assert result["release"] == "dr1"
+    assert result["rows"][0]["_chronos_collection"] == "spherex_dr1_deep"
+    assert result["rows"][0]["_chronos_dataset_class"] == "real"
+    assert result["query_complete_below_row_cap"] is True
+
+
+def test_candidate_source_epoch_rows_identify_dr1_qr3_and_unknown_uris():
+    assert recon.release_from_uri("https://irsa.example/spherex/dr1/level2/a.fits") == "dr1"
+    assert recon.release_from_uri("https://irsa.example/spherex/qr3/level2/b.fits") == "qr3"
+    assert recon.release_from_uri("https://irsa.example/unknown/a.fits") == "unknown"
 
 
 def test_source_exposure_cone_filter_handles_ra_wrap_and_deduplicates_source_plane_pairs():
@@ -182,6 +206,12 @@ def test_local_catalogue_summary_reports_exact_counts_when_below_cap(monkeypatch
             ],
         }
     monkeypatch.setattr(recon, "query_rows", fake_query)
+    monkeypatch.setattr(recon, "query_region_footprints_sia", lambda region, collection: {
+        "service": "IRSA SIAv2", "collection": collection,
+        "release": recon.SIA_COLLECTION_RELEASE[collection],
+        "maxrec": recon.COVERAGE_ROW_LIMIT, "row_count": 0,
+        "columns": [], "rows": [], "query_complete_below_row_cap": True,
+    })
     result = recon.inspect_region(recon.REGIONS[0])
     assert result["query_errors"] == {}
     assert result["counts"]["total_catalogue_rows"] == 3
@@ -205,6 +235,12 @@ def test_catalogue_at_query_cap_is_reported_as_lower_bound(monkeypatch):
             return {"query": sql, "row_count": len(rows), "rows": rows}
         return {"query": sql, "row_count": 0, "rows": []}
     monkeypatch.setattr(recon, "query_rows", fake_query)
+    monkeypatch.setattr(recon, "query_region_footprints_sia", lambda region, collection: {
+        "service": "IRSA SIAv2", "collection": collection,
+        "release": recon.SIA_COLLECTION_RELEASE[collection],
+        "maxrec": recon.COVERAGE_ROW_LIMIT, "row_count": 0,
+        "columns": [], "rows": [], "query_complete_below_row_cap": True,
+    })
     result = recon.inspect_region(recon.REGIONS[0])
     assert result["counts"]["catalogue_query_complete"] is False
     assert result["counts"]["total_catalogue_rows"] is None
@@ -216,17 +252,20 @@ def test_query_failures_are_explicit_not_zero_detections(monkeypatch):
     def fail_query(sql):
         raise RuntimeError("test TAP failure")
     monkeypatch.setattr(recon, "query_rows", fail_query)
+    monkeypatch.setattr(recon, "query_region_footprints_sia", lambda region, collection: (_ for _ in ()).throw(RuntimeError("test SIA failure")))
     result = recon.inspect_region(recon.REGIONS[0])
     assert set(result["query_errors"]) == {
         "catalogue_sources", "candidate_sources", "dr1_level2_exposures"
     }
     assert set(result["optional_query_errors"]) == {
-        "dr1_level2_exposures_full_region", "candidate_source_exposure_matches"
+        "candidate_source_exposure_matches"
     }
+    assert set(result["optional_sia_errors"]) == set(recon.SIA_COLLECTIONS)
     assert result["counts"]["dr1_level2_exposures_intersecting_full_region_total"] is None
     assert result["counts"]["candidate_source_exposure_match_rows"] is None
     assert result["counts"]["candidate_source_footprint_matches_measured"] is False
-    assert result["counts"]["dr1_level2_full_region_optional_query_error"]
+    assert result["counts"]["dr1_level2_full_region_optional_query_error"] is not None
+    assert result["counts"]["region_footprint_sia_collection_count_failed"] == len(recon.SIA_COLLECTIONS)
     assert result["counts"]["total_catalogue_rows"] is None
     assert result["counts"]["published_yso_label_rows"] is None
 

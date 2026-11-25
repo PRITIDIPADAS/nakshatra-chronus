@@ -137,3 +137,12 @@ The original software-only status above is superseded by the current, separately
 A separate SPLICES/DR1 reconnaissance completed for five star-forming regions and one high-latitude control. It reports catalogue labels and footprint coverage but does not establish a population rate or discover new YSOs. The six-region calibrated-Jy pilot, blind held-out benchmark, independent astronomical review/reproduction and scientific release gates remain open until separately evidenced.
 
 See [CHRONOS 5 empirical status — 25 November 2026](CHRONOS_5_EMPIRICAL_STATUS_2026-11-25.md) for the precise measurements, archive identities, report hashes, limitations and acceptance-gate table. Do not substitute software-test success, catalogue ML labels or a running GitHub Actions job for those empirical gates.
+
+
+## Archive-coverage update — DR1 + QR3 (25 November 2026)
+
+SPHEREx DR1 and QR3 spectral images are the current uniformly processed set for new work. Regional footprint reconnaissance queries the four IRSA SIAv2 image collections separately: `spherex_dr1`, `spherex_dr1_deep`, `spherex_qr3`, and `spherex_qr3_deep`. Each region uses a SIAv2 POS circle, with per-collection counts, row caps and errors preserved. The existing TAP centre-point query remains a narrower diagnostic and is not represented as full regional coverage.
+
+The source-to-exposure TAP association uses one point-in-polygon predicate in `WHERE`, joins artifact and plane records through their explicit plane ID, and accepts DR1/QR3 Level-2 paths. A source/plane match is geometric coverage only; it is not evidence of extracted-flux validity, usable spectrum quality, sufficient cadence or physical source identity.
+
+The DR1 All-Sky Cube (`spherex_dr1_cube`) is a separate 102-channel spatial-spectral product over the nominal 0.75–5.0 μm range. It is not counted as a sequence of independent temporal exposures. QR2 is not mixed into DR1/QR3 analysis. Collection names and product roles follow the [IRSA SPHEREx Data Access guide](https://irsa.ipac.caltech.edu/spherex-archive-documentation/spherex-data-access/) and [Data Releases guide](https://irsa.ipac.caltech.edu/spherex-archive-documentation/spherex-data-releases/).

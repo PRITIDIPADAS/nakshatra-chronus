@@ -3,7 +3,9 @@
 
 This script does not claim a YSO discovery. It separates published catalogue
 labels from SPLICES machine-learning classes, retains comparison classes, and
-measures SPHEREx DR1 Level-2 archive coverage for the same predeclared fields.
+measures SPHEREx DR1 + QR3 Level-2 archive coverage for the same predeclared fields.
+Full-region footprint intersection uses IRSA SIAv2 POS searches; source-to-exposure
+associations use an ADQL point-in-polygon predicate in WHERE.
 """
 from __future__ import annotations
 
@@ -28,6 +30,18 @@ REGIONS = (
 OUTPUT = Path("data/yso_population_recon")
 CANDIDATE_LIMIT = 5000
 DR1_BANDS = tuple(f"SPHEREx-D{i}" for i in range(1, 7))
+SIA_COLLECTIONS = (
+    "spherex_dr1",
+    "spherex_dr1_deep",
+    "spherex_qr3",
+    "spherex_qr3_deep",
+)
+SIA_COLLECTION_RELEASE = {
+    "spherex_dr1": "dr1",
+    "spherex_dr1_deep": "dr1",
+    "spherex_qr3": "qr3",
+    "spherex_qr3_deep": "qr3",
+}
 
 
 def scalar(value: Any) -> Any:
@@ -53,6 +67,42 @@ def query_rows(query: str) -> dict:
         "columns": list(table.colnames),
         "row_count": len(rows),
         "rows": rows,
+    }
+
+
+def query_region_footprints_sia(region: dict, collection: str) -> dict:
+    """Search SIAv2 spectral-image products whose footprints overlap a region."""
+    if collection not in SIA_COLLECTIONS:
+        raise ValueError(f"unsupported SPHEREx SIAv2 collection: {collection}")
+    position = (
+        float(region["ra_deg"]),
+        float(region["dec_deg"]),
+        float(region["radius_deg"]),
+    )
+    table = Irsa.query_sia(
+        pos=position,
+        collection=collection,
+        maxrec=COVERAGE_ROW_LIMIT,
+    )
+    table = table.to_table() if hasattr(table, "to_table") else table
+    rows = []
+    for row in table:
+        item = {str(name): scalar(row[name]) for name in table.colnames}
+        item["_chronos_collection"] = collection
+        item["_chronos_release"] = SIA_COLLECTION_RELEASE[collection]
+        item["_chronos_dataset_class"] = "real"
+        item["_chronos_region"] = region["name"]
+        rows.append(item)
+    return {
+        "service": "IRSA SIAv2",
+        "pos_circle_deg": list(position),
+        "collection": collection,
+        "release": SIA_COLLECTION_RELEASE[collection],
+        "maxrec": COVERAGE_ROW_LIMIT,
+        "columns": list(table.colnames),
+        "row_count": len(rows),
+        "rows": rows,
+        "query_complete_below_row_cap": len(rows) < COVERAGE_ROW_LIMIT,
     }
 
 
@@ -126,22 +176,6 @@ def build_region_queries(region: dict) -> dict[str, str]:
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
         + ")) ORDER BY p.time_bounds_lower"
     )
-    # Optional full-region coverage: test shape/shape intersection rather
-    # than only testing the region centre. IRSA's SPHEREx ADQL interface
-    # documents INTERSECTS for two geometry regions. Keep this query
-    # non-fatal so an archive-side geometry limitation cannot invalidate
-    # the catalogue and centre-point reconnaissance already returned above.
-    full_region_exposure_sql = (
-        f"SELECT TOP {COVERAGE_ROW_LIMIT} p.planeid, a.uri, p.energy_bandpassname, "
-        "p.time_bounds_lower, p.time_bounds_upper "
-        "FROM spherex.artifact a JOIN spherex.plane p ON p.planeid = a.planeid "
-        "WHERE 1 = INTERSECTS("
-        f"CIRCLE('ICRS', {region['ra_deg']:.8f}, {region['dec_deg']:.8f}, {region['radius_deg']:.5f}), "
-        "p.poly) "
-        "AND (LOWER(a.uri) LIKE '%/dr1/level2/%' AND p.energy_bandpassname IN ("
-        + ", ".join(f"'{band}'" for band in DR1_BANDS)
-        + ")) ORDER BY p.time_bounds_lower"
-    )
     # Optional source-to-exposure coverage: the only spatial predicate is
     # the supported POINT-in-exposure-POLYGON test. A conservative RA/Dec
     # bounding box limits candidate rows to this region; exact great-circle
@@ -177,7 +211,7 @@ def build_region_queries(region: dict) -> dict[str, str]:
         f"AND s.dec BETWEEN {dec_min:.8f} AND {dec_max:.8f} "
         "AND (s.yso_pub IS NOT NULL OR UPPER(s.class_1) LIKE '%YSO%' "
         "OR UPPER(s.stype_ml) LIKE '%YSO%') "
-        "AND LOWER(a.uri) LIKE '%/dr1/level2/%' "
+        "AND (LOWER(a.uri) LIKE '%/dr1/level2/%' OR LOWER(a.uri) LIKE '%/qr3/level2/%') "
         "AND p.energy_bandpassname IN ("
         + ", ".join(f"'{band}'" for band in DR1_BANDS)
         + ")) ORDER BY s.source_id, p.time_bounds_lower"
@@ -186,7 +220,6 @@ def build_region_queries(region: dict) -> dict[str, str]:
         "catalogue_sources": catalogue_sql,
         "candidate_sources": candidate_sql,
         "dr1_level2_exposures": exposure_sql,
-        "dr1_level2_exposures_full_region": full_region_exposure_sql,
         "candidate_source_exposure_matches": source_epoch_sql,
     }
 
@@ -200,6 +233,16 @@ def great_circle_separation_deg(ra1: float, dec1: float,
         + math.cos(d1) * math.cos(d2) * math.cos(r1 - r2)
     )
     return math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+
+
+def release_from_uri(uri: Any) -> str:
+    """Identify DR1/QR3 only when the archive URI explicitly names the release."""
+    value = str(uri or "").lower()
+    if "/dr1/" in value:
+        return "dr1"
+    if "/qr3/" in value:
+        return "qr3"
+    return "unknown"
 
 
 def summarize_candidate_source_epochs(
@@ -235,6 +278,8 @@ def summarize_candidate_source_epochs(
         candidate = candidate_by_id.get(source_id, {})
         accepted = {
             **row,
+            "data_release": release_from_uri(row.get("uri")),
+            "dataset_class": "real",
             "angular_separation_from_region_centre_deg": separation,
             "within_predeclared_region_radius": True,
             "candidate_row_present_in_bounded_query": source_id in candidate_by_id,
@@ -271,6 +316,14 @@ def summarize_candidate_source_epochs(
             "region": region["name"],
             "region_role": region["role"],
             "unique_level2_plane_count": len({row["planeid"] for row in observations}),
+            "unique_release_count": len({
+                row["data_release"] for row in observations
+                if row["data_release"] != "unknown"
+            }),
+            "releases": ";".join(sorted({
+                row["data_release"] for row in observations
+                if row["data_release"] != "unknown"
+            })),
             "unique_observation_count": len({
                 str(row.get("obsid") or "").strip() for row in observations
                 if row.get("obsid") not in (None, "")
@@ -297,7 +350,7 @@ def summarize_candidate_source_epochs(
         "source_epoch_query_at_cap": len(match_rows) >= SOURCE_EPOCH_ROW_LIMIT,
         "candidate_query_complete": len(candidate_rows) < CANDIDATE_LIMIT,
         "interpretation": (
-            "A match means the catalogue source coordinate lies inside a returned DR1 Level-2 exposure polygon. "
+            "A match means the catalogue source coordinate lies inside a returned DR1 or QR3 Level-2 exposure polygon. "
             "It is a geometric archive-coverage match, not proof of valid extracted flux, spectrum quality, "
             "usable epoch cadence, or an astrophysical classification."
         ),
@@ -401,15 +454,30 @@ def inspect_region(region: dict) -> dict:
                 "row_count": None,
                 "rows": [],
             }
-            if name in {
-                "dr1_level2_exposures_full_region",
-                "candidate_source_exposure_matches",
-            }:
+            if name == "candidate_source_exposure_matches":
                 error_record["optional"] = True
                 optional_query_errors[name] = error_record["error"]
             else:
                 error_record["optional"] = False
             query_results[name] = error_record
+
+    optional_sia_errors = {}
+    for collection in SIA_COLLECTIONS:
+        name = f"region_footprints_sia_{collection}"
+        try:
+            query_results[name] = query_region_footprints_sia(region, collection)
+        except Exception as exc:
+            optional_sia_errors[collection] = f"{type(exc).__name__}: {exc}"
+            query_results[name] = {
+                "service": "IRSA SIAv2",
+                "collection": collection,
+                "release": SIA_COLLECTION_RELEASE[collection],
+                "maxrec": COVERAGE_ROW_LIMIT,
+                "row_count": None,
+                "rows": [],
+                "error": optional_sia_errors[collection],
+                "optional": True,
+            }
 
     catalogue_result = query_results["catalogue_sources"]
     catalogue_rows = catalogue_result.get("rows", [])
@@ -544,33 +612,64 @@ def inspect_region(region: dict) -> dict:
         "region_center_point_inside_exposure_polygon"
     )
 
-    full_region_result = query_results["dr1_level2_exposures_full_region"]
-    full_region_rows = full_region_result.get("rows", [])
-    full_region_error = full_region_result.get("error")
-    full_region_by_band = {}
-    if not full_region_error:
-        for row in full_region_rows:
-            band = str(row.get("energy_bandpassname") or "UNKNOWN")
-            record = full_region_by_band.setdefault(band, {
-                "exposure_rows": 0, "first_time": None, "last_time": None,
-            })
-            record["exposure_rows"] += 1
-            lo, hi = row.get("time_bounds_lower"), row.get("time_bounds_upper")
-            record["first_time"] = min(record["first_time"], lo) if record["first_time"] is not None else lo
-            record["last_time"] = max(record["last_time"], hi) if record["last_time"] is not None else hi
-    counts["dr1_level2_exposures_intersecting_full_region_by_band"] = (
-        None if full_region_error else full_region_by_band
+    full_region_counts = {}
+    full_region_rows = []
+    dr1_collections = ("spherex_dr1", "spherex_dr1_deep")
+    for collection in SIA_COLLECTIONS:
+        result = query_results[f"region_footprints_sia_{collection}"]
+        if result.get("error"):
+            continue
+        rows = result.get("rows", [])
+        full_region_rows.extend(rows)
+        full_region_counts[collection] = {
+            "release": SIA_COLLECTION_RELEASE[collection],
+            "product_rows": len(rows),
+            "row_cap": COVERAGE_ROW_LIMIT,
+            "query_complete_below_row_cap": len(rows) < COVERAGE_ROW_LIMIT,
+        }
+    successful_collections = [
+        collection for collection in SIA_COLLECTIONS
+        if not query_results[f"region_footprints_sia_{collection}"].get("error")
+    ]
+    counts["region_footprint_sia_collection_count_requested"] = len(SIA_COLLECTIONS)
+    counts["region_footprint_sia_collection_count_succeeded"] = len(successful_collections)
+    counts["region_footprint_sia_collection_count_failed"] = len(SIA_COLLECTIONS) - len(successful_collections)
+    counts["region_intersecting_spectral_image_rows_by_collection"] = (
+        full_region_counts if successful_collections else None
+    )
+    counts["region_intersecting_spectral_image_rows_total"] = (
+        len(full_region_rows) if successful_collections else None
+    )
+    counts["region_intersecting_spectral_image_queries_complete_below_row_cap"] = (
+        len(successful_collections) == len(SIA_COLLECTIONS)
+        and all(item["query_complete_below_row_cap"] for item in full_region_counts.values())
+    )
+    counts["region_intersecting_spectral_image_query_semantics"] = (
+        "IRSA SIAv2 POS circle; returned spectral-image footprint overlaps the predeclared region"
+    )
+    dr1_rows = [row for row in full_region_rows if row.get("_chronos_release") == "dr1"]
+    dr1_available = all(
+        not query_results[f"region_footprints_sia_{collection}"].get("error")
+        for collection in dr1_collections
     )
     counts["dr1_level2_exposures_intersecting_full_region_total"] = (
-        None if full_region_error else len(full_region_rows)
+        len(dr1_rows) if dr1_available else None
     )
     counts["dr1_level2_full_region_query_complete_under_declared_row_cap"] = (
-        not full_region_error and len(full_region_rows) < COVERAGE_ROW_LIMIT
+        dr1_available
+        and all(
+            len(query_results[f"region_footprints_sia_{collection}"].get("rows", [])) < COVERAGE_ROW_LIMIT
+            for collection in dr1_collections
+        )
     )
     counts["dr1_level2_full_region_coverage_query_semantics"] = (
-        "region_circle_intersects_exposure_polygon"
+        "IRSA SIAv2 POS circle across DR1 wide and deep spectral-image collections"
     )
-    counts["dr1_level2_full_region_optional_query_error"] = full_region_error
+    counts["dr1_level2_full_region_optional_query_error"] = {
+        collection: optional_sia_errors[collection]
+        for collection in dr1_collections if collection in optional_sia_errors
+    } or None
+    counts["region_footprint_sia_optional_query_errors"] = optional_sia_errors
     counts["source_level_epoch_coverage_measured"] = False
 
     query_errors = {
@@ -585,6 +684,7 @@ def inspect_region(region: dict) -> dict:
         "query_sha256": digest_json(query_definitions),
         "query_errors": query_errors,
         "optional_query_errors": optional_query_errors,
+        "optional_sia_errors": optional_sia_errors,
     }
 
 
@@ -597,9 +697,10 @@ def main() -> None:
     all_label_disagreements = []
     all_source_exposure_matches = []
     all_source_epoch_summaries = []
+    all_region_sia_footprints = []
     errors = []
     for region in REGIONS:
-        print(f"Querying SPLICES and DR1 coverage: {region['name']}", flush=True)
+        print(f"Querying SPLICES and DR1/QR3 coverage: {region['name']}", flush=True)
         try:
             result = inspect_region(region)
             summaries.append({
@@ -608,6 +709,7 @@ def main() -> None:
                 "query_sha256": result["query_sha256"],
                 "query_errors": result["query_errors"],
                 "optional_query_errors": result["optional_query_errors"],
+                "optional_sia_errors": result["optional_sia_errors"],
             })
             if result["query_errors"]:
                 errors.append({
@@ -628,15 +730,17 @@ def main() -> None:
             all_source_epoch_summaries.extend(
                 result["queries"]["candidate_source_epoch_summary"]["rows"]
             )
+            for name, query_result in result["queries"].items():
+                if name.startswith("region_footprints_sia_"):
+                    all_region_sia_footprints.extend(query_result.get("rows", []))
             region_dir = OUTPUT / region["name"]
             for name, query_result in result["queries"].items():
                 if "rows" in query_result and name in {
                     "catalogue_sources", "candidate_sources", "class_distribution",
                     "label_disagreement_candidates", "dr1_level2_exposures",
-                    "dr1_level2_exposures_full_region",
                     "candidate_source_exposure_matches",
                     "candidate_source_epoch_summary"
-                }:
+                } or name.startswith("region_footprints_sia_"):
                     write_csv(region_dir / f"{name}.csv", query_result["rows"])
             (region_dir / "query_record.json").write_text(
                 json.dumps(result, indent=2, default=str), encoding="utf-8"
@@ -651,12 +755,27 @@ def main() -> None:
     write_csv(OUTPUT / "label_disagreement_candidates_all_regions.csv", all_label_disagreements)
     write_csv(OUTPUT / "candidate_source_exposure_matches_all_regions.csv", all_source_exposure_matches)
     write_csv(OUTPUT / "candidate_source_epoch_summary_all_regions.csv", all_source_epoch_summaries)
+    write_csv(OUTPUT / "region_intersecting_footprints_sia_all_regions.csv", all_region_sia_footprints)
     report = {
-        "schema": "chronos-spllices-yso-recon/1.0",
+        "schema": "chronos-spllices-yso-recon/1.1",
         "started_utc": started,
         "finished_utc": datetime.now(timezone.utc).isoformat(),
         "catalogue": "IRSA spherex.splices",
         "catalogue_release": "SPLICES v8.6 according to IRSA release notes; actual TAP response is retained",
+        "spectral_image_archive": {
+            "source": "NASA/IPAC IRSA SPHEREx",
+            "releases": ["DR1", "QR3"],
+            "siav2_collections": list(SIA_COLLECTIONS),
+            "coverage_search": "POS-circle footprint overlap; wide and deep collections preserved separately",
+            "data_class": "real",
+        },
+        "dr1_all_sky_cube": {
+            "collection": "spherex_dr1_cube",
+            "nominal_channels": 102,
+            "wavelength_range_um": [0.75, 5.0],
+            "role": "spatial-spectral context, not a temporal epoch sequence",
+            "queried_in_this_reconnaissance": False,
+        },
         "predeclared_regions": list(REGIONS),
         "region_results": summaries,
         "candidate_record_count": len(all_candidates),
@@ -664,9 +783,15 @@ def main() -> None:
         "label_disagreement_candidate_count": len(all_label_disagreements),
         "candidate_source_exposure_match_row_count": len(all_source_exposure_matches),
         "candidate_source_epoch_summary_row_count": len(all_source_epoch_summaries),
+        "region_intersecting_spectral_image_footprint_row_count": len(all_region_sia_footprints),
+        "region_footprint_sia_collections": list(SIA_COLLECTIONS),
         "optional_query_errors": {
             item["region"]["name"]: item.get("optional_query_errors", {})
             for item in summaries if item.get("optional_query_errors")
+        },
+        "optional_sia_errors": {
+            item["region"]["name"]: item.get("optional_sia_errors", {})
+            for item in summaries if item.get("optional_sia_errors")
         },
         "label_profile_counts_by_region": {
             item["region"]["name"]: item["counts"].get("label_concordance")
@@ -682,10 +807,12 @@ def main() -> None:
             "Machine-learning classification is not treated as independent confirmation.",
             "The regional counts are not a population rate; selection functions and contamination must be modelled.",
             "This reconnaissance does not establish a new YSO discovery.",
-            "The centre-point DR1 query tests whether each fixed region-centre coordinate lies inside an exposure polygon.",
-            "A separate optional INTERSECTS query tests whether each exposure polygon overlaps the full circular region. If IRSA rejects that optional geometry query, the error is recorded separately and does not invalidate the catalogue or centre-point queries.",
+            "The centre-point DR1 TAP query tests whether each fixed region-centre coordinate lies inside an exposure polygon.",
+            "Full-region footprint coverage uses SIAv2 POS-circle searches over DR1 and QR3 wide/deep spectral-image collections; each collection and row cap is preserved separately.",
+            "The DR1 All-Sky Cube is a distinct 102-channel spatial-spectral product and is not treated as a sequence of independent temporal exposures.",
+            "DR1 and QR3 are the current uniformly processed spectral-image set; QR2 is not combined into this analysis.",
             "The row-cap checks establish only that each completed query returned fewer than 20000 rows; they do not establish survey-wide or source-level coverage completeness.",
-            "The optional candidate-source query matches SPLICES coordinates to Level-2 exposure polygons; this is geometric archive footprint coverage, not extracted-flux validity, spectrum quality, usable epoch cadence or source-level epoch completeness.",
+            "The candidate-source TAP query matches SPLICES coordinates to DR1/QR3 Level-2 exposure polygons; this is geometric archive footprint coverage, not extracted-flux validity, spectrum quality, usable epoch cadence or source-level epoch completeness.",
         ],
         "report_sha256": None,
     }

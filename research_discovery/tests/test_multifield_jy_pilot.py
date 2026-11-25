@@ -154,6 +154,28 @@ def test_aggregate_rejects_duplicate_exposure_identity_from_multifield_gate():
     assert report["scientific_gate_status"]["multi_field_calibrated_jy_evaluation"] == "not_satisfied"
 
 
+
+def test_aggregate_rejects_duplicate_or_missing_predeclared_field():
+    records = []
+    for index, field in enumerate(FIELDS):
+        summary = _summary()
+        summary["science"]["observation_id"] = f"obs-{index}"
+        summary["science"]["sha256"] = f"{index + 1:064x}"
+        records.append(summarize_field_record(
+            field, summary, return_code=0, log_path=f"{field['name']}.log"
+        ))
+    # Six rows are insufficient if one declared field was duplicated.
+    records[-1]["field"] = dict(records[0]["field"])
+    report = aggregate_report(
+        records, started_utc="a", finished_utc="b", code_revision=None
+    )
+    audit = report["field_manifest_audit"]
+    assert audit["valid"] is False
+    assert audit["duplicate_fields"]
+    assert audit["missing_fields"]
+    assert report["scientific_gate_status"]["multi_field_calibrated_jy_evaluation"] == "not_satisfied"
+
+
 def test_query_report_is_hashed_and_failures_remain_visible():
     records = [
         summarize_field_record(
