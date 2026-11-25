@@ -62,6 +62,9 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
     split["test_split_groups"] = sorted(test_groups)
     split["field_to_split_group"] = group_by_field
     token_by_id = {field_id: secrets.token_urlsafe(18) for field_id in ids}
+    group_token_by_id = {
+        group_id: secrets.token_urlsafe(18) for group_id in groups
+    }
     private_fields = []
     public_fields = []
     allowed_controls = {
@@ -100,6 +103,7 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
         public_fields.append({
             "blind_field_token": token,
             "split_role": role,
+            "independence_group_token": group_token_by_id[group_by_field[field_id]],
             "dataset_class": signature.get("dataset_class"),
             "match_radius": match_radius,
             "field_area_deg2": float(field_area) if field_area is not None else None,
@@ -292,6 +296,7 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         packages.append({
             "input_signature": original_signature,
             "truth_catalogue": original["truth_catalogue"],
+            "independence_group_id": str(private_row.get("split_group_id") or private_row.get("original_field_id")),
             "methods": restored_methods,
             "match_radius": original.get("match_radius"),
             "field_area_deg2": original.get("field_area_deg2"),
