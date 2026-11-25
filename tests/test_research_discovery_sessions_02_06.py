@@ -25,6 +25,95 @@ def _manifest(products):
         products=products, processing_config={"download": "unit-test"})
 
 
+
+def _verified_audit_fixture(tmp_path):
+    import json
+    from research_discovery.spherex.archive_manifest import build_manifest, product_record
+    from research_discovery.spherex.calibration_matrix import build_matrix
+
+    uris = {
+        "science": "https://irsa.ipac.caltech.edu/dr1/level2/native_science.fits",
+        "spectral": "https://irsa.ipac.caltech.edu/dr1/cal/spectral_wcs/D2.fits",
+        "area": "https://irsa.ipac.caltech.edu/dr1/cal/solid_angle/D2.fits",
+    }
+    files = {}
+    for key, payload in (("science", b"native-science-bytes"),
+                         ("spectral", b"native-cwave-cband-bytes"),
+                         ("area", b"native-solid-angle-bytes")):
+        path = tmp_path / (key + ".fits")
+        path.write_bytes(payload)
+        files[key] = {"path": path, "sha256": hashlib.sha256(payload).hexdigest(),
+                      "bytes": len(payload)}
+    checks = {name: {"status": "pass"} for name in (
+        "required_hdus", "image_2d", "native_full_frame", "image_unit",
+        "release_psf_family", "flags_integer_type", "celestial_wcs",
+        "alternate_wcs_a", "cutout_parent_origin", "cwave_cband",
+        "solid_angle", "variance_alignment", "zodi_alignment")}
+    audit = {
+        "science_native_uri": uris["science"],
+        "science_sha256": files["science"]["sha256"],
+        "spectral_wcs_native_uri": uris["spectral"],
+        "spectral_wcs_sha256": files["spectral"]["sha256"],
+        "release": "DR1",
+        "science_detector": "D2",
+        "science_pipeline_version": "7.1",
+        "science_processing_date": "2026-001",
+        "coordinate_frame": "native_detector",
+        "spectral_wcs_metadata": {
+            "release": "DR1", "detector": "D2", "pipeline_version": "7.1",
+            "processing_date": "2026-001", "coordinate_frame": "native_detector"},
+        "checks": checks,
+        "flags": {"header_flag_dictionary_present": True},
+        "wavelength_summary": {
+            "cwave_native_shape": [2040, 2040], "cband_native_shape": [2040, 2040]},
+        "solid_angle": {
+            "status": "pass", "uri": uris["area"], "sha256": files["area"]["sha256"],
+            "shape": [2040, 2040], "detector": "D2", "bunit": "arcsec2"},
+    }
+    audit_path = tmp_path / "native_mef_audit.json"
+    audit_path.write_text(json.dumps(audit, sort_keys=True), encoding="utf-8")
+    audit_sha = hashlib.sha256(audit_path.read_bytes()).hexdigest()
+    science_meta = {
+        "release": "DR1", "detector": "D2", "pipeline_version": "7.1",
+        "processing_date": "2026-001", "coordinate_frame": "native_detector",
+        "native_uri": uris["science"], "sha256": files["science"]["sha256"]}
+    calibration_meta = {
+        "release": "DR1", "detector": "D2", "pipeline_version": "7.1",
+        "processing_date": "2026-001", "coordinate_frame": "native_detector",
+        "native_uri": uris["spectral"], "sha256": files["spectral"]["sha256"],
+        "wavelength_audit_path": str(audit_path), "wavelength_audit_sha256": audit_sha,
+        "solid_angle_map_uri": uris["area"], "solid_angle_map_sha256": files["area"]["sha256"]}
+    products = [
+        product_record(product_type="level2_mef", native_uri=uris["science"],
+            status="downloaded", archive_id="science-archive-id", release="DR1",
+            detector="D2", observation_time={"mjd": 60000}, pipeline_version="7.1",
+            processing_date="2026-001", local_path=str(files["science"]["path"]),
+            byte_count=files["science"]["bytes"], sha256=files["science"]["sha256"]),
+        product_record(product_type="spectral_wcs", native_uri=uris["spectral"],
+            status="downloaded", archive_id="spectral-archive-id", release="DR1",
+            detector="D2", observation_time=None, pipeline_version="7.1",
+            processing_date="2026-001", local_path=str(files["spectral"]["path"]),
+            byte_count=files["spectral"]["bytes"], sha256=files["spectral"]["sha256"],
+            compatibility_status="candidate_only"),
+        product_record(product_type="solid_angle_pixel_map", native_uri=uris["area"],
+            status="downloaded", archive_id="area-archive-id", release="DR1",
+            detector="D2", observation_time=None, pipeline_version="7.1",
+            processing_date="2026-001", local_path=str(files["area"]["path"]),
+            byte_count=files["area"]["bytes"], sha256=files["area"]["sha256"],
+            compatibility_status="candidate_only"),
+    ]
+    manifest = build_manifest(archive="IRSA", query={}, products=products, processing_config={})
+    matrix = build_matrix({
+        "science_exposures": [{"id": "science", "uri": uris["science"],
+            "sha256": files["science"]["sha256"], "metadata": science_meta}],
+        "calibration_candidates": [{"id": "D2-spectral", "uri": uris["spectral"],
+            "sha256": files["spectral"]["sha256"], "product_type": "spectral_wcs",
+            "metadata": calibration_meta}],
+    })
+    return manifest, matrix, audit_path, science_meta, calibration_meta
+
+
+
 def test_archive_manifest_retains_identity_and_is_valid():
     from research_discovery.spherex.archive_manifest import validate_manifest
     product = _manifest_product()
@@ -112,7 +201,7 @@ def test_calibration_pair_rejects_wrong_spectral_grid_and_bad_values():
     assert compatibility_decision(science,invalid)["status"] == "rejected"
 
 
-def test_calibration_pair_accepts_hash_linked_audit_summary():
+def test_calibration_pair_without_native_audit_is_not_compatible():
     from research_discovery.spherex.calibration_compatibility import compatibility_decision
     science = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
                "processing_date":"2026-001","coordinate_frame":"native_detector"}
@@ -120,7 +209,7 @@ def test_calibration_pair_accepts_hash_linked_audit_summary():
            "processing_date":"2026-001","coordinate_frame":"native_detector",
            "cwave_shape":[2040,2040],"cband_shape":[2040,2040],
            "valid_fraction":1.0,"wavelength_maps_audit_sha256":"c"*64}
-    assert compatibility_decision(science,cal)["status"] == "compatible"
+    assert compatibility_decision(science,cal)["status"] == "review_required"
 
 
 def test_coordinate_cutout_offset_and_round_trip():
@@ -187,18 +276,23 @@ def test_rotated_wcs_conversion_and_uncertainty_propagation():
     assert float(sky_back.separation(sky).arcsec) < 1e-4
 
 
-def test_calibration_pair_requires_explicit_matching_metadata():
+def test_calibration_pair_requires_checksum_verified_native_audit(tmp_path):
     from research_discovery.spherex.calibration_compatibility import compatibility_decision
-    science = {"release":"DR1","detector":"D2","pipeline_version":"7.1",
-               "processing_date":"2026-001","coordinate_frame":"native_detector"}
-    cal = {"release":"DR1","detector":"2","pipeline_version":"7.1",
-           "processing_date":"2026-001","coordinate_frame":"native_detector",
-           "cwave":np.ones((2040,2040),dtype=np.float32)*2.0,"cband":np.ones((2040,2040),dtype=np.float32)*0.1,
-           "solid_angle_map":{"status":"pass","detector":"D2","shape":[2040,2040],
-             "bunit":"arcsec2","uri":"https://irsa.ipac.caltech.edu/solid-angle/D2.fits","sha256":"d"*64}}
-    assert compatibility_decision(science,cal)["status"] == "compatible"
-    cal["detector"] = "D5"
-    assert compatibility_decision(science,cal)["status"] == "rejected"
+    manifest, matrix, audit_path, science_meta, calibration_meta = _verified_audit_fixture(tmp_path)
+    result = compatibility_decision(science_meta, calibration_meta)
+    assert result["status"] == "compatible"
+    assert result["audit"]["audit_sha256"] == hashlib.sha256(audit_path.read_bytes()).hexdigest()
+    calibration_meta["detector"] = "D5"
+    assert compatibility_decision(science_meta, calibration_meta)["status"] == "rejected"
+
+
+def test_calibration_audit_hash_tampering_is_rejected(tmp_path):
+    from research_discovery.spherex.calibration_compatibility import compatibility_decision
+    manifest, matrix, audit_path, science_meta, calibration_meta = _verified_audit_fixture(tmp_path)
+    audit_path.write_text(audit_path.read_text() + " ", encoding="utf-8")
+    result = compatibility_decision(science_meta, calibration_meta)
+    assert result["status"] == "rejected"
+    assert result["audit"]["reason"] == "Native-MEF audit JSON SHA-256 mismatch."
 
 
 def test_calibration_pair_missing_metadata_is_review_required():
