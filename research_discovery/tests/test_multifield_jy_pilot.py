@@ -36,7 +36,8 @@ def _summary():
             "five_sigma_sensitivity_jy": 1e-4,
             "flux_summary": [{"flux_level": 1e-4, "n_injected": 20, "n_recovered": 18}],
             "n_baseline_detections": 10,
-            "source_photon_noise": {"physically_modelled": False},
+            "source_photon_noise": {"enabled": True, "physically_modelled": True, "calibration_review_status": "pending"},
+            "electron_calibration_derivation": {"absolute_gain_uri": "https://irsa.example/gain.fits", "absolute_gain_sha256": "b" * 64, "independent_review_status": "pending"},
         },
     }
 
@@ -86,7 +87,7 @@ def test_aggregate_never_claims_blind_or_population_discovery():
     assert report["field_count_completed"] == 6
     assert report["science_observation_ids_unique"] is True
     assert report["science_file_hashes_unique"] is True
-    assert report["scientific_gate_status"]["multi_field_calibrated_jy_evaluation"] == "completed_for_predeclared_regions"
+    assert report["scientific_gate_status"]["multi_field_calibrated_jy_evaluation"] == "completed_exploratory_for_predeclared_regions"
     assert report["scientific_gate_status"]["independent_blind_four_baseline_benchmark"] == "not_satisfied"
     assert report["scientific_gate_status"]["population_level_yso_discovery"] == "not_satisfied"
 
