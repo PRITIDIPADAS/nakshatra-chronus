@@ -77,7 +77,13 @@ def tap_query(field: Field, bandpass: str, release: str = "dr1"):
       AND LOWER(a.uri) LIKE '%/{release}/%'
     ORDER BY p.time_bounds_lower
     """
-    table = Irsa.query_tap(sql)
+    result = Irsa.query_tap(sql)
+    # Astroquery IRSA TAP returns pyvo.dal.TAPResults, not an Astropy Table.
+    # Normalize at the API boundary so downstream code can use Table.write,
+    # slicing and column-name iteration consistently across astroquery versions.
+    table = result.to_table() if hasattr(result, "to_table") else result
+    if not hasattr(table, "write") or not hasattr(table, "colnames"):
+        raise TypeError("IRSA TAP result could not be converted to an Astropy Table")
     return sql, table
 
 
