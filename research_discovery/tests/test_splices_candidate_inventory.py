@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import json
 
 import pytest
@@ -192,20 +193,75 @@ def _fixture_sia_v11(root):
         "_chronos_collection": "spherex_dr1_cube",
         "_chronos_product_role": "all_sky_spatial_spectral_cube",
     }])
-    for region, source_id in (
-        ("Taurus_Auriga", "source-a"),
-        ("Perseus_NGC1333", "source-c"),
-    ):
-        _write_csv(root / region / "candidate_source_product_matches.csv", [{
-            "source_id": source_id,
-            "archive_product_id": f"{region}-product-1",
-            "obs_id": f"{region}-obs-1",
-            "collection": "spherex_dr1",
-            "data_release": "dr1",
-            "energy_bandpassname": "SPHEREx-D2",
-            "match_method": "spherical-gnomonic-pip/1.0",
-            "metadata_only": True,
-        }])
+    pair_by_region = {
+        "Taurus_Auriga": {
+            "source-a": {
+                "archive_product_id": "https://irsa.example/Taurus_Auriga/spherex_dr1/0.fits",
+                "obs_id": "Taurus_Auriga-spherex_dr1-0",
+                "collection": "spherex_dr1",
+                "data_release": "dr1",
+                "energy_bandpassname": "SPHEREx-D2",
+            },
+        },
+        "Perseus_NGC1333": {
+            "source-c": {
+                "archive_product_id": "https://irsa.example/Perseus_NGC1333/spherex_qr3/0.fits",
+                "obs_id": "Perseus_NGC1333-spherex_qr3-0",
+                "collection": "spherex_qr3",
+                "data_release": "qr3",
+                "energy_bandpassname": "SPHEREx-D2",
+            },
+        },
+    }
+    for region, products_by_source in pair_by_region.items():
+        pairs, summaries, matched_summaries = [], [], []
+        regional_source_ids = sorted({
+            str(row["source_id"]) for row in rows if row["recon_region"] == region
+        })
+        for source_id in regional_source_ids:
+            product = products_by_source.get(source_id)
+            product_ids = [product["archive_product_id"]] if product else []
+            summary = {
+                "source_id": source_id,
+                "region": region,
+                "has_archive_footprint_match": bool(product_ids),
+                "matched_archive_product_count": len(product_ids),
+                "archive_product_id_set_sha256": hashlib.sha256(
+                    "\n".join(sorted(product_ids)).encode("utf-8")
+                ).hexdigest(),
+                "unique_archive_observation_id_count": len(product_ids),
+                "metadata_only": True,
+                "extracted_flux_available": False,
+                "match_method": "spherical-gnomonic-pip/1.0",
+            }
+            summaries.append(summary)
+            if product:
+                pairs.append({
+                    "source_id": source_id,
+                    "region": region,
+                    "region_role": "star_forming_region",
+                    **product,
+                    "obs_publisher_did": None,
+                    "access_url": product["archive_product_id"],
+                    "t_min": None,
+                    "t_max": None,
+                    "match_method": "spherical-gnomonic-pip/1.0",
+                    "metadata_only": True,
+                    "extracted_flux_available": False,
+                })
+                matched_summaries.append(summary)
+        for collection in ("spherex_dr1", "spherex_qr3"):
+            inventory_path = root / region / f"region_footprints_sia_{collection}.csv"
+            inventory = read_csv(inventory_path)
+            for row in inventory:
+                if row.get("access_url") in {
+                    item["archive_product_id"] for item in products_by_source.values()
+                }:
+                    row["obs_publisher_did"] = row["access_url"]
+            _write_csv(inventory_path, inventory)
+        _write_csv(root / region / "candidate_source_product_matches.csv", pairs)
+        _write_csv(root / region / "candidate_source_exposure_matches.csv", matched_summaries)
+        _write_csv(root / region / "candidate_source_epoch_summary.csv", summaries)
     report["schema"] = "chronos-spllices-yso-recon/1.1"
     report["dr1_all_sky_cube"] = {
         "collection": "spherex_dr1_cube", "nominal_channels": 102,
@@ -474,6 +530,48 @@ def test_input_report_still_rejects_unknown_future_schema(tmp_path):
         _check_input_report(report, rows)
 
 
+def test_schema_1_1_source_product_manifest_integrity_checks_inventory_counts_and_hashes(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    audit = first["candidate_source_product_manifest_audit"]
+    assert audit["available"] is True
+    assert audit["valid"] is True
+    assert audit["duplicate_source_product_pair_count"] == 0
+    assert audit["pair_product_ids_missing_from_siav2_inventory"] == 0
+    assert audit["source_summary_pair_count_mismatches"] == 0
+    assert audit["source_summary_product_id_hash_mismatches"] == 0
+    assert result["candidate_source_exposure_coverage"]["matched_archive_product_pair_count"] == 2
+
+
+def test_schema_1_1_source_product_summary_hash_mismatch_fails_closed(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    path = tmp_path / "Taurus_Auriga" / "candidate_source_epoch_summary.csv"
+    rows = read_csv(path)
+    rows[0]["archive_product_id_set_sha256"] = "0" * 64
+    _write_csv(path, rows)
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    assert first["candidate_source_product_manifest_audit"]["valid"] is False
+    assert first["candidate_source_product_manifest_integrity_error"]
+    assert first["candidate_source_exposure_query_status"] == "unavailable"
+    assert first["candidate_source_product_match_rows"] is None
+    assert result["candidate_source_exposure_coverage"]["matched_archive_product_pair_count"] is None
+
+
+def test_schema_1_1_source_product_pair_absent_from_siav2_inventory_fails_closed(tmp_path):
+    _fixture_sia_v11(tmp_path)
+    path = tmp_path / "Taurus_Auriga" / "candidate_source_product_matches.csv"
+    rows = read_csv(path)
+    rows[0]["archive_product_id"] = "ivo://unknown/not-in-siav2"
+    _write_csv(path, rows)
+    result = analyze(tmp_path)
+    first = result["regional_candidate_and_coverage_summaries"][0]
+    assert first["candidate_source_product_manifest_audit"]["pair_product_ids_missing_from_siav2_inventory"] == 1
+    assert first["candidate_source_product_manifest_integrity_error"]
+    assert first["candidate_source_exposure_query_status"] == "unavailable"
+
+
 def test_schema_1_1_missing_source_product_manifest_is_unavailable_not_zero(tmp_path):
     _fixture_sia_v11(tmp_path)
     missing = tmp_path / "Taurus_Auriga" / "candidate_source_product_matches.csv"
@@ -491,21 +589,45 @@ def test_schema_1_1_missing_source_product_manifest_is_unavailable_not_zero(tmp_
 def test_schema_1_1_cross_region_source_product_overlap_uses_exact_archive_product_ids(tmp_path):
     _fixture_sia_v11(tmp_path)
     for region in ("Taurus_Auriga", "Perseus_NGC1333"):
-        _write_csv(tmp_path / region / "candidate_source_product_matches.csv", [{
-            "source_id": "source-shared",
-            "archive_product_id": "ivo:shared-product",
+        product_id = "ivo://irsa.example/shared-product"
+        inventory_path = tmp_path / region / "region_footprints_sia_spherex_dr1.csv"
+        inventory = read_csv(inventory_path)
+        inventory.append({
             "obs_id": "shared-obs",
+            "access_url": f"https://irsa.example/{region}/shared-product.fits",
+            "obs_publisher_did": product_id,
+            "_chronos_collection": "spherex_dr1",
+            "_chronos_release": "dr1",
+            "_chronos_dataset_class": "real",
+            "_chronos_region": region,
+        })
+        _write_csv(inventory_path, inventory)
+        pair = {
+            "source_id": "source-a",
+            "archive_product_id": product_id,
+            "obs_id": "shared-obs",
+            "access_url": f"https://irsa.example/{region}/shared-product.fits",
             "collection": "spherex_dr1",
             "data_release": "dr1",
             "energy_bandpassname": "SPHEREx-D2",
             "match_method": "spherical-gnomonic-pip/1.0",
             "metadata_only": True,
-        }])
+            "extracted_flux_available": False,
+            "region": region,
+        }
+        _write_csv(tmp_path / region / "candidate_source_product_matches.csv", [pair])
+        summaries = read_csv(tmp_path / region / "candidate_source_epoch_summary.csv")
+        source_a = next(row for row in summaries if row["source_id"] == "source-a")
+        source_a["matched_archive_product_count"] = "1"
+        source_a["archive_product_id_set_sha256"] = hashlib.sha256(product_id.encode()).hexdigest()
+        source_a["has_archive_footprint_match"] = "True"
+        _write_csv(tmp_path / region / "candidate_source_epoch_summary.csv", summaries)
+        _write_csv(tmp_path / region / "candidate_source_exposure_matches.csv", [source_a])
     result = analyze(tmp_path)
     overlap = result["cross_region_candidate_source_exposure_overlap"]
     assert overlap["source_archive_product_match_rows"] == 2
     assert overlap["unique_source_archive_product_pairs_observed"] == 1
     assert overlap["source_product_pairs_in_multiple_region_queries"] == 1
-    assert overlap["source_archive_product_region_memberships"]["source-shared|ivo:shared-product"] == [
+    assert overlap["source_archive_product_region_memberships"]["source-a|ivo://irsa.example/shared-product"] == [
         "Perseus_NGC1333", "Taurus_Auriga"
     ]

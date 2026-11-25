@@ -259,6 +259,167 @@ def _summarize_sia_products(rows: list[dict]) -> dict:
     return result
 
 
+
+def _archive_product_id(row: dict) -> str:
+    return str(
+        row.get("obs_publisher_did") or row.get("archive_product_id")
+        or row.get("access_url") or row.get("obs_id") or row.get("obsid")
+        or row.get("uri") or row.get("ID") or ""
+    ).strip()
+
+
+def _is_true(value: Any) -> bool:
+    return str(value).strip().lower() in {"true", "1", "yes"}
+
+
+def _audit_source_product_manifest(
+    region_name: str,
+    candidate_ids: set[str],
+    source_summary_rows: list[dict],
+    source_product_rows: list[dict],
+    full_region_rows: list[dict],
+    *,
+    available: bool,
+) -> dict:
+    """Cross-check exact source/product pairs against source digests and SIAv2 rows."""
+    if not available:
+        return {
+            "available": False,
+            "valid": False,
+            "status": "unavailable",
+            "errors": ["source summary or source/product manifest unavailable"],
+        }
+
+    errors = []
+    summary_by_id: dict[str, dict] = {}
+    duplicate_summary_ids = set()
+    for row in source_summary_rows:
+        source_id = str(row.get("source_id") or "").strip()
+        if not source_id:
+            errors.append("source summary row has no source_id")
+            continue
+        if source_id in summary_by_id:
+            duplicate_summary_ids.add(source_id)
+        else:
+            summary_by_id[source_id] = row
+    unexpected_summary_ids = sorted(set(summary_by_id) - candidate_ids)
+    missing_summary_ids = sorted(candidate_ids - set(summary_by_id))
+    if duplicate_summary_ids:
+        errors.append("duplicate source IDs in candidate source summary")
+    if unexpected_summary_ids:
+        errors.append("source summary contains IDs outside the regional candidate set")
+
+    full_product_rows: dict[str, list[dict]] = defaultdict(list)
+    for row in full_region_rows:
+        product_id = _archive_product_id(row)
+        if product_id:
+            full_product_rows[product_id].append(row)
+    full_product_ids = set(full_product_rows)
+
+    seen_pairs = set()
+    products_by_source: dict[str, list[str]] = defaultdict(list)
+    missing_pair_source_ids = 0
+    missing_pair_product_ids = 0
+    unexpected_pair_source_ids = set()
+    unknown_archive_product_ids = set()
+    duplicate_pairs = 0
+    metadata_flag_errors = 0
+    region_flag_errors = 0
+    product_metadata_mismatches = 0
+    for row in source_product_rows:
+        source_id = str(row.get("source_id") or "").strip()
+        product_id = str(row.get("archive_product_id") or "").strip()
+        if not source_id:
+            missing_pair_source_ids += 1
+            continue
+        if not product_id:
+            missing_pair_product_ids += 1
+            continue
+        if source_id not in candidate_ids or source_id not in summary_by_id:
+            unexpected_pair_source_ids.add(source_id)
+        pair = (source_id, product_id)
+        if pair in seen_pairs:
+            duplicate_pairs += 1
+        seen_pairs.add(pair)
+        products_by_source[source_id].append(product_id)
+        if product_id not in full_product_ids:
+            unknown_archive_product_ids.add(product_id)
+        if not _is_true(row.get("metadata_only")) or _is_true(row.get("extracted_flux_available")):
+            metadata_flag_errors += 1
+        row_region = str(row.get("region") or "").strip()
+        if row_region and row_region != region_name:
+            region_flag_errors += 1
+        matching_metadata = full_product_rows.get(product_id) or []
+        if matching_metadata:
+            for field in ("obs_id", "access_url", "energy_bandpassname"):
+                pair_value = str(row.get(field) or "").strip()
+                archive_value = str(matching_metadata[0].get(field) or "").strip()
+                if pair_value and archive_value and pair_value != archive_value:
+                    product_metadata_mismatches += 1
+                    break
+
+    if missing_pair_source_ids:
+        errors.append("source/product pair row is missing source_id")
+    if missing_pair_product_ids:
+        errors.append("source/product pair row is missing archive_product_id")
+    if unexpected_pair_source_ids:
+        errors.append("source/product pair references a source outside the regional candidate summaries")
+    if unknown_archive_product_ids:
+        errors.append("source/product pair references a product absent from the SIAv2 regional inventory")
+    if duplicate_pairs:
+        errors.append("duplicate source/archive-product pair rows")
+    if metadata_flag_errors:
+        errors.append("source/product pair violates metadata-only status flags")
+    if region_flag_errors:
+        errors.append("source/product pair region differs from its regional manifest")
+    if product_metadata_mismatches:
+        errors.append("source/product metadata fields disagree with the SIAv2 product row")
+
+    count_mismatches = []
+    digest_mismatches = []
+    for source_id, summary in summary_by_id.items():
+        product_ids = sorted(set(products_by_source.get(source_id, [])))
+        try:
+            expected_count = int(float(summary.get("matched_archive_product_count") or 0))
+        except (TypeError, ValueError):
+            expected_count = -1
+        if expected_count != len(product_ids):
+            count_mismatches.append(source_id)
+        expected_digest = str(summary.get("archive_product_id_set_sha256") or "").strip().lower()
+        actual_digest = hashlib.sha256("\n".join(product_ids).encode("utf-8")).hexdigest()
+        if expected_digest != actual_digest:
+            digest_mismatches.append(source_id)
+    if count_mismatches:
+        errors.append("per-source matched product counts disagree with the pair manifest")
+    if digest_mismatches:
+        errors.append("per-source archive product ID-set SHA-256 disagrees with the pair manifest")
+
+    valid = not errors
+    return {
+        "available": True,
+        "valid": valid,
+        "status": "passed" if valid else "failed",
+        "candidate_source_id_count": len(candidate_ids),
+        "source_summary_row_count": len(source_summary_rows),
+        "unique_source_summary_id_count": len(summary_by_id),
+        "source_summary_ids_missing_from_matcher_output": len(missing_summary_ids),
+        "source_product_pair_row_count": len(source_product_rows),
+        "unique_source_product_pair_count": len(seen_pairs),
+        "duplicate_source_product_pair_count": duplicate_pairs,
+        "source_ids_outside_candidate_set": len(unexpected_pair_source_ids),
+        "product_ids_in_siav2_regional_inventory": len(full_product_ids),
+        "pair_product_ids_missing_from_siav2_inventory": len(unknown_archive_product_ids),
+        "source_summary_pair_count_mismatches": len(count_mismatches),
+        "source_summary_product_id_hash_mismatches": len(digest_mismatches),
+        "pair_rows_missing_source_id": missing_pair_source_ids,
+        "pair_rows_missing_archive_product_id": missing_pair_product_ids,
+        "pair_rows_with_metadata_flag_errors": metadata_flag_errors,
+        "pair_rows_with_region_errors": region_flag_errors,
+        "pair_rows_with_product_metadata_mismatches": product_metadata_mismatches,
+        "errors": errors,
+    }
+
+
 def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
     region_rows = []
     centre_point_exposures = []
@@ -399,6 +560,22 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
             else:
                 source_product_error = "candidate source/product match manifest missing"
 
+        source_product_manifest_audit = None
+        source_product_manifest_integrity_error = None
+        if use_siav2:
+            source_product_manifest_audit = _audit_source_product_manifest(
+                name,
+                candidate_ids,
+                source_summary_rows,
+                source_product_rows,
+                full_region_rows,
+                available=not source_epoch_error and not source_product_error,
+            )
+            if source_product_manifest_audit.get("available") and not source_product_manifest_audit.get("valid"):
+                source_product_manifest_integrity_error = "; ".join(
+                    source_product_manifest_audit.get("errors") or ["source/product integrity failed"]
+                )
+
         centre_point_exposures.extend({**row, "recon_region": name} for row in exposures)
         full_region_products.extend(
             {**row, "recon_region": name} for row in full_region_rows
@@ -414,7 +591,9 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
         source_counts = result.get("counts") or {}
         source_query_complete = source_counts.get("candidate_source_exposure_query_complete")
         if use_siav2:
-            source_match_error = source_epoch_error or source_product_error
+            source_match_error = (
+                source_epoch_error or source_product_error or source_product_manifest_integrity_error
+            )
             matched_source_ids = {
                 str(row.get("source_id") or "").strip()
                 for row in source_match_rows
@@ -517,6 +696,8 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
                 None if source_match_error else source_product_pair_count
             ),
             "candidate_source_product_match_error": source_product_error,
+            "candidate_source_product_manifest_integrity_error": source_product_manifest_integrity_error,
+            "candidate_source_product_manifest_audit": source_product_manifest_audit,
             "candidate_source_exposure_match_rows": (
                 None if source_match_error else len(source_match_rows)
             ),
@@ -704,7 +885,10 @@ def analyze(root: Path) -> dict:
     if report.get("schema") == "chronos-spllices-yso-recon/1.1":
         source_pair_membership = defaultdict(set)
         for region_item in regional:
-            if region_item.get("candidate_source_product_match_error"):
+            if (
+                region_item.get("candidate_source_product_match_error")
+                or region_item.get("candidate_source_product_manifest_integrity_error")
+            ):
                 continue
             region_name = str(region_item.get("region") or "")
             product_path = root / region_name / "candidate_source_product_matches.csv"
@@ -722,7 +906,11 @@ def analyze(root: Path) -> dict:
         }
         candidate_source_footprint_overlap = {
             "source_archive_product_match_rows": (
-                None if any(row.get("candidate_source_product_match_error") for row in regional)
+                None if any(
+                    row.get("candidate_source_product_match_error")
+                    or row.get("candidate_source_product_manifest_integrity_error")
+                    for row in regional
+                )
                 else sum(row.get("candidate_source_product_match_rows") or 0 for row in regional)
             ),
             "unique_source_archive_product_pairs_observed": len(source_pair_membership),
@@ -777,7 +965,11 @@ def analyze(root: Path) -> dict:
             "matched_archive_product_pair_count": (
                 sum(row.get("candidate_source_product_match_rows") or 0 for row in regional)
                 if report.get("schema") == "chronos-spllices-yso-recon/1.1"
-                and not any(row.get("candidate_source_product_match_error") for row in regional)
+                and not any(
+                    row.get("candidate_source_product_match_error")
+                    or row.get("candidate_source_product_manifest_integrity_error")
+                    for row in regional
+                )
                 else None if report.get("schema") == "chronos-spllices-yso-recon/1.1"
                 else len(candidate_source_exposure_matches)
             ),
