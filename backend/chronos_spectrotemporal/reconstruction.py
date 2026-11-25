@@ -196,7 +196,15 @@ def reconstruct(
             if not math.isfinite(denominator) or denominator <= 0:
                 continue
             alpha = precision_one / denominator
-            effective = float(1.0 / np.sum(alpha ** 2))
+            # GLS coefficients may be negative when covariance is correlated.
+            # The conventional 1/sum(w^2) effective count is not meaningful
+            # for signed coefficients, so use normalized absolute influence.
+            influence = np.abs(alpha)
+            influence_total = float(np.sum(influence))
+            if not math.isfinite(influence_total) or influence_total <= 0:
+                continue
+            influence /= influence_total
+            effective = float(1.0 / np.sum(influence ** 2))
             if not math.isfinite(effective) or effective < min_neighbors * 0.5:
                 continue
 
