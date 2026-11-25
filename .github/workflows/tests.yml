@@ -13,3 +13,46 @@ jobs:
       - run: python -m pytest tests research_discovery/tests -q
       - run: node --check frontend/causal-lab.js
       - run: node --check site/causal-lab.js
+
+  spherex-real-field:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/chronos-5-causal-sky-twin'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: chronos-5-causal-sky-twin
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: research_discovery/requirements-research.txt
+
+      - name: Install archive and FITS dependencies
+        run: python -m pip install -r research_discovery/requirements-research.txt
+
+      - name: Compile retrieval and audit package
+        run: python -m compileall -q research_discovery/spherex
+
+      - name: Retrieve and audit M101 SPHEREx DR1 D2
+        run: |
+          python -m research_discovery.spherex.run_real_field_audit \
+            --field M101,210.80227,54.34895 \
+            --bandpass SPHEREx-D2 \
+            --release dr1 \
+            --limit-per-family 5 \
+            --out data/spherex_m101_audit 2>&1 | tee spherex-real-field.log
+
+      - name: Upload native science and calibration files with audit records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spherex-m101-dr1-d2-audit
+          path: |
+            data/spherex_m101_audit/
+            spherex-real-field.log
+          if-no-files-found: warn
+          retention-days: 30
