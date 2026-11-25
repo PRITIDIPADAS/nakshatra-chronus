@@ -25,6 +25,7 @@ from research_discovery.spherex.fetch_calibration import download_calibration
 from research_discovery.spherex.native_mef_audit import audit as audit_native_mef
 from research_discovery.spherex.extract_epsf_stamp import extract as extract_epsf
 from research_discovery.spherex.flag_policy import policy_mask
+from research_discovery.spherex.run_provenance_calibration_audit import normalize_release
 from research_discovery.validation.injection_recovery import run_injection_recovery
 
 
