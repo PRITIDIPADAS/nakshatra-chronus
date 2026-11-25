@@ -141,7 +141,7 @@ def download_object(session: requests.Session, key: str, metadata: dict, family:
             "family": family,
             "key": key,
             "s3_uri": url,
-            "irsa_archive_uri": IRSA_BASE + key.removeprefix("dr1/"),
+            "irsa_archive_uri": IRSA_BASE + key,
             "local_path": str(destination),
             "archive_size_bytes": expected_bytes,
             "downloaded_size_bytes": count,
@@ -214,7 +214,7 @@ def main():
 
     # The science object comes from the exact TAP-identified artifact and is
     # also revalidated against S3's independently exposed object metadata.
-    science_prefix = SCIENCE_KEY.rsplit("/", 1)[0] + "/"
+    science_prefix = SCIENCE_KEY
     science_list_url, science_object = list_prefix(session, science_prefix)
     if science_object["key"] != SCIENCE_KEY:
         raise RuntimeError(f"Exact science object mismatch: {science_object['key']}")
