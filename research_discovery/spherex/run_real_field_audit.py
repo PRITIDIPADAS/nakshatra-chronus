@@ -278,14 +278,19 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         background = np.asarray(science["ZODI"].data, dtype=float)
         psf = np.asarray(psf_file[0].data, dtype=float)
         area_hdu = next(h for h in area_file if h.data is not None and np.asarray(h.data).ndim == 2)
-        area_arcsec2 = np.asarray(area_hdu.data, dtype=float)
+        area_values = np.asarray(area_hdu.data, dtype=float)
         area_unit = str(area_hdu.header.get("BUNIT", "")).strip().lower().replace(" ", "")
-        if area_unit not in {"arcsec2", "arcsec**2", "arcsec^2"}:
-            raise ValueError(f"Solid-angle calibration must be in arcsec^2; received {area_hdu.header.get('BUNIT')!r}")
-        if image.shape != variance.shape or image.shape != flags.shape or image.shape != area_arcsec2.shape:
+        if area_unit in {"arcsec2", "arcsec**2", "arcsec^2"}:
+            # 1 arcsec = pi/(180*3600) radians; square for pixel solid angle.
+            omega_sr = area_values * (np.pi / (180.0 * 3600.0)) ** 2
+        elif area_unit in {"sr", "steradian", "steradians"}:
+            omega_sr = area_values
+        else:
+            raise ValueError(
+                f"Solid-angle calibration must be in arcsec^2 or sr; received {area_hdu.header.get('BUNIT')!r}"
+            )
+        if image.shape != variance.shape or image.shape != flags.shape or image.shape != omega_sr.shape:
             raise ValueError("IMAGE, VARIANCE, FLAGS and solid-angle map must be pixel-aligned")
-        # 1 arcsec = pi/(180*3600) radians; square for pixel solid angle.
-        omega_sr = area_arcsec2 * (np.pi / (180.0 * 3600.0)) ** 2
 
     flag_bits, flag_names = policy_mask("conservative-photometry")
     half = psf.shape[0] // 2
@@ -323,6 +328,11 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
     result["evaluation_type"] = "calibration-compatible real-data single-exposure injection recovery"
     result["calibrated_flux_definition"] = "Integrated source flux density in Jy; IMAGE is MJy/sr and pixel solid angle is converted from arcsec^2 to sr."
     result["local_reference_5sigma_sensitivity_jy"] = five_sigma_jy
+    result["local_reference_1sigma_flux_uncertainty_jy"] = five_sigma_jy / 5.0
+    result["local_matched_filter_information_jy_inverse2"] = matched_filter_information / (1.0e-12)
+    result["local_psf_footprint_solid_angle_fractional_range"] = float(
+        (np.max(local_omega) - np.min(local_omega)) / np.median(local_omega)
+    )
     result["injection_flux_levels_jy"] = levels_jy
     result["science_provenance"] = {
         "science_native_uri": science_uri, "science_sha256": science_sha,
