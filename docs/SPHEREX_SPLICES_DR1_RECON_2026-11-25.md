@@ -41,9 +41,22 @@ The three YSO-related fields retain distinct meanings:
 - `CLASS_1`: the catalogue's harmonised class field.
 - `STYPE_ML`: the machine-learning source-type label.
 
-The observed sums are 1,490 rows with `YSO_PUB` non-null, 1,490 rows whose `CLASS_1` text contains YSO, and 1,165 rows whose `STYPE_ML` text contains YSO. In the current output, the first two counts coincide region-by-region; this is a property of this returned catalogue and query definition, not a demonstration that the two label-generation processes are independent. The ML label is not independent confirmation of a published label.
+The observed sums are 1,490 rows with `YSO_PUB` non-null, 1,490 rows whose `CLASS_1` text contains YSO, and 1,165 rows whose `STYPE_ML` text contains YSO. In the exported 2,421-row candidate union, a row-by-row overlap audit found that the `YSO_PUB` and `CLASS_1` flags have identical membership on all 2,421 rows. This is an observed property of the returned catalogue/query, not evidence that the underlying label-generation processes are independent.
 
-The 2,421 candidate-union rows are records matching at least one of the three fields. They are not 2,421 new YSOs, not 2,421 spectroscopically confirmed YSOs, and not independent unique objects after cross-region overlap resolution.
+The three-field intersection patterns in the exported candidate union are:
+
+| YSO_PUB present | CLASS_1 contains YSO | STYPE_ML contains YSO | Candidate rows |
+|---|---|---|---:|
+| Yes | Yes | No | 1,256 |
+| No | No | Yes | 931 |
+| Yes | Yes | Yes | 234 |
+| **Total** |  |  | **2,421** |
+
+No row in this candidate export has a disagreement between the `YSO_PUB` and `CLASS_1` YSO flags. The 931 ML-only records are candidates for independent review, not newly confirmed YSOs. The 234 rows with all three labels are catalogue-field agreement, not independent astrophysical confirmation.
+
+All 2,421 exported candidate rows have a non-empty source ID, and the source IDs are unique within this five-region-plus-control export (2,421 unique IDs, zero repeated IDs). This says nothing about uniqueness outside the queried catalogue and sky regions.
+
+The 2,421 candidate-union rows are records matching at least one of the three fields. They are not 2,421 new YSOs, not 2,421 spectroscopically confirmed YSOs, and not a selection-function-corrected population.
 
 ## Query implementation corrections
 
