@@ -53,6 +53,8 @@ def _revalidate_coverage(
     fields: Sequence[Mapping[str, Any]],
     coverage_audit: Mapping[str, Any] | None,
     minimum_completeness: float,
+    selection_trials: Sequence[Mapping[str, Any]],
+    selection_bin_spec: Mapping[str, Any],
 ) -> dict[str, Any]:
     if not isinstance(coverage_audit, Mapping):
         raise ValueError("a complete coverage_audit is required before population-rate estimation")
@@ -81,6 +83,10 @@ def _revalidate_coverage(
             minimum_continuum_samples=thresholds["minimum_continuum_samples"],
             minimum_median_snr=thresholds["minimum_median_snr"],
             minimum_completeness=thresholds["minimum_completeness"],
+            selection_trials=selection_trials,
+            selection_bin_spec=selection_bin_spec,
+            minimum_trials_per_selection_cell=thresholds["minimum_trials_per_selection_cell"],
+            minimum_selection_probability=thresholds["minimum_selection_probability"],
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f"coverage_audit cannot be independently recomputed: {exc}") from exc
@@ -91,6 +97,8 @@ def _revalidate_coverage(
         )
     if coverage_audit.get("input_fields_sha256") != verified.get("input_fields_sha256"):
         raise ValueError("coverage_audit field digest mismatch")
+    if coverage_audit.get("input_selection_trials_sha256") != verified.get("input_selection_trials_sha256"):
+        raise ValueError("coverage_audit selection-trial digest mismatch")
     return verified
 
 
@@ -99,6 +107,8 @@ def estimate_event_rate(
     *,
     coverage_audit: Mapping[str, Any],
     minimum_completeness: float | None = None,
+    selection_trials: Sequence[Mapping[str, Any]] | None = None,
+    selection_bin_spec: Mapping[str, Any] | None = None,
     draws: int = 10000,
     seed: int = 1,
 ) -> dict[str, Any]:
@@ -140,7 +150,12 @@ def estimate_event_rate(
     if seed_value != seed:
         raise ValueError("seed must be an integer")
 
-    verified_coverage = _revalidate_coverage(fields, coverage_audit, minimum_completeness)
+    if not selection_trials or not isinstance(selection_bin_spec, Mapping):
+        raise ValueError("multidimensional real-field selection trials and the frozen bin specification are required")
+    verified_coverage = _revalidate_coverage(
+        fields, coverage_audit, minimum_completeness,
+        selection_trials=selection_trials, selection_bin_spec=selection_bin_spec,
+    )
     rng = np.random.default_rng(seed_value)
     total_corrected_excess_draws = np.zeros(draws, dtype=float)
     total_science_exposure_sqdeg_days = 0.0
@@ -269,8 +284,8 @@ def estimate_event_rate(
             "Field independence and null-control matching remain operator-supplied scientific assumptions.",
             "Observed and null counts are treated as Poisson counts; spatial clustering and temporal dependence are not modelled.",
             "The null-control exposure ratio must accurately represent the science-to-control solid-angle times time ratio.",
-            "The Beta completeness model assumes injections represent the target population and compresses the selection function to one scalar per field.",
+            "The event-rate likelihood still uses the field-level aggregate completeness for count-detection uncertainty; the multidimensional source-selection model is a separate eligibility gate and is not silently substituted for event completeness.",
             "No covariance between field counts, completeness estimates and control estimates is modelled.",
-            "This rate is exploratory and is not a population result until selection, contamination and denominator assumptions are independently validated.",
+            "This rate remains exploratory; the multidimensional selection function does not by itself correct event-level detection efficiency, contamination, clustering, field covariance or denominator uncertainty.",
         ],
     }
