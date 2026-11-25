@@ -33,6 +33,12 @@ The total row is a sum of regional query returns, not a count of unique objects 
 
 The 1,540 Level-2 rows are exposures whose native footprints contain the single predeclared region-centre coordinate used by each query. They are **not** all exposures intersecting each circular region: the query does not test overlap with the full cone. They are also not claimed to be 1,540 unique exposures; the same exposure can cover more than one region centre, and cross-region plane-ID deduplication is handled by the separate candidate-inventory audit. These centre-point counts do not establish which individual catalogue source lies in an exposure, source-level visits, or epoch completeness. A row count below the declared 20,000-row cap means only that the centre-point query completed below that cap, not that full survey coverage is complete.
 
+## Full-region footprint-query extension
+
+The live reconnaissance above records the **centre-point** query only. The current workflow now also issues a separate optional ADQL shape-intersection query using `INTERSECTS(CIRCLE('ICRS', ra, dec, radius), p.poly)` to count Level-2 exposure polygons overlapping the entire predeclared circular region. This follows the IRSA SPHEREx ADQL help, which documents `INTERSECTS` for two geometry regions ([IRSA SPHEREx help](https://irsa.ipac.caltech.edu/onlinehelp/spherex/help.pdf?id=2073b24); [ADQL 2.1 specification](https://www.ivoa.net/documents/ADQL/20210528/PR-ADQL-2.1-20210528.html)).
+
+The new full-region query has a separate row-cap check, CSV, and cross-region plane-ID audit. It is optional and non-fatal: if the live TAP service rejects the shape-intersection expression, the error is recorded in `optional_query_errors`; the analyzer does not treat the failed query as zero coverage and ignores any stale full-region CSV. No full-region-intersection counts are added to the historical 1,540 centre-point rows in this report until a new live workflow run successfully returns and validates them.
+
 ## Labels were not merged into a single truth class
 
 The three YSO-related fields retain distinct meanings:
