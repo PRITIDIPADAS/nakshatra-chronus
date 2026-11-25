@@ -59,9 +59,10 @@ def test_dr1_exposure_coverage_uses_centre_point_and_optional_full_region_inters
 
     source_epoch = queries["candidate_source_exposure_matches"]
     assert f"SELECT TOP {recon.SOURCE_EPOCH_ROW_LIMIT}" in source_epoch
-    assert "FROM spherex.splices s, spherex.plane p, spherex.artifact a" in source_epoch
+    assert "FROM spherex.splices s " in source_epoch
+    assert "JOIN spherex.artifact a ON 1 = 1" in source_epoch
+    assert "JOIN spherex.plane p ON p.planeid = a.planeid" in source_epoch
     assert "WHERE CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1" in source_epoch
-    assert "AND p.planeid = a.planeid" in source_epoch
     assert source_epoch.count("CONTAINS(") == 1
     assert "AND (" in source_epoch
     assert "s.yso_pub IS NOT NULL" in source_epoch

@@ -165,12 +165,13 @@ def build_region_queries(region: dict) -> dict[str, str]:
         f"SELECT TOP {SOURCE_EPOCH_ROW_LIMIT} s.source_id, s.designation, s.ra, s.dec, "
         "s.yso_pub, s.class_1, s.stype_ml, p.planeid, p.obsid, a.uri, "
         "p.energy_bandpassname, p.time_bounds_lower, p.time_bounds_upper "
-        "FROM spherex.splices s, spherex.plane p, spherex.artifact a "
-        # IRSA TAP requires the single geometric predicate in WHERE, not in
-        # a JOIN ... ON expression. Keep all remaining SQL restrictions in
-        # one parenthesized block as required by its TAP ADQL guidance.
+        "FROM spherex.splices s "
+        # Keep explicit joins so IRSA TAP's metadata resolver can resolve each
+        # schema-qualified table. The cross join is restricted by the single
+        # geometry predicate in WHERE plus a conservative RA/Dec bounding box.
+        "JOIN spherex.artifact a ON 1 = 1 "
+        "JOIN spherex.plane p ON p.planeid = a.planeid "
         "WHERE CONTAINS(POINT('ICRS', s.ra, s.dec), p.poly) = 1 "
-        "AND p.planeid = a.planeid "
         "AND ("
         f"{ra_condition} "
         f"AND s.dec BETWEEN {dec_min:.8f} AND {dec_max:.8f} "
