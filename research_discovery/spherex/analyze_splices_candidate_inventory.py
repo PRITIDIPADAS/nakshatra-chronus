@@ -283,6 +283,7 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
         centre_path = root / name / "dr1_level2_exposures.csv"
         source_match_path = root / name / "candidate_source_exposure_matches.csv"
         source_summary_path = root / name / "candidate_source_epoch_summary.csv"
+        source_product_path = root / name / "candidate_source_product_matches.csv"
         exposures = read_csv(centre_path)
         optional_errors = result.get("optional_query_errors") or {}
         source_epoch_error = optional_errors.get("candidate_source_exposure_matches")
@@ -389,6 +390,14 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
             source_match_rows = []
             source_summary_rows = []
 
+        source_product_rows = []
+        source_product_error = None
+        if use_siav2:
+            if source_product_path.is_file():
+                source_product_rows = read_csv(source_product_path)
+            else:
+                source_product_error = "candidate source/product match manifest missing"
+
         centre_point_exposures.extend({**row, "recon_region": name} for row in exposures)
         full_region_products.extend(
             {**row, "recon_region": name} for row in full_region_rows
@@ -401,18 +410,65 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
         )
 
         centre_band_summary, centre_plane_ids = _summarize_exposure_rows(exposures)
-        source_band_summary, source_plane_ids = _summarize_exposure_rows(source_match_rows)
-        matched_source_ids = {
-            str(row.get("source_id") or "").strip()
-            for row in source_match_rows if nonempty(row.get("source_id"))
-        }
         source_counts = result.get("counts") or {}
         source_query_complete = source_counts.get("candidate_source_exposure_query_complete")
-        source_match_status = (
-            "unavailable" if source_epoch_error
-            else "complete_below_declared_row_cap" if source_query_complete is True
-            else "lower_bound_or_candidate_query_incomplete"
-        )
+        if use_siav2:
+            source_match_error = source_epoch_error or source_product_error
+            matched_source_ids = {
+                str(row.get("source_id") or "").strip()
+                for row in source_match_rows
+                if nonempty(row.get("source_id"))
+                and str(row.get("has_archive_footprint_match", "true")).lower() not in {"false", "0"}
+            }
+            source_product_pair_count = len(source_product_rows) if not source_product_error else None
+            observation_id_count = (
+                sum(int(float(row.get("unique_archive_observation_id_count") or 0))
+                    for row in source_match_rows)
+                if not source_match_error else None
+            )
+            band_counts = Counter()
+            release_source_counts = Counter()
+            for row in source_match_rows:
+                try:
+                    parsed = json.loads(row.get("band_product_counts_json") or "{}")
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    parsed = {}
+                for band, count in parsed.items():
+                    band_counts[str(band)] += int(count)
+                for release in str(row.get("data_releases") or "").split(";"):
+                    if release:
+                        release_source_counts[release] += 1
+            source_band_summary = {
+                "matched_archive_product_pair_count": source_product_pair_count,
+                "archive_observation_id_count_summed_per_source": observation_id_count,
+                "product_rows_by_band": dict(sorted(band_counts.items())),
+                "matched_source_rows_by_release": dict(sorted(release_source_counts.items())),
+                "interpretation": "Metadata-only product associations; obs_id and time bounds are not validated independent epochs",
+            } if not source_match_error else None
+            source_plane_ids = set()
+            source_match_status = (
+                "unavailable" if source_match_error
+                else source_counts.get("candidate_source_exposure_query_status")
+                or ("complete_below_declared_row_cap" if source_query_complete is True
+                    else "observed_lower_bound")
+            )
+        else:
+            source_match_error = source_epoch_error
+            source_band_summary, source_plane_ids = _summarize_exposure_rows(source_match_rows)
+            matched_source_ids = {
+                str(row.get("source_id") or "").strip()
+                for row in source_match_rows if nonempty(row.get("source_id"))
+            }
+            source_product_pair_count = len(source_match_rows)
+            observation_id_count = sum(
+                int(float(row.get("unique_observation_count") or 0))
+                for row in source_summary_rows
+            )
+            source_match_status = (
+                "unavailable" if source_match_error
+                else "complete_below_declared_row_cap" if source_query_complete is True
+                else "lower_bound_or_candidate_query_incomplete"
+            )
         region_rows.append({
             "region": name,
             "role": region.get("role"),
@@ -455,7 +511,11 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
                 if use_siav2 else "region_circle_intersects_exposure_polygon"
             ),
             "candidate_source_exposure_query_status": source_match_status,
-            "candidate_source_exposure_query_error": source_epoch_error,
+            "candidate_source_exposure_query_error": source_match_error,
+            "candidate_source_product_match_rows": (
+                None if source_match_error else source_product_pair_count
+            ),
+            "candidate_source_product_match_error": source_product_error,
             "candidate_source_exposure_match_rows": (
                 None if source_epoch_error else len(source_match_rows)
             ),
@@ -467,15 +527,23 @@ def _region_summaries(root: Path, report: dict, candidate_rows: list[dict]):
                 else max(0, len(candidate_ids) - len(matched_source_ids))
             ),
             "candidate_source_exposure_unique_plane_ids": (
-                None if source_epoch_error else len(source_plane_ids)
+                None if use_siav2 or source_match_error else len(source_plane_ids)
             ),
+            "candidate_source_matched_archive_product_pair_count": (
+                None if source_match_error else source_product_pair_count
+            ),
+            "candidate_source_archive_observation_id_count_summed_per_source": observation_id_count,
             "candidate_source_exposure_by_band": (
-                None if source_epoch_error else source_band_summary
+                None if source_match_error else source_band_summary
             ),
             "candidate_source_epoch_summary_rows": (
-                None if source_epoch_error else len(source_summary_rows)
+                None if source_match_error else len(source_summary_rows)
             ),
             "source_coverage_interpretation": (
+                "Spherical SIAv2 s_region positional associations and archive metadata only. "
+                "Product rows, obs_id values and MJD bounds are not validated independent visits, "
+                "extracted flux, calibrated photometry, light curves or YSO identity."
+                if use_siav2 else
                 "Geometric source-coordinate to Level-2 exposure-polygon matches only. "
                 "Extracted flux validity, spectrum quality and usable epoch cadence are not assessed."
             ),
@@ -546,10 +614,11 @@ def analyze(root: Path) -> dict:
     cube_summary = {
         **(report.get("dr1_all_sky_cube") or {}),
         "metadata_rows_verified_against_csv": (
-            None if cube_raw.get("error") else len(cube_metadata_rows)
+            None if cube_raw.get("query_errors") else len(cube_metadata_rows)
         ),
+        "observed_metadata_rows_in_csv": len(cube_metadata_rows),
         "metadata_access_uri_rows": (
-            None if cube_raw.get("error") else sum(
+            None if cube_raw.get("query_errors") else sum(
                 nonempty(row.get("access_url") or row.get("uri")) for row in cube_metadata_rows
             )
         ),
@@ -631,29 +700,62 @@ def analyze(root: Path) -> dict:
         ),
         archive_products=report.get("schema") == "chronos-spllices-yso-recon/1.1",
     )
-    source_pair_membership = defaultdict(set)
-    for row in candidate_source_exposure_matches:
-        source_id = str(row.get("source_id") or "").strip()
-        plane_id = str(row.get("planeid") or "").strip()
-        if source_id and plane_id:
-            source_pair_membership[(source_id, plane_id)].add(
-                str(row.get("recon_region") or "")
-            )
-    cross_region_source_pairs = {
-        f"{source_id}|{plane_id}": sorted(regions)
-        for (source_id, plane_id), regions in source_pair_membership.items()
-        if len(regions) > 1
-    }
-    candidate_source_footprint_overlap = {
-        "source_exposure_match_rows": len(candidate_source_exposure_matches),
-        "unique_source_plane_pairs": len(source_pair_membership),
-        "source_plane_pairs_in_multiple_region_queries": len(cross_region_source_pairs),
-        "source_plane_pair_region_memberships": cross_region_source_pairs,
-        "interpretation": (
-            "Rows are exact cone-filtered source-coordinate to Level-2 exposure-polygon matches. "
-            "Repeated source-plane pairs across region queries are reported, not collapsed."
-        ),
-    }
+    if report.get("schema") == "chronos-spllices-yso-recon/1.1":
+        source_pair_membership = defaultdict(set)
+        for region_item in regional:
+            if region_item.get("candidate_source_product_match_error"):
+                continue
+            region_name = str(region_item.get("region") or "")
+            product_path = root / region_name / "candidate_source_product_matches.csv"
+            if not product_path.is_file():
+                continue
+            for row in read_csv(product_path):
+                source_id = str(row.get("source_id") or "").strip()
+                product_id = str(row.get("archive_product_id") or "").strip()
+                if source_id and product_id:
+                    source_pair_membership[(source_id, product_id)].add(region_name)
+        cross_region_source_pairs = {
+            f"{source_id}|{product_id}": sorted(regions)
+            for (source_id, product_id), regions in source_pair_membership.items()
+            if len(regions) > 1
+        }
+        candidate_source_footprint_overlap = {
+            "source_archive_product_match_rows": (
+                None if any(row.get("candidate_source_product_match_error") for row in regional)
+                else sum(row.get("candidate_source_product_match_rows") or 0 for row in regional)
+            ),
+            "unique_source_archive_product_pairs_observed": len(source_pair_membership),
+            "source_product_pairs_in_multiple_region_queries": len(cross_region_source_pairs),
+            "source_archive_product_region_memberships": cross_region_source_pairs,
+            "interpretation": (
+                "Exact source-to-SIAv2 product positional associations from the per-region manifest; "
+                "these are metadata links, not extracted flux or independent epochs."
+            ),
+        }
+    else:
+        source_pair_membership = defaultdict(set)
+        for row in candidate_source_exposure_matches:
+            source_id = str(row.get("source_id") or "").strip()
+            plane_id = str(row.get("planeid") or "").strip()
+            if source_id and plane_id:
+                source_pair_membership[(source_id, plane_id)].add(
+                    str(row.get("recon_region") or "")
+                )
+        cross_region_source_pairs = {
+            f"{source_id}|{plane_id}": sorted(regions)
+            for (source_id, plane_id), regions in source_pair_membership.items()
+            if len(regions) > 1
+        }
+        candidate_source_footprint_overlap = {
+            "source_exposure_match_rows": len(candidate_source_exposure_matches),
+            "unique_source_plane_pairs": len(source_pair_membership),
+            "source_plane_pairs_in_multiple_region_queries": len(cross_region_source_pairs),
+            "source_plane_pair_region_memberships": cross_region_source_pairs,
+            "interpretation": (
+                "Rows are exact cone-filtered source-coordinate to Level-2 exposure-polygon matches. "
+                "Repeated source-plane pairs across region queries are reported, not collapsed."
+            ),
+        }
     result = {
         "schema": SCHEMA,
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -670,6 +772,17 @@ def analyze(root: Path) -> dict:
         ),
         "dr1_all_sky_cube_inventory": cube_summary,
         "candidate_source_exposure_coverage": {
+            "matched_source_summary_row_count": len(candidate_source_exposure_matches),
+            "matched_archive_product_pair_count": (
+                sum(row.get("candidate_source_product_match_rows") or 0 for row in regional)
+                if report.get("schema") == "chronos-spllices-yso-recon/1.1"
+                and not any(row.get("candidate_source_product_match_error") for row in regional)
+                else None if report.get("schema") == "chronos-spllices-yso-recon/1.1"
+                else len(candidate_source_exposure_matches)
+            ),
+            "product_match_manifest_rows_observed": sum(
+                row.get("candidate_source_product_match_rows") or 0 for row in regional
+            ),
             "match_row_count": (
                 None if report.get("schema") == "chronos-spllices-yso-recon/1.1"
                 and any(row.get("candidate_source_exposure_query_status") == "unavailable"
@@ -691,7 +804,15 @@ def analyze(root: Path) -> dict:
                 row.get("candidate_source_exposure_query_status") == "unavailable"
                 for row in regional
             ),
-            "interpretation": "Geometric matches only; not extracted spectra or usable-epoch validation.",
+            "matching_method": (
+                "SIAv2 spherical s_region point-in-polygon"
+                if report.get("schema") == "chronos-spllices-yso-recon/1.1"
+                else "legacy TAP source-to-plane geometry"
+            ),
+            "metadata_only": report.get("schema") == "chronos-spllices-yso-recon/1.1",
+            "source_level_epoch_coverage_measured": False,
+            "source_level_calibrated_flux_measured": False,
+            "interpretation": "Archive positional associations only; not extracted spectra, calibrated flux, validated light curves or independent epochs.",
         },
         "cross_region_candidate_source_exposure_overlap": candidate_source_footprint_overlap,
         "candidate_selection_definition": (

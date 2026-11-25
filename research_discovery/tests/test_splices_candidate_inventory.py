@@ -194,6 +194,20 @@ def _fixture_sia_v11(root):
         "_chronos_collection": "spherex_dr1_cube",
         "_chronos_product_role": "all_sky_spatial_spectral_cube",
     }])
+    for region, source_id in (
+        ("Taurus_Auriga", "source-a"),
+        ("Perseus_NGC1333", "source-c"),
+    ):
+        _write_csv(root / region / "candidate_source_product_matches.csv", [{
+            "source_id": source_id,
+            "archive_product_id": f"{region}-product-1",
+            "obs_id": f"{region}-obs-1",
+            "collection": "spherex_dr1",
+            "data_release": "dr1",
+            "energy_bandpassname": "SPHEREx-D2",
+            "match_method": "spherical-gnomonic-pip/1.0",
+            "metadata_only": True,
+        }])
     report["schema"] = "chronos-spllices-yso-recon/1.1"
     report["dr1_all_sky_cube"] = {
         "collection": "spherex_dr1_cube", "nominal_channels": 102,
@@ -281,6 +295,8 @@ def test_schema_1_1_siav2_products_and_cube_are_not_epochs(tmp_path):
     assert first["dr1_level2_full_region_intersection_exposure_rows"] is None
     assert first["candidate_source_exposure_query_status"] == "unavailable"
     assert first["candidate_source_exposure_match_rows"] is None
+    assert first["candidate_source_product_match_rows"] == 1
+    assert report["cross_region_candidate_source_exposure_overlap"]["unique_source_archive_product_pairs_observed"] == 2
     cube = report["dr1_all_sky_cube_inventory"]
     assert cube["metadata_rows_verified_against_csv"] == 1
     assert cube["metadata_access_uri_rows"] == 1
