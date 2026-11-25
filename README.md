@@ -1,6 +1,6 @@
 # Nakshatra CHRONOS
 
-See [`docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md`](docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md) for the evidence-gated status of the real SPHEREx calibration pilot, blind benchmark, YSO population and release gates.
+See [`docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md`](docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md) for the evidence-gated project status and [the completed M101 DR1/D2 real-data pilot](docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md) for archive provenance, calibration checks and Jy injection/recovery results.
 
 
 **An observatory for change in the SPHEREx infrared sky.** CHRONOS finds what changed between SPHEREx visits, tests whether the change is real, ranks five explanations, tries to prove its own answer wrong, and writes a report in which every sentence points to a measurement.
@@ -51,7 +51,7 @@ CHRONOS does not merely search for changes. It investigates whether they are rea
 
 **Real data, run on GitHub Actions** (workflow `real data`, `scripts/real_data_run.py`, results in `data/real_data_run.json`): image counts per release at three places (for example 226 DR1 and 110 QR3 images at RW Aurigae); a real DR1 All-Sky Cube spectrum (tile Npix277, 102 × 512 × 512, BLANKCH D3:17 and D4:01, the missing channels 51 and 52); 12 SPLICES ice targets near RW Aurigae; the official DR1 helium, aurora, shuttle glow, nonfunctional pixel, spectral WCS, ePSF and crosstalk files; and 3I/ATLAS, with SPHEREx DR1 images at its JPL Horizons positions in August and December 2025.
 
-Also added: the research extension pack (`backend/chronos_addons/`, 14 offline API routes; `research_discovery/`: DR1 and calibration discovery, native MEF download with checksums, ePSF stamps at sub-pixel phase, flag policy, detector-template reprojection, injection and recovery, Planet Nine population tools, citizen-study manifest and protocols) and two Kaggle notebooks for the real-data runs (`notebooks/kaggle/`). Physics first: no generative AI produces any result. 121 automated tests.
+Also added: the research extension pack (`backend/chronos_addons/`, 14 offline API routes; `research_discovery/`: DR1 and calibration discovery, native MEF download with checksums, ePSF stamps at sub-pixel phase, flag policy, detector-template reprojection, injection and recovery, Planet Nine population tools, citizen-study manifest and protocols) and two Kaggle notebooks for the real-data runs (`notebooks/kaggle/`). Physics first: no generative AI produces any result. The latest combined CI run passed 248 tests (2 warnings); see the empirical status record for the exact run.
 
 ## The problem: you cannot blink SPHEREx
 
@@ -181,7 +181,7 @@ Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Methods: [docs/MET
 
 ## Data used
 
-* **SPHEREx, NASA IRSA.** The live observatory can read Quick Release cutouts (QR2/QR3) for display and candidate investigation. Its WCS-WAVE lookup is display-grade only. The separate Session 02–06 research path standardizes new comparisons on DR1/QR3 and assigns science wavelengths from detector-matched CWAVE/CBAND calibration maps, while retaining IMAGE, FLAGS, VARIANCE, ZODI, PSF/ePSF and alternate WCS A metadata. Actual native-MEF audit and calibration compatibility remain conditional on retrieving the exact files and verifying their provenance.
+* **SPHEREx, NASA IRSA.** The live observatory can read Quick Release cutouts (QR2/QR3) for display and candidate investigation. Its WCS-WAVE lookup is display-grade only. The separate Session 02–06 research path standardizes new comparisons on DR1/QR3 and assigns science wavelengths from detector-matched CWAVE/CBAND calibration maps, while retaining IMAGE, FLAGS, VARIANCE, ZODI, PSF/ePSF and alternate WCS A metadata. A first native-MEF audit and calibration compatibility run has now passed for one M101 DR1 D2 exposure; see the evidence-gated pilot report. Other exposures and calibration groups still require their own file-backed provenance checks.
 * **Gaia DR3, ESA.** Star anchors, star ensemble gains, catalog motion for cross matching.
 * **AllWISE, NASA IRSA.** Overlay in live mode.
 * **JPL Small Body Identification service.** Known small bodies in live mode.
