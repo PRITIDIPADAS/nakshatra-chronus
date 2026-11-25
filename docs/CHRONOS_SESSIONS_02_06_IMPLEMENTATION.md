@@ -15,7 +15,7 @@ Standard science retrieval uses the uniformly processed DR1 and QR3 collections,
 
 Example SIA2 query and retrieval:
 
-    python research_discovery/spherex/discover_dr1.py       --ra <RA_DEG> --dec <DEC_DEG> --radius 0.05       --collections spherex_dr1 spherex_qr3       --download --limit 2 --out data/spherex_dr1
+    python research_discovery/spherex/discover_dr1.py       --ra <RA_DEG> --dec <DEC_DEG> --radius 0.05       --collections spherex_dr1 spherex_dr1_deep spherex_qr3 spherex_qr3_deep       --download --limit 2 --out data/spherex_dr1
 
 Example native-MEF query (release is explicit):
 
@@ -74,20 +74,22 @@ Required record fields:
       "calibration_product": "abs_gain_matrix",
       "calibration_bunit": "<exact BUNIT read from the absolute-gain FITS header>",
       "exposure_time_s": 0.0,
-      "science_file_sha256": "<64 lowercase hex characters>",
-      "science_observation_id": "<exact original OBSID from the science MEF>",
+      "science_file_sha256": "<native science MEF SHA-256>",
+      "science_native_file_sha256": "<same native science MEF SHA-256>",
+      "science_cutout_sha256": "<exact cutout byte SHA-256; required by GUI injection>",
+      "science_observation_id": "<original archive OBSID, without detector suffix>",
       "science_source_uri": "<exact native HTTPS archive URI>",
       "detector": "D2",
       "image_unit": "MJy/sr",
-      "calibration_uri": "<exact HTTPS calibration URI>",
-      "calibration_file_path": "data/calibration/D2_gain.fits",
+      "calibration_uri": "<exact HTTPS absolute-gain calibration URI>",
+      "calibration_file_path": "data/calibration/D2_abs_gain_matrix.fits",
       "calibration_sha256": "<64 lowercase hex characters>",
-      "conversion_method": "<documented derivation, including units>",
+      "conversion_method": "e-/image-unit = exposure_time_s / abs_gain_matrix; see official supplement",
       "verified_by": "<reviewer>",
       "verified_utc": "<ISO-8601 UTC timestamp>"
     }
 
-The example values above are placeholders, not SPHEREx instrument constants. A real conversion must be derived from the correct exposure and calibration product. Do not fill the record with guessed values. Do not store a scalar gain in this record: the runtime derives the pixel-dependent conversion map directly from abs_gain_matrix and exposure_time_s. The science_file_sha256 identifies the exact bytes injected: the native MEF for the research-discovery CLI, or the exact cutout bytes retained by the browser-backed connector. Both records retain the original native archive URI. The CLI requires --science-uri <exact native HTTPS archive URI> alongside --electron-calibration-record <record.json> and --exposure-time-s <exact SIA2 exposure time in seconds>.
+The example values above are placeholders, not SPHEREx instrument constants. A real conversion must be derived from the correct exposure and calibration product. Do not fill the record with guessed values. Set exposure_time_s from the exact exposure record, not by assumption. science_file_sha256 identifies the native MEF; the GUI cutout workflow additionally requires science_cutout_sha256 for the exact cutout bytes. Do not store a scalar gain in this record: the runtime derives the pixel-dependent conversion map directly from abs_gain_matrix and exposure_time_s. The science_file_sha256 identifies the exact bytes injected: the native MEF for the research-discovery CLI, or the exact cutout bytes retained by the browser-backed connector. Both records retain the original native archive URI. The CLI requires --science-uri <exact native HTTPS archive URI> alongside --electron-calibration-record <record.json> and --exposure-time-s <exact SIA2 exposure time in seconds>.
 
 The legacy backend/inject.py path now carries the loaded cutout's original archive URI, original OBSID, exact cutout-byte SHA-256, detector and IMAGE unit. A record must match the exposure identity, detector, unit, cutout hash and native source URI; its local calibration bytes are re-hashed. A scalar gain is rejected. The GUI path derives its own cutout-shaped conversion map from abs_gain_matrix, the exact exposure time and the validated cutout origin. Exposures with no such record stay deterministic, with a note attached to the exposure.
 
