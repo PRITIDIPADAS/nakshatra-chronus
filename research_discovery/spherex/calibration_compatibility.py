@@ -36,11 +36,27 @@ def compatibility_decision(science:Mapping[str,Any],calibration:Mapping[str,Any]
         frame["status"]="fail"
     cwave=np.asarray(calibration.get("cwave")) if calibration.get("cwave") is not None else None
     cband=np.asarray(calibration.get("cband")) if calibration.get("cband") is not None else None
-    if cwave is None or cband is None: checks["wavelength_maps"]={"status":"unknown"}
+    if cwave is not None and cband is not None:
+        ok=(cwave.shape==(2040,2040) and cband.shape==(2040,2040) and
+            np.isfinite(cwave).all() and np.isfinite(cband).all() and
+            (cwave>0).all() and (cband>0).all())
+        checks["wavelength_maps"]={"status":"pass" if ok else "fail",
+            "cwave_shape":list(cwave.shape),"cband_shape":list(cband.shape),
+            "native_grid_required":[2040,2040],"all_finite_positive":bool(
+                np.isfinite(cwave).all() and np.isfinite(cband).all() and
+                (cwave>0).all() and (cband>0).all())}
     else:
-        ok=cwave.shape==cband.shape and cwave.ndim==2 and np.isfinite(cwave).any() and np.isfinite(cband).any()
-        ok=bool(ok and np.any(np.isfinite(cwave)&(cwave>0)) and np.any(np.isfinite(cband)&(cband>0)))
-        checks["wavelength_maps"]={"status":"pass" if ok else "fail","cwave_shape":list(cwave.shape),"cband_shape":list(cband.shape)}
+        import re
+        audit_sha=str(calibration.get("wavelength_maps_audit_sha256",""))
+        shape_ok=(calibration.get("cwave_shape")==[2040,2040] and
+                  calibration.get("cband_shape")==[2040,2040])
+        fraction=calibration.get("valid_fraction")
+        summary_ok=(bool(re.fullmatch(r"[0-9a-fA-F]{64}",audit_sha)) and shape_ok and
+                    isinstance(fraction,(int,float)) and float(fraction)==1.0)
+        checks["wavelength_maps"]={"status":"pass" if summary_ok else "unknown",
+            "audit_sha256":audit_sha or None,"cwave_shape":calibration.get("cwave_shape"),
+            "cband_shape":calibration.get("cband_shape"),"valid_fraction":fraction,
+            "note":"Requires a SHA-256-linked native MEF audit summary proving full science-footprint validity."}
     states=[x["status"] for x in checks.values()]
     status="rejected" if "fail" in states else "compatible" if all(x=="pass" for x in states) else "review_required"
     return {"status":status,"checks":checks,
