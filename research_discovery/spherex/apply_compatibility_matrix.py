@@ -10,7 +10,7 @@ from research_discovery.spherex.calibration_compatibility import compatibility_d
 
 
 def apply_matrix(manifest, matrix):
-    manifest_report = validate_manifest(manifest)
+    manifest_report = validate_manifest(manifest, verify_local=True, base_dir=Path.cwd())
     if not manifest_report["valid"]:
         raise ValueError(f"Input archive manifest is invalid: {manifest_report['issues'][:5]}")
     products = [dict(product) for product in manifest.get("products", [])]
