@@ -120,6 +120,7 @@ def test_feature_evolution_rejects_unverified_wavelength_arrays():
 def test_spectral_epoch_rejects_valid_pixels_with_nan_wavelengths():
     from chronos_causal.wavelength_gate import validate_spectral_epoch
     epoch = {
+        "mjd": 60000.0,
         "wavelength_um": [1.0, float("nan"), 1.2],
         "flux": [1.0, 1.0, 1.0],
         "valid": [True, True, True],
@@ -137,6 +138,7 @@ def test_spectral_epoch_rejects_valid_pixels_with_nan_wavelengths():
 def test_spectral_epoch_allows_masked_invalid_wavelength_pixels():
     from chronos_causal.wavelength_gate import validate_spectral_epoch
     epoch = {
+        "mjd": 60000.0,
         "wavelength_um": [1.0, float("nan"), 1.2],
         "flux": [1.0, float("nan"), 1.0],
         "valid": [True, False, True],
@@ -154,3 +156,23 @@ def test_legacy_pipeline_does_not_match_display_only_wavelengths():
     b = SimpleNamespace(lam=2.11, bw=0.02, lam_ok=True)
     assert color_distance(a, b) == float("inf")
 
+
+
+def test_spectral_epoch_rejects_nonfinite_flux_or_invalid_sigma_in_valid_pixels():
+    from chronos_causal.wavelength_gate import validate_spectral_epoch
+    epoch = {
+        "mjd": 60000.0,
+        "wavelength_um": [1.0, 1.1, 1.2],
+        "flux": [1.0, float("nan"), 1.0],
+        "sigma": [0.1, 0.1, 0.1],
+        "valid": [True, True, True],
+        "wavelength_unit": "um", "wavelength_source": "CWAVE/CBAND",
+        "wavelength_validated": True, "calibration_group": "DR1:D2:7.1:2026-191",
+        "wavelength_provenance": _real_provenance(),
+    }
+    with pytest.raises(ValueError, match="valid flux pixel"):
+        validate_spectral_epoch(epoch)
+    epoch["flux"][1] = 1.0
+    epoch["sigma"][1] = float("nan")
+    with pytest.raises(ValueError, match="valid sigma pixel"):
+        validate_spectral_epoch(epoch)
