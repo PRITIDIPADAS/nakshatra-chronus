@@ -5,11 +5,90 @@ The PSF stamp must be extracted from the matching DR1 ePSF product and
 normalized to unit sum. This tool does not create a fake instrument PSF.
 """
 from __future__ import annotations
-import argparse, csv, json
+import argparse, csv, json, hashlib
 from pathlib import Path
 import numpy as np
 from scipy.signal import fftconvolve
 from scipy.ndimage import maximum_filter
+
+
+
+def normalize_psf(psf: np.ndarray) -> np.ndarray:
+    """Validate and unit-normalize a native-pixel PSF without changing its phase."""
+    p = np.asarray(psf, dtype=float)
+    if p.ndim != 2 or any(n % 2 == 0 for n in p.shape):
+        raise ValueError("PSF must be a 2D odd-sized stamp")
+    if not np.isfinite(p).all() or np.any(p < 0):
+        raise ValueError("PSF must be finite and nonnegative")
+    total = float(p.sum())
+    if not np.isfinite(total) or total <= 0:
+        raise ValueError("PSF must have a finite positive sum")
+    return p / total
+
+
+def validate_electron_calibration_record(record, *, electrons_per_image_unit=None):
+    """Validate required signed-off provenance before enabling source Poisson noise."""
+    if not isinstance(record, dict):
+        raise ValueError("source Poisson noise requires an electron calibration record")
+    required = ("verification_status", "electrons_per_image_unit", "science_file_sha256",
+                "science_observation_id", "detector", "image_unit", "calibration_uri",
+                "calibration_file_path", "calibration_sha256", "conversion_method",
+                "verified_by", "verified_utc")
+    missing = [key for key in required if record.get(key) in (None, "")]
+    if missing:
+        raise ValueError("electron calibration record is missing: " + ", ".join(missing))
+    if record["verification_status"] != "verified":
+        raise ValueError("electron conversion is not marked verified; deterministic injection remains available")
+    gain = float(record["electrons_per_image_unit"])
+    if not np.isfinite(gain) or gain <= 0:
+        raise ValueError("calibration record electrons_per_image_unit must be finite and positive")
+    if electrons_per_image_unit is not None and float(electrons_per_image_unit) != gain:
+        raise ValueError("CLI conversion value differs from the calibration record")
+    import re
+    for key in ("science_file_sha256", "calibration_sha256"):
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", str(record[key])):
+            raise ValueError(f"{key} must be a 64-character SHA-256 hex digest")
+    if not str(record["calibration_uri"]).startswith("https://"):
+        raise ValueError("calibration_uri must be an HTTPS source URI")
+    return gain
+
+
+def inject_source_patch(image: np.ndarray, variance: np.ndarray, flags: np.ndarray,
+                        source_signal: np.ndarray, x: float, y: float, *,
+                        rng: np.random.Generator, electrons_per_image_unit: float | None = None,
+                        excluded_flag_bits: int = 0) -> dict:
+    """Inject a complete PSF patch; never crop, wrap, or write into excluded bad pixels."""
+    image, variance, flags = np.asarray(image), np.asarray(variance), np.asarray(flags)
+    signal = np.asarray(source_signal, dtype=float)
+    if image.ndim != 2 or variance.shape != image.shape or flags.shape != image.shape:
+        raise ValueError("IMAGE, VARIANCE and FLAGS must be aligned 2D arrays")
+    if signal.ndim != 2 or any(n % 2 == 0 for n in signal.shape):
+        raise ValueError("source_signal must be an odd-sized 2D PSF patch")
+    if not np.isfinite(signal).all() or np.any(signal < 0):
+        raise ValueError("source_signal must be finite and nonnegative")
+    if not np.isfinite(x) or not np.isfinite(y):
+        raise ValueError("source coordinates must be finite")
+    py, px = np.array(signal.shape) // 2
+    x0, y0 = int(np.floor(x)) - int(px), int(np.floor(y)) - int(py)
+    x1, y1 = x0 + signal.shape[1], y0 + signal.shape[0]
+    if x0 < 0 or y0 < 0 or x1 > image.shape[1] or y1 > image.shape[0]:
+        raise ValueError("full PSF footprint falls outside the image; edge clipping is prohibited")
+    sl = (slice(y0, y1), slice(x0, x1))
+    if excluded_flag_bits and np.any((flags[sl].astype(np.uint64) & np.uint64(excluded_flag_bits)) != 0):
+        raise ValueError("full PSF footprint touches an excluded flag pixel")
+    if electrons_per_image_unit is None:
+        image[sl] += signal
+        return {"mode": "deterministic", "variance_added_sum": 0.0}
+    gain = float(electrons_per_image_unit)
+    if not np.isfinite(gain) or gain <= 0:
+        raise ValueError("electrons_per_image_unit must be finite and positive")
+    expected_electrons = signal * gain
+    if not np.isfinite(expected_electrons).all():
+        raise ValueError("expected source electrons are non-finite")
+    image[sl] += rng.poisson(expected_electrons) / gain
+    variance[sl] += expected_electrons / (gain ** 2)
+    return {"mode": "source_poisson", "variance_added_sum": float(np.sum(expected_electrons / (gain ** 2)))}
+
 
 
 def matched_filter_snr(image: np.ndarray, variance: np.ndarray, psf: np.ndarray) -> np.ndarray:
@@ -82,7 +161,8 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
                            psf_reference_xy: tuple[float,float] | None = None,
                            psf_region_radius: float | None = None,
                            background: np.ndarray | None = None,
-                           electrons_per_image_unit: float | None = None) -> dict:
+                           electrons_per_image_unit: float | None = None,
+                           electron_calibration_record: dict | None = None) -> dict:
     image=np.asarray(image,float); variance=np.asarray(variance,float); flags=np.asarray(flags)
     if image.ndim!=2 or variance.shape!=image.shape or flags.shape!=image.shape: raise ValueError("IMAGE/VARIANCE/FLAGS must have equal 2D shapes")
     if not flux_levels or any((not np.isfinite(x)) or x<=0 for x in flux_levels): raise ValueError("injected flux levels must be finite and >0")
@@ -97,18 +177,17 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
         work_image=image.copy()
     if flux_unit not in {"image_sum", "Jy"}: raise ValueError("flux_unit must be 'image_sum' or 'Jy'")
     if electrons_per_image_unit is not None:
-        electrons_per_image_unit = float(electrons_per_image_unit)
-        if not np.isfinite(electrons_per_image_unit) or electrons_per_image_unit <= 0:
-            raise ValueError("electrons_per_image_unit must be finite and positive when source photon noise is enabled")
+        electrons_per_image_unit = validate_electron_calibration_record(
+            electron_calibration_record, electrons_per_image_unit=electrons_per_image_unit)
+    elif electron_calibration_record is not None:
+        electrons_per_image_unit = validate_electron_calibration_record(electron_calibration_record)
     omega = None
     if flux_unit == "Jy":
         if solid_angle_sr_map is None: raise ValueError("Jy injections require a detector-aligned solid-angle map in steradians")
         omega = np.asarray(solid_angle_sr_map, float)
         if omega.shape != image.shape: raise ValueError("solid-angle map must be aligned to IMAGE and have the same shape")
-    p=np.asarray(psf,float)
-    if p.ndim!=2 or any(n%2==0 for n in p.shape): raise ValueError("PSF must be odd 2D stamp")
-    if not np.isfinite(p).all() or (p < 0).any() or p.sum() <= 0: raise ValueError("PSF must be finite, nonnegative and have positive sum")
-    p=p/p.sum(); py,px=np.array(p.shape)//2
+    p=normalize_psf(psf)
+    py,px=np.array(p.shape)//2
     good=np.isfinite(work_image)&np.isfinite(variance)&(variance>0)
     if excluded_flag_bits: good &= (flags.astype(np.uint64)&np.uint64(excluded_flag_bits))==0
     if flux_unit == "Jy": good &= np.isfinite(omega) & (omega > 0)
@@ -149,8 +228,6 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
         injected_variance=variance.copy()
         for x,y in xy:
             x0=int(np.floor(x))-px;y0=int(np.floor(y))-py
-            region=injected_img[y0:y0+p.shape[0],x0:x0+p.shape[1]]
-            var_region=injected_variance[y0:y0+p.shape[0],x0:x0+p.shape[1]]
             if flux_unit == "Jy":
                 # IMAGE is MJy/sr. Convert integrated source flux density F[Jy]
                 # to pixel surface brightness through each pixel solid angle.
@@ -159,16 +236,9 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
             else:
                 # This is deliberately an image-sum injection unit, not Jy.
                 source_signal = level*p
-            if electrons_per_image_unit is None:
-                region += source_signal
-            else:
-                # Convert the expected source signal to electrons, draw its
-                # Poisson realization, then convert back to image units. The
-                # added variance is lambda / gain^2 = signal / gain.
-                expected_electrons = np.clip(source_signal * electrons_per_image_unit, 0.0, None)
-                source_realization = rng.poisson(expected_electrons) / electrons_per_image_unit
-                region += source_realization
-                var_region += expected_electrons / (electrons_per_image_unit ** 2)
+            inject_source_patch(injected_img, injected_variance, flags, source_signal, x, y,
+                rng=rng, electrons_per_image_unit=electrons_per_image_unit,
+                excluded_flag_bits=excluded_flag_bits)
         injected_snr = matched_filter_snr(injected_img,injected_variance,p)
         injected_snr[~detection_valid] = np.nan
         peaks=detect_peaks(injected_snr,threshold=snr_threshold)
@@ -214,8 +284,10 @@ def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.nd
       "background_model_subtracted":bool(background is not None),
       "source_photon_noise": {
           "enabled": electrons_per_image_unit is not None,
+          "physically_modelled": electrons_per_image_unit is not None and electron_calibration_record is not None,
           "electrons_per_image_unit": electrons_per_image_unit,
-          "variance_update": "Added source Poisson variance in image units" if electrons_per_image_unit is not None else "Not modelled; do not interpret this injection run as a full photon-noise experiment",
+          "calibration_record": electron_calibration_record,
+          "variance_update": "Added source Poisson variance in image units from the verified per-exposure conversion" if electrons_per_image_unit is not None else "Not modelled; deterministic signal only",
       },
       "background_interpretation":"Caller-supplied aligned background model subtracted before matched filtering" if background is not None else "No background model subtracted; users should supply the matching ZODI/background or precomputed residual map for scientifically appropriate detection",
       "flux_interpretation":"Jy integrated source flux converted through a detector-aligned steradian pixel-area map" if flux_unit == "Jy" else "sum of per-pixel IMAGE units; not an integrated Jy flux",
@@ -238,7 +310,9 @@ def main():
                    help="Additional raw flag bits to exclude, ORed with --flag-policy")
     p.add_argument("--seed",type=int,default=20261114)
     p.add_argument("--electrons-per-image-unit",type=float,
-                   help="Verified exposure-specific electrons per IMAGE unit per pixel; enables source Poisson realizations and the corresponding variance update")
+                   help="Optional assertion that must equal the value in --electron-calibration-record")
+    p.add_argument("--electron-calibration-record",type=Path,
+                   help="Signed-off JSON record binding conversion to this exact science file and calibration bytes")
     p.add_argument("--source-exclusion-radius",type=int,default=7,
                    help="Exclude positions near pre-existing >threshold peaks (pixels)")
     p.add_argument("--flux-unit",choices=("image_sum","Jy"),default="image_sum",
@@ -257,7 +331,13 @@ def main():
     except ImportError as exc: raise SystemExit("Install astropy to read FITS files") from exc
     psf_sel=int(a.psf_hdu) if a.psf_hdu.isdigit() else a.psf_hdu
     omega=None
+    electron_record = json.loads(a.electron_calibration_record.read_text()) if a.electron_calibration_record else None
     with fits.open(a.science_mef,memmap=True) as sci, fits.open(a.psf_stamp,memmap=True) as pf:
+        science_sha = hashlib.sha256(a.science_mef.read_bytes()).hexdigest()
+        science_obsid = str(sci[a.image_hdu].header.get("OBSID", sci[0].header.get("OBSID", ""))).strip()
+        science_detector = str(sci[a.image_hdu].header.get("DETECTOR", "")).strip()
+        science_bunit = str(sci[a.image_hdu].header.get("BUNIT", "")).strip()
+
         image=np.asarray(sci[a.image_hdu].data,float);variance=np.asarray(sci[a.variance_hdu].data,float);flags=np.asarray(sci[a.flags_hdu].data)
         background = None
         if a.background_hdu.upper() != "NONE":
@@ -293,6 +373,23 @@ def main():
                 omega = omega * (np.pi / (180.0 * 3600.0))**2
     if a.flux_unit == "Jy" and omega is None:
         raise SystemExit("--flux-unit Jy requires --solid-angle-map")
+    if a.electrons_per_image_unit is not None and electron_record is None:
+        raise SystemExit("A numeric conversion alone is not accepted. Supply --electron-calibration-record tied to the exact science MEF.")
+    if electron_record is not None:
+        calibration_path = Path(electron_record.get("calibration_file_path", ""))
+        if not calibration_path.is_file():
+            raise FileNotFoundError("electron calibration record must point to the locally downloaded calibration file")
+        calibration_sha = hashlib.sha256(calibration_path.read_bytes()).hexdigest()
+        if calibration_sha.lower() != str(electron_record.get("calibration_sha256","")).lower():
+            raise ValueError("local calibration file SHA-256 does not match the electron calibration record")
+        for key, actual in (("science_file_sha256",science_sha),("science_observation_id",science_obsid),
+                            ("detector",science_detector),("image_unit",science_bunit)):
+            if str(electron_record.get(key,"")).lower() != str(actual).lower():
+                raise ValueError(f"electron calibration record {key} does not match this science MEF")
+        electrons_per_image_unit=validate_electron_calibration_record(
+            electron_record,electrons_per_image_unit=a.electrons_per_image_unit)
+    else:
+        electrons_per_image_unit=None
     from research_discovery.spherex.flag_policy import policy_mask
     policy_bits, policy_names = policy_mask(a.flag_policy)
     excluded_bits = int(policy_bits) | int(a.flag_bits)
@@ -300,7 +397,7 @@ def main():
         snr_threshold=a.threshold,excluded_flag_bits=excluded_bits,seed=a.seed,
         source_exclusion_radius=a.source_exclusion_radius,solid_angle_sr_map=omega,flux_unit=a.flux_unit,
         psf_reference_xy=psf_reference_xy,psf_region_radius=a.psf_region_radius,background=background,
-        electrons_per_image_unit=a.electrons_per_image_unit)
+        electrons_per_image_unit=electrons_per_image_unit, electron_calibration_record=electron_record)
     a.out.mkdir(parents=True,exist_ok=True)
     r["flag_policy"] = {"name": a.flag_policy, "excluded_flag_names": list(policy_names),
                         "excluded_flag_bits_additional": int(a.flag_bits),
