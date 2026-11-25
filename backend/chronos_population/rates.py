@@ -1,9 +1,9 @@
 """Exploratory event-rate estimates with completeness and scaled null controls.
 
-The null-count model requires an explicit ratio converting the control
-solid-angle times time exposure to the science-field exposure. It never
-silently subtracts raw control counts from science counts with different
-denominators.
+A population-rate calculation must repeat the fail-closed coverage audit on
+the exact submitted field records. The audit's input digest binds the result
+to the data, while the calculation below independently recomputes that audit
+rather than trusting a caller-supplied boolean.
 """
 from __future__ import annotations
 
@@ -35,23 +35,71 @@ def _positive_finite(value: Any, label: str) -> float:
     return number
 
 
+def _revalidate_coverage(
+    fields: Sequence[Mapping[str, Any]],
+    coverage_audit: Mapping[str, Any] | None,
+    minimum_completeness: float,
+) -> dict[str, Any]:
+    if not isinstance(coverage_audit, Mapping):
+        raise ValueError("a complete coverage_audit is required before population-rate estimation")
+    intervals = coverage_audit.get("predeclared_intervals_um")
+    thresholds = coverage_audit.get("thresholds")
+    if not isinstance(intervals, Mapping) or not isinstance(thresholds, Mapping):
+        raise ValueError("coverage_audit is missing its predeclared intervals or thresholds")
+    if not math.isclose(
+        float(thresholds.get("minimum_completeness", float("nan"))),
+        float(minimum_completeness),
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise ValueError("rate minimum_completeness must match the coverage-audit threshold")
+    try:
+        from chronos_population.coverage import assess_population_coverage
+        verified = assess_population_coverage(
+            fields,
+            target_class=str(coverage_audit["target_class"]),
+            feature_interval_um=intervals["feature"],
+            blue_continuum_um=intervals["blue_continuum"],
+            red_continuum_um=intervals["red_continuum"],
+            minimum_independent_fields=thresholds["minimum_independent_fields"],
+            minimum_epochs_per_source=thresholds["minimum_epochs_per_source"],
+            minimum_feature_samples=thresholds["minimum_feature_samples"],
+            minimum_continuum_samples=thresholds["minimum_continuum_samples"],
+            minimum_median_snr=thresholds["minimum_median_snr"],
+            minimum_completeness=thresholds["minimum_completeness"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"coverage_audit cannot be independently recomputed: {exc}") from exc
+    if verified.get("eligible_for_predeclared_population_protocol") is not True:
+        raise ValueError(
+            "Population rate blocked: independently recomputed coverage audit did not pass "
+            f"({verified.get('failure_counts')})"
+        )
+    if coverage_audit.get("input_fields_sha256") != verified.get("input_fields_sha256"):
+        raise ValueError("coverage_audit input digest does not match the exact field records")
+    if coverage_audit.get("input_fields_sha256") != verified.get("input_fields_sha256"):
+        raise ValueError("coverage_audit field digest mismatch")
+    return verified
+
+
 def estimate_event_rate(
     fields: Sequence[Mapping[str, Any]],
     *,
+    coverage_audit: Mapping[str, Any],
     minimum_completeness: float = 0.1,
     draws: int = 10000,
     seed: int = 1,
 ) -> dict[str, Any]:
     """Estimate a conditional event rate per square-degree-day.
 
-    null_control_to_science_exposure_ratio equals the science field solid-angle
-    times time divided by the null control solid-angle times time. A
-    Gamma-Poisson posterior-predictive draw scales the null count onto the
-    science exposure before it is subtracted from the observed count.
+    null_control_to_science_exposure_ratio equals science solid-angle times
+    time divided by null-control solid-angle times time. The control count is
+    drawn from a Gamma-Poisson posterior predictive model scaled onto the
+    science exposure before subtracting it from the observed count.
 
-    This is an approximate exploratory model. Fields must genuinely be
-    independent, the scalar injection completeness must represent the target
-    population, and null controls must be appropriately matched.
+    This remains an exploratory model. It assumes Poisson counts, matched
+    controls and scalar completeness; it does not handle clustering, field
+    covariance or a multidimensional selection function.
     """
     if not fields:
         raise ValueError("at least one independent field is required")
@@ -69,10 +117,10 @@ def estimate_event_rate(
     if seed_value != seed:
         raise ValueError("seed must be an integer")
 
+    verified_coverage = _revalidate_coverage(fields, coverage_audit, minimum_completeness)
     rng = np.random.default_rng(seed_value)
     total_rate_draws = np.zeros(draws, dtype=float)
     included: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
     seen_field_ids: set[str] = set()
 
     for index, raw in enumerate(fields):
@@ -86,30 +134,11 @@ def estimate_event_rate(
             )
         seen_field_ids.add(field_id)
 
-        if str(row.get("dataset_class", row.get("data_class", "unverified"))).lower() != "real":
-            skipped.append({"field_id": field_id, "reason": "field_not_labelled_real"})
-            continue
-        if row.get("independent_field") is not True:
-            skipped.append({"field_id": field_id, "reason": "independence_not_attested"})
-            continue
-        if not str(row.get("null_control_id", "")).strip():
-            skipped.append({"field_id": field_id, "reason": "null_control_not_identified"})
-            continue
-
-        try:
-            null_to_science_ratio = _positive_finite(
-                row.get("null_control_to_science_exposure_ratio"),
-                f"field {field_id} null_control_to_science_exposure_ratio",
-            )
-        except ValueError:
-            skipped.append({
-                "field_id": field_id,
-                "reason": "null_control_exposure_ratio_missing_or_invalid",
-            })
-            continue
-
-        required = ("observed_events", "null_events", "area_deg2",
-                    "baseline_days", "n_injected", "n_recovered")
+        required = (
+            "observed_events", "null_events", "area_deg2",
+            "baseline_days", "n_injected", "n_recovered",
+            "null_control_to_science_exposure_ratio",
+        )
         missing = [key for key in required if key not in row]
         if missing:
             raise ValueError(f"field {field_id} missing {missing}")
@@ -120,20 +149,19 @@ def estimate_event_rate(
         recovered = _count(row["n_recovered"], f"field {field_id} n_recovered")
         area = _positive_finite(row["area_deg2"], f"field {field_id} area_deg2")
         days = _positive_finite(row["baseline_days"], f"field {field_id} baseline_days")
-        if recovered > injected:
-            raise ValueError(f"field {field_id} recovered count cannot exceed injected count")
-        if injected <= 0:
-            skipped.append({"field_id": field_id, "reason": "no injection denominator"})
-            continue
+        null_to_science_ratio = _positive_finite(
+            row["null_control_to_science_exposure_ratio"],
+            f"field {field_id} null_control_to_science_exposure_ratio",
+        )
+        if recovered > injected or injected <= 0:
+            raise ValueError(f"field {field_id} has invalid injection/recovery counts")
+        if not str(row.get("null_control_id", "")).strip():
+            raise ValueError(f"field {field_id} has no null-control identifier")
 
         completeness = recovered / injected
         if completeness < minimum_completeness:
-            skipped.append({
-                "field_id": field_id,
-                "reason": "completeness below configured floor",
-                "measured_completeness": completeness,
-            })
-            continue
+            # The full coverage audit should already have blocked this field.
+            raise ValueError(f"field {field_id} fell below the rate completeness floor")
 
         completeness_draws = rng.beta(
             recovered + 0.5, injected - recovered + 0.5, size=draws
@@ -161,14 +189,11 @@ def estimate_event_rate(
             "baseline_days": days,
         })
 
-    if not included:
-        raise ValueError("no real, independent fields passed the completeness and null-control checks")
-
     q16, median, q84 = np.quantile(total_rate_draws, [0.16, 0.5, 0.84])
     q025, q975 = np.quantile(total_rate_draws, [0.025, 0.975])
     return {
         "included_fields": included,
-        "skipped_fields": skipped,
+        "skipped_fields": [],
         "field_count": len(included),
         "event_rate_per_sqdeg_day": {
             "median": float(median),
@@ -179,16 +204,19 @@ def estimate_event_rate(
         },
         "draws": draws,
         "seed": seed_value,
+        "coverage_revalidated": True,
+        "coverage_input_fields_sha256": verified_coverage["input_fields_sha256"],
         "method": (
             "sum of field-level non-negative Poisson excesses, with Jeffreys Beta "
             "completeness draws and scaled Gamma-Poisson null-control predictive draws"
         ),
         "limitations": [
-            "Field independence is an operator-supplied assertion; overlapping areas or repeated sources must be removed before analysis.",
+            "The estimator independently recomputes the coverage gate over the exact submitted records.",
+            "Field independence and null-control matching remain operator-supplied scientific assumptions.",
             "Observed and null counts are treated as Poisson counts; spatial clustering and temporal dependence are not modelled.",
             "The null-control exposure ratio must accurately represent the science-to-control solid-angle times time ratio.",
             "The Beta completeness model assumes injections represent the target population and compresses the selection function to one scalar per field.",
             "No covariance between field counts, completeness estimates and control estimates is modelled.",
-            "This rate is exploratory and is not a population result until selection, contamination, null-control and denominator assumptions are independently validated.",
+            "This rate is exploratory and is not a population result until selection, contamination and denominator assumptions are independently validated.",
         ],
     }
