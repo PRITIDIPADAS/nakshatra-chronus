@@ -1,5 +1,8 @@
 # Nakshatra CHRONOS
 
+See [`docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md`](docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md) for the evidence-gated status of the real SPHEREx calibration pilot, blind benchmark, YSO population and release gates.
+
+
 **An observatory for change in the SPHEREx infrared sky.** CHRONOS finds what changed between SPHEREx visits, tests whether the change is real, ranks five explanations, tries to prove its own answer wrong, and writes a report in which every sentence points to a measurement.
 
 NASA Space Apps Challenge · Planet X and SPHEREx
