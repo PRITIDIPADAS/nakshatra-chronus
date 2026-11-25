@@ -141,7 +141,7 @@ def test_label_concordance_keeps_ml_only_candidates_separate_from_published_labe
     assert profiles[1]["label_profile"] == "ml_only"
     assert profiles[1]["machine_only_candidate"] is True
     assert profiles[1]["interpretation"] == "ML-only candidate for independent review"
-    assert profiles[2]["label_profile"] == "non_ml_label_without_ml"
+    assert profiles[2]["label_profile"] == "non_ml_label_without_ml_yso"
     summary = recon.summarise_label_concordance(rows)
     assert summary["all_three_label_sources_agree_count"] == 1
     assert summary["ml_only_label_count"] == 1
