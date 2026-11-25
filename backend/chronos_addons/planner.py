@@ -248,3 +248,86 @@ def plan_observations(
             "This does not schedule or command a telescope.",
         ],
     }
+
+
+def plan_candidate_observations(candidates: Sequence[Mapping[str, Any]], *,
+                                priors: Mapping[str, float] | None = None,
+                                prior_sets: Mapping[str, Mapping[str, float]] | None = None,
+                                measurement_sigma: float = 1.0) -> dict[str, Any]:
+    if not candidates:
+        raise ValueError("at least one candidate observation is required")
+    normalized, provenance, raw_feasibility = [], {}, {}
+    seen = set()
+    for index, raw in enumerate(candidates):
+        cid = str(raw.get("candidate_observation_id", raw.get("id", ""))).strip()
+        if not cid or cid in seen:
+            raise ValueError("candidate observation IDs must be present and unique")
+        seen.add(cid)
+        predictions = raw.get("predictions") or {}
+        fp = raw.get("forecast_provenance") or {}
+        missing = sorted(set(predictions) - set(fp))
+        if missing:
+            raise ValueError(f"{cid} forecast provenance missing models: {missing}")
+        for name in predictions:
+            item = fp[name]
+            if not isinstance(item, Mapping) or not item.get("fit_id") or not item.get("input_observation_ids"):
+                raise ValueError(f"{cid} model {name} requires fit_id and input_observation_ids")
+        option = dict(raw.get("measurement_option") or {})
+        feasibility = raw.get("feasibility")
+        if feasibility is None:
+            feasibility = raw.get("feasibility_evidence") or {}
+        normalized_feasibility = dict(feasibility) if isinstance(feasibility, Mapping) else None
+        if normalized_feasibility and normalized_feasibility.get("status") == "available":
+            normalized_feasibility = {**normalized_feasibility, "status": "verified",
+                "feasible": True,
+                "source_uri": normalized_feasibility.get("source_uri", normalized_feasibility.get("source_url")),
+                "checked_utc": normalized_feasibility.get("checked_utc", normalized_feasibility.get("retrieved_at"))}
+        normalized.append({
+            "candidate_id": cid, "time": raw.get("time"),
+            "wavelength_um": option.get("wavelength_um", raw.get("wavelength_um")),
+            "detector_id": option.get("detector_id", raw.get("detector_id")),
+            "array_configuration": option.get("array_configuration", option.get("array")),
+            "measurement_type": option.get("measurement_type"),
+            "predictions": predictions,
+            "measurement_sigma": raw.get("measurement_sigma", measurement_sigma),
+            "feasibility": normalized_feasibility,
+            "constraints": dict(raw.get("constraints") or option.get("constraints") or {}),
+            "visible": raw.get("visible", True), "feasible": raw.get("feasible", True),
+        })
+        provenance[cid] = {"forecast_provenance": dict(fp), "measurement_option": option,
+                            "purpose": raw.get("purpose")}
+        raw_feasibility[cid] = dict(feasibility) if isinstance(feasibility, Mapping) else {}
+    base = plan_observations(normalized, priors=priors, measurement_sigma=measurement_sigma,
+                             alternative_priors=prior_sets)
+    ranked = []
+    for rank, item in enumerate(base["ranked"], start=1):
+        measurement = dict(item.get("measurement") or {})
+        cid = str(measurement.get("candidate_id", ""))
+        extra = provenance.get(cid, {})
+        ranked.append({**item, "rank": rank, "candidate_observation_id": cid,
+            "forecast_provenance": extra.get("forecast_provenance", {}),
+            "measurement_option": extra.get("measurement_option", {}),
+            "purpose": extra.get("purpose"), "feasibility_evidence": raw_feasibility.get(cid, {})})
+    verified, blocked = [], []
+    for item in ranked:
+        f = item.get("feasibility") or {}
+        raw_f = item.get("feasibility_evidence") or {}
+        good = (f.get("status") == "verified" and f.get("feasible") is True
+                and str(f.get("source_uri", "")).startswith("https://")
+                and bool(f.get("checked_utc")) and bool(raw_f.get("calculator"))
+                and bool(raw_f.get("query_id")))
+        if good:
+            verified.append(item)
+        else:
+            blocked.append({"candidate_observation_id": item["candidate_observation_id"],
+                "reason": "external feasibility evidence is absent, incomplete or unverified",
+                "feasibility": f})
+    return {
+        "status": "ranked_with_verified_feasibility" if verified else "science_ranked_but_feasibility_unverified",
+        "recommended": verified[0] if verified else None,
+        "feasible_ranked": verified, "science_only_ranked": ranked,
+        "blocked_or_unverified": blocked,
+        "prior_sensitivity": base.get("prior_sensitivity", {}),
+        "feasibility_policy": "A candidate is recommended only when the supplied external record is verified and contains an HTTPS source, timezone-aware check time, calculator and query ID. CHRONOS does not authenticate that service.",
+        "limitations": base["limitations"] + ["Forecasts must come from fitted physical models.", "The planner does not schedule or command a telescope."],
+    }

@@ -37,7 +37,7 @@ class SpectroTemporalRequest(BaseModel):
     min_neighbors: int = 2
     calibration_group: str | None = None
     measurement_covariance: list[list[float]] | None = None
-    shared_calibration_fractional_sigma: float = 0.0
+    shared_calibration_fractional_sigma: float | None = None
 
 class FeatureEvolutionRequest(BaseModel):
     epochs: list[dict[str, Any]]
@@ -104,11 +104,30 @@ class ObservationPlanRequest(BaseModel):
     measurement_sigma: float = 1.0
     alternative_priors: dict[str, dict[str, float]] = Field(default_factory=dict)
 
+class CandidateObservationPlanRequest(BaseModel):
+    candidates: list[dict[str, Any]]
+    priors: dict[str, float] | None = None
+    prior_sets: dict[str, dict[str, float]] = Field(default_factory=dict)
+    measurement_sigma: float = 1.0
+
 class PopulationRateRequest(BaseModel):
     fields: list[dict[str, Any]]
     minimum_completeness: float = 0.1
     draws: int = 10000
     seed: int = 1
+
+class PopulationCoverageRequest(BaseModel):
+    fields: list[dict[str, Any]]
+    target_class: str = "young_stellar_object"
+    feature_interval_um: list[float]
+    blue_continuum_um: list[float]
+    red_continuum_um: list[float]
+    minimum_independent_fields: int = 5
+    minimum_epochs_per_source: int = 3
+    minimum_feature_samples: int = 3
+    minimum_continuum_samples: int = 4
+    minimum_median_snr: float = 5.0
+    minimum_completeness: float = 0.5
 
 class ResidualRequest(BaseModel):
     observed: list[float]
@@ -132,6 +151,19 @@ class BaselineComparisonRequest(BaseModel):
     field_area_deg2: float | None = None
     target_false_candidates_per_field: float | None = None
     target_completeness: float | None = None
+
+class WorkspaceCandidatesRequest(BaseModel):
+    observations: list[dict[str, Any]]
+    query: str = ""
+    dataset_class: str | None = None
+    calibration_group: str | None = None
+
+class WorkspaceCompareRequest(BaseModel):
+    candidate_ids: list[str]
+    observations: list[dict[str, Any]]
+    min_relative_support: float = 0.65
+    min_delta_bic: float = 6.0
+
 
 class EvidenceGraphRequest(BaseModel):
     candidate_id: str
@@ -287,6 +319,15 @@ def observations_plan(request: ObservationPlanRequest):
         alternative_priors=request.alternative_priors,
     ))
 
+@router.post("/observations/plan-candidate")
+def observations_plan_candidate(request: CandidateObservationPlanRequest):
+    from chronos_addons.planner import plan_candidate_observations
+    return guarded(lambda: plan_candidate_observations(
+        request.candidates, priors=request.priors,
+        prior_sets=request.prior_sets, measurement_sigma=request.measurement_sigma,
+    ))
+
+
 @router.post("/population/rate")
 def population_rate(request: PopulationRateRequest):
     from chronos_population.rates import estimate_event_rate
@@ -294,6 +335,23 @@ def population_rate(request: PopulationRateRequest):
         request.fields, minimum_completeness=request.minimum_completeness,
         draws=request.draws, seed=request.seed,
     ))
+
+@router.post("/population/assess-coverage")
+def population_assess_coverage(request: PopulationCoverageRequest):
+    from chronos_population.coverage import assess_population_coverage
+    return guarded(lambda: assess_population_coverage(
+        request.fields, target_class=request.target_class,
+        feature_interval_um=request.feature_interval_um,
+        blue_continuum_um=request.blue_continuum_um,
+        red_continuum_um=request.red_continuum_um,
+        minimum_independent_fields=request.minimum_independent_fields,
+        minimum_epochs_per_source=request.minimum_epochs_per_source,
+        minimum_feature_samples=request.minimum_feature_samples,
+        minimum_continuum_samples=request.minimum_continuum_samples,
+        minimum_median_snr=request.minimum_median_snr,
+        minimum_completeness=request.minimum_completeness,
+    ))
+
 
 @router.post("/evidence/manifest")
 def evidence_manifest(request: ManifestRequest):
@@ -352,6 +410,83 @@ def evidence_graph(request: EvidenceGraphRequest):
         analysis=request.analysis,
         manifest=request.manifest,
     ))
+
+@router.post("/workspace/candidates")
+def workspace_candidates(request: WorkspaceCandidatesRequest):
+    if not request.observations:
+        raise HTTPException(status_code=422, detail="observations are required")
+    query = request.query.strip().lower()
+    grouped = {}
+    for index, row in enumerate(request.observations):
+        candidate_id = str(row.get("candidate_id") or row.get("source_id") or "").strip()
+        if not candidate_id:
+            continue
+        data_class = str(row.get("dataset_class", row.get("data_class", "unverified"))).lower()
+        if data_class not in {"real", "synthetic", "illustrative", "unverified"}:
+            data_class = "unverified"
+        calibration_group = str(row.get("calibration_group") or "")
+        if request.dataset_class and data_class != request.dataset_class:
+            continue
+        if request.calibration_group and calibration_group != request.calibration_group:
+            continue
+        if query and query not in candidate_id.lower():
+            continue
+        entry = grouped.setdefault(candidate_id, {
+            "classes": set(), "groups": set(), "observation_ids": [],
+            "times": [], "wavelengths": [],
+        })
+        entry["classes"].add(data_class)
+        if calibration_group:
+            entry["groups"].add(calibration_group)
+        entry["observation_ids"].append(str(row.get("observation_id", row.get("measurement_id", index))))
+        try:
+            entry["times"].append(float(row["mjd"]))
+            entry["wavelengths"].append(float(row["wavelength_um"]))
+        except (KeyError, TypeError, ValueError):
+            pass
+    output = []
+    for candidate_id, entry in grouped.items():
+        classes = sorted(entry["classes"])
+        times, waves = entry["times"], entry["wavelengths"]
+        output.append({
+            "candidate_id": candidate_id,
+            "data_class": classes[0] if len(classes) == 1 else "mixed",
+            "dataset_classes": classes,
+            "calibration_groups": sorted(entry["groups"]),
+            "observation_count": len(entry["observation_ids"]),
+            "observation_ids": entry["observation_ids"],
+            "time_span_days": max(times) - min(times) if len(times) > 1 else 0.0,
+            "wavelength_count": len(set(waves)),
+        })
+    output.sort(key=lambda row: row["candidate_id"])
+    return {"candidates": output, "count": len(output),
+            "data_class_policy": "Labels are inherited from input rows; missing labels are unverified."}
+
+
+@router.post("/workspace/compare")
+def workspace_compare(request: WorkspaceCompareRequest):
+    if len(request.candidate_ids) != 2 or request.candidate_ids[0] == request.candidate_ids[1]:
+        raise HTTPException(status_code=422, detail="select exactly two distinct candidate IDs")
+    comparisons = []
+    for candidate_id in request.candidate_ids:
+        rows = [row for row in request.observations
+                if str(row.get("candidate_id") or row.get("source_id") or "") == candidate_id]
+        if not rows:
+            raise HTTPException(status_code=422, detail=f"no observations found for candidate {candidate_id}")
+        result = guarded(lambda rows=rows: investigate(
+            rows, min_relative_support=request.min_relative_support,
+            min_delta_bic=request.min_delta_bic))
+        classes = sorted({str(row.get("dataset_class", row.get("data_class", "unverified")))
+                          for row in rows})
+        comparisons.append({
+            "candidate_id": candidate_id,
+            "data_class": classes[0] if len(classes) == 1 else "mixed",
+            "observation_count": len(rows),
+            "analysis": result,
+        })
+    return {"comparisons": comparisons,
+            "warning": "The two investigations are independent. Relative support is descriptive and is not a ranking of astrophysical importance."}
+
 
 @router.post("/validation/residuals")
 def validation_residuals(request: ResidualRequest):
