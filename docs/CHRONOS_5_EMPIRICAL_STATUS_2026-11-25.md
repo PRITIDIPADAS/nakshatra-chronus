@@ -97,3 +97,9 @@ The latest completed combined test/M101 run available for this refresh is [45652
 The population software has since been hardened so a source must have feature and both continuum sidebands in the same repeated epochs; duplicate/reused source IDs across fields are rejected; and null counts cannot be used without an explicit science-to-control solid-angle-times-time ratio. Tests for these controls are committed on the current feature branch. The current CI triggered by those changes was still in progress at the time of this status update, so no passing result is claimed for that latest population-gate change until its workflow completes.
 
 The following gates remain open: gain-to-electron calibration review; external preregistration and an independent custodian; blind four-method testing on common real held-out fields; a source-level, selection- and contamination-aware YSO population study; independent astronomical reproduction/review; and a validated scientific release.
+
+## Committed archive manifest snapshot
+
+The repository now includes data/spherex_archive_manifest.M101_DR1_D2.json, a four-product M101 DR1 D2 metadata/checksum snapshot for the native science MEF, CWAVE/CBAND spectral-WCS map, absolute-gain map and supplemental solid-angle map. Each product has a source URI, archive plane identity, byte count and SHA-256; available calibration archive MD5 values are also retained. Only the spectral-WCS and absolute-gain products are asserted as direct spherex.provenance_input links to the science plane. The solid-angle map is explicitly supplemental. The native FITS files remain in the checksummed workflow #904 artifact and are not duplicated in Git.
+
+The manifest preserves the one-exposure claim boundary and the gain conversion state derived_pending_independent_review. It is an archive traceability improvement, not additional empirical validation and not an independent calibration sign-off.
