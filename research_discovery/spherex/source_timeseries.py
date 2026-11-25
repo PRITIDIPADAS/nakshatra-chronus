@@ -66,7 +66,156 @@ def _verified_file(record: Mapping[str, Any], label: str, *, verify_files: bool)
     return {"uri": uri, "local_path": str(local), "sha256": expected, "bytes": local.stat().st_size}
 
 
-def assemble_source_timeseries(
+
+
+def _verify_native_pixel(
+    product: Mapping[str, Any],
+    measurement: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Verify a measurement's zero-based pixel against its native FITS maps."""
+    measurement_id = str(measurement.get("measurement_id", "")).strip()
+    if measurement.get("pixel_valid") is not True:
+        raise ValueError(f"measurement {measurement_id} pixel_valid must be explicitly true")
+    pixel_index = measurement.get("pixel_index")
+    if not isinstance(pixel_index, Mapping):
+        raise ValueError(
+            f"measurement {measurement_id} requires a zero-based pixel_index object with x and y"
+        )
+    x_raw, y_raw = pixel_index.get("x"), pixel_index.get("y")
+    try:
+        x, y = int(x_raw), int(y_raw)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(f"measurement {measurement_id} pixel_index x/y must be integers") from None
+    if (
+        isinstance(x_raw, bool) or isinstance(y_raw, bool)
+        or x != x_raw or y != y_raw or x < 0 or y < 0
+    ):
+        raise ValueError(f"measurement {measurement_id} pixel_index is not a valid zero-based image pixel")
+
+    try:
+        from astropy.io import fits
+    except ImportError as exc:
+        raise RuntimeError("Astropy is required to verify native CWAVE/CBAND and image pixels") from exc
+
+    files = product["files"]
+    try:
+        with (
+            fits.open(files["science"]["local_path"], memmap=True) as science_hdul,
+            fits.open(files["spectral_wcs"]["local_path"], memmap=True) as spectral_hdul,
+            fits.open(files["solid_angle"]["local_path"], memmap=True) as area_hdul,
+        ):
+            for name in ("IMAGE", "VARIANCE"):
+                if name not in science_hdul:
+                    raise ValueError(f"product {product['archive_product_id']} science MEF is missing {name}")
+            for name in ("CWAVE", "CBAND"):
+                if name not in spectral_hdul:
+                    raise ValueError(f"product {product['archive_product_id']} spectral-WCS file is missing {name}")
+            area_hdu = area_hdul["IMAGE"] if "IMAGE" in area_hdul else next(
+                (hdu for hdu in area_hdul[1:] if getattr(hdu, "data", None) is not None),
+                None,
+            )
+            if area_hdu is None:
+                raise ValueError(f"product {product['archive_product_id']} solid-angle file has no image extension")
+
+            image_hdu = science_hdul["IMAGE"]
+            variance_hdu = science_hdul["VARIANCE"]
+            cwave_hdu = spectral_hdul["CWAVE"]
+            cband_hdu = spectral_hdul["CBAND"]
+            image = np.asarray(image_hdu.data)
+            variance = np.asarray(variance_hdu.data)
+            cwave = np.asarray(cwave_hdu.data)
+            cband = np.asarray(cband_hdu.data)
+            solid_angle = np.asarray(area_hdu.data)
+
+            if image.ndim != 2 or variance.shape != image.shape:
+                raise ValueError(f"product {product['archive_product_id']} IMAGE and VARIANCE must be aligned 2D arrays")
+            if cwave.shape != image.shape or cband.shape != image.shape:
+                raise ValueError(f"product {product['archive_product_id']} CWAVE/CBAND dimensions do not match the native science image")
+            if solid_angle.shape != image.shape:
+                raise ValueError(f"product {product['archive_product_id']} solid-angle dimensions do not match the native science image")
+            if y >= image.shape[0] or x >= image.shape[1]:
+                raise ValueError(f"measurement {measurement_id} pixel_index lies outside the native image")
+
+            image_unit = str(image_hdu.header.get("BUNIT", "")).lower().replace(" ", "")
+            cwave_unit = str(cwave_hdu.header.get("BUNIT", "")).strip().lower()
+            cband_unit = str(cband_hdu.header.get("BUNIT", "")).strip().lower()
+            area_unit = str(area_hdu.header.get("BUNIT", "")).strip().lower().replace(" ", "")
+            if image_unit not in {"mjy/sr", "mjy*sr-1"}:
+                raise ValueError(f"product {product['archive_product_id']} IMAGE must be calibrated in MJy/sr")
+            if cwave_unit not in {"um", "micron", "microns"}:
+                raise ValueError(f"product {product['archive_product_id']} CWAVE BUNIT must be microns")
+            if cband_unit not in {"um", "micron", "microns"}:
+                raise ValueError(f"product {product['archive_product_id']} CBAND BUNIT must be microns")
+            if area_unit not in {"arcsec2", "arcsec^2", "arcsec**2", "sr"}:
+                raise ValueError(f"product {product['archive_product_id']} solid-angle BUNIT must be arcsec2 or sr")
+
+            expected_detector = int(product["detector"][1:])
+            for label, hdu in (
+                ("science IMAGE", image_hdu),
+                ("CWAVE", cwave_hdu),
+                ("CBAND", cband_hdu),
+                ("solid-angle IMAGE", area_hdu),
+            ):
+                detector_value = hdu.header.get("DETECTOR")
+                try:
+                    actual_detector = int(str(detector_value).strip())
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"product {product['archive_product_id']} {label} is missing a numeric DETECTOR header"
+                    ) from None
+                if actual_detector != expected_detector:
+                    raise ValueError(
+                        f"product {product['archive_product_id']} {label} detector {actual_detector} "
+                        f"does not match {product['detector']}"
+                    )
+            observed_id = str(image_hdu.header.get("OBSID", "")).strip()
+            if not observed_id or observed_id != product["observation_id"]:
+                raise ValueError(
+                    f"product {product['archive_product_id']} science OBSID does not match the archive observation_id"
+                )
+
+            actual_wavelength = float(cwave[y, x])
+            actual_bandwidth = float(cband[y, x])
+            pixel_area = float(solid_angle[y, x])
+            pixel_flux = float(image[y, x])
+            pixel_variance = float(variance[y, x])
+            wavelength = _finite(measurement.get("wavelength_um"), f"measurement {measurement_id} wavelength")
+            bandwidth = _finite(measurement.get("bandwidth_um"), f"measurement {measurement_id} bandwidth")
+            if not math.isfinite(actual_wavelength) or actual_wavelength <= 0:
+                raise ValueError(f"measurement {measurement_id} points to an invalid CWAVE pixel")
+            if not math.isfinite(actual_bandwidth) or actual_bandwidth <= 0:
+                raise ValueError(f"measurement {measurement_id} points to an invalid CBAND pixel")
+            if not math.isclose(wavelength, actual_wavelength, rel_tol=0.0, abs_tol=1e-6):
+                raise ValueError(f"measurement {measurement_id} wavelength_um does not match the native CWAVE pixel")
+            if not math.isclose(bandwidth, actual_bandwidth, rel_tol=0.0, abs_tol=1e-6):
+                raise ValueError(f"measurement {measurement_id} bandwidth_um does not match the native CBAND pixel")
+            if not math.isfinite(pixel_area) or pixel_area <= 0:
+                raise ValueError(f"measurement {measurement_id} points to an invalid solid-angle pixel")
+            if not math.isfinite(pixel_flux):
+                raise ValueError(f"measurement {measurement_id} points to a non-finite science IMAGE pixel")
+            if not math.isfinite(pixel_variance) or pixel_variance <= 0:
+                raise ValueError(f"measurement {measurement_id} points to an invalid VARIANCE pixel")
+    except OSError as exc:
+        raise ValueError(
+            f"measurement {measurement_id} native FITS file could not be read: {exc}"
+        ) from exc
+
+    return {
+        "pixel_index": {"x": x, "y": y, "convention": "zero-based"},
+        "cwave_pixel_value_um": actual_wavelength,
+        "cband_pixel_value_um": actual_bandwidth,
+        "cwave_abs_error_um": abs(wavelength - actual_wavelength),
+        "cband_abs_error_um": abs(bandwidth - actual_bandwidth),
+        "solid_angle_pixel_value": pixel_area,
+        "solid_angle_unit": area_unit,
+        "science_image_pixel_value": pixel_flux,
+        "science_variance_pixel_value": pixel_variance,
+        "science_image_unit": image_hdu.header.get("BUNIT") if False else "MJy/sr",
+        "native_image_shape": list(image.shape),
+        "native_map_shape": list(cwave.shape),
+        "spectral_pixel_value_tolerance_um": 1e-6,
+    }
+\ndef assemble_source_timeseries(
     manifest: Mapping[str, Any],
     *,
     minimum_epochs: int = 2,
@@ -207,6 +356,7 @@ def assemble_source_timeseries(
         sigma = _finite(measurement.get("sigma_jy"), f"measurement {measurement_id} sigma_jy")
         if wavelength <= 0 or bandwidth <= 0 or sigma <= 0:
             raise ValueError(f"measurement {measurement_id} wavelength, bandwidth and sigma must be positive")
+        native_pixel = _verify_native_pixel(product, measurement)
         if measurement.get("fit_status") != "success":
             raise ValueError(f"measurement {measurement_id} was not produced by a successful extraction fit")
         raw_n_pixels = measurement.get("n_pixels")
@@ -237,10 +387,8 @@ def assemble_source_timeseries(
             "science_uri": product["files"]["science"]["uri"],
             "calibration_uri": product["files"]["spectral_wcs"]["uri"],
             "solid_angle_uri": product["files"]["solid_angle"]["uri"],
-            "pixel_valid": measurement.get("pixel_valid") is True,
-            "cwave_pixel_value_um": wavelength,
-            "cband_pixel_value_um": bandwidth,
-            "pixel_index": measurement.get("pixel_index"),
+            **native_pixel,
+            "pixel_valid": True,
         }
         row = {
             "source_id": source_id,
