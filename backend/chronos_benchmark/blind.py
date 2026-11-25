@@ -563,7 +563,7 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         detection_run.get("fields") or [],
         benchmark_id=str(detection_run.get("benchmark_id", "")),
     )
-    for key in (
+    for field_key in (
         "fields", "blind_run_contract", "source_commit",
         "score_thresholds", "matched_target",
         "false_candidate_noninferiority_margin",
@@ -571,9 +571,9 @@ def unblind_benchmark(public_manifest: Mapping[str, Any], encrypted_truth_store:
         "configuration", "dataset_digest",
         "frozen_configuration_sha256",
     ):
-        if canonical_json(detection_run.get(key)) != canonical_json(validated_handoff.get(key)):
+        if canonical_json(detection_run.get(field_key)) != canonical_json(validated_handoff.get(field_key)):
             raise ValueError(
-                f"detection run {key} does not match the independently rebuilt truth-free handoff"
+                f"detection run {field_key} does not match the independently rebuilt truth-free handoff"
             )
 
     from .custodian_attestation import verify_custodian_attestation

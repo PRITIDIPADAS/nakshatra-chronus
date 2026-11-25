@@ -143,7 +143,10 @@ def test_pipeline_adapters_preserve_common_signature_and_forensic_veto():
 
 def test_blind_truth_is_encrypted_and_unblinding_requires_frozen_config():
     from cryptography.fernet import Fernet
-    from chronos_benchmark.blind import create_blind_store, freeze_configuration, unblind_benchmark
+    from chronos_benchmark.blind import (
+        build_blind_detection_run, create_blind_store, freeze_configuration,
+        unblind_benchmark,
+    )
     from chronos_benchmark.runner import sha256_json
 
     fields = [_field(f"PRIVATE-FIELD-{i}", split="not_split") for i in range(4)]
@@ -158,14 +161,19 @@ def test_blind_truth_is_encrypted_and_unblinding_requires_frozen_config():
         "public_manifest": public, "run_manifest": run_manifest
     })
     public_fields = run_manifest["fields"]
+    methods_required = (
+        "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
+    )
     frozen_config = {
-        "score_thresholds": {name: [1.0] for name in (
-            "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
-        )},
+        "preregistration_sha256": "c" * 64,  # Test fixture digest, not an external registration claim.
+        "score_thresholds": {name: [1.0] for name in methods_required},
         "matched_target": {"false_candidates_per_field": 0.0},
         "matching_radii_by_field": {
-            row["blind_field_token"]: 1.0 for row in public_fields
+            row["blind_field_token"]: float(row["match_radius"])
+            for row in public_fields
         },
+        "false_candidate_noninferiority_margin": 0.0,
+        "multiple_comparison_correction": "bonferroni_95_familywise",
     }
     frozen = freeze_configuration(
         frozen_config,
@@ -173,40 +181,38 @@ def test_blind_truth_is_encrypted_and_unblinding_requires_frozen_config():
         dataset_digest=dataset_digest,
     )
     test_tokens = set(public["blind_test_tokens"])
-    run_fields = []
+    detection_fields = []
     for row in public_fields:
         if row["blind_field_token"] not in test_tokens:
             continue
         signature = row["input_signature"]
-        methods = {
-            name: {"input_signature": signature, "detections": []}
-            for name in ("snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin")
-        }
-        run_fields.append({
+        detection_fields.append({
             "blind_field_token": row["blind_field_token"],
             "input_signature": signature,
-            "methods": methods,
+            "match_radius": row["match_radius"],
+            "score_thresholds": frozen_config["score_thresholds"],
+            "methods": {
+                name: {"input_signature": signature, "detections": []}
+                for name in methods_required
+            },
+            "baseline_contract": {
+                "same_pipeline_state": True,
+                "verified_exposure_ids": sorted(signature["exposure_ids"]),
+                "verified_mask_sha256": signature["mask_sha256"],
+                "verified_pixel_wcs_sha256": signature["pixel_wcs_sha256"],
+            },
         })
-    detection_run = {
-        "benchmark_id": "sealed-evaluation",
-        "dataset_digest": dataset_digest,
-        "frozen_configuration_sha256": frozen["configuration_sha256"],
-        "source_commit": "d" * 40,
-        "configuration": frozen_config,
-        "public_fields": public_fields,
-        "matching_radii_by_field": frozen_config["matching_radii_by_field"],
-        "fields": run_fields,
-        "score_thresholds": frozen_config["score_thresholds"],
-        "matched_target": frozen_config["matched_target"],
-    }
+    detection_run = build_blind_detection_run(
+        public, run_manifest, frozen, detection_fields,
+        benchmark_id="sealed-evaluation",
+    )
     # Matching hashes and a frozen configuration are not proof of independent
-    # custody. Held-out truth must remain sealed until the custodian signature
+    # custody. Held-out truth must remain sealed until a custodian signature
     # and its out-of-band pinned public key have been verified.
     with pytest.raises(PermissionError, match="held-out truth remains sealed"):
         unblind_benchmark(
             public, encrypted, key, frozen, detection_run, bootstrap_draws=100
         )
-
 
 def test_pixel_forward_model_separates_components_and_marks_placeholders():
     from chronos_causal.pixel_forward import simulate_spectral_exposure
