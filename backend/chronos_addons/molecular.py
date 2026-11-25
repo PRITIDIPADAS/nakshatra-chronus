@@ -230,6 +230,7 @@ def measure_equivalent_width(
         "n_feature_samples": int(feature_mask.sum()),
         "n_continuum_samples": int(side_mask.sum()),
         "resolution_diagnostics": resolution_report,
+        "blend_diagnostics": resolution_report["blend_diagnostics"],
         "interpretation": "Positive EW is absorption; negative EW is emission under this continuum convention.",
         "limitations": [
             "Feature interval is user supplied; no molecule is identified.",
