@@ -62,6 +62,7 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
                             challenge_specs: Sequence[Mapping[str, Any]] | None = None,
                             challenge_plan_sha256: str | None = None,
                             candidate_family: Sequence[Mapping[str, Any]] | None = None,
+                            candidate_family_complete: bool = False,
                             flux_covariance=None,
                             bootstrap_draws: int = 1000,
                             transient_draws: int = 500,
@@ -137,27 +138,45 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
         "candidate_selection_adjusted": False,
         "family_wise_false_alarm_probability": None,
     }
-    candidate_family_complete = False
+    candidate_family_complete_flag = bool(candidate_family_complete)
+    candidate_family_contains_current = False
     candidate_family_significant = False
+    candidate_family_sha256 = None
     if candidate_family is not None:
-        family_report = transient_candidate_family_bootstrap(
-            candidate_family, draws=transient_draws, seed=seed + 2
-        )
-        current_candidate_id = analysis.get("candidate_id")
-        included_ids = {str(item.get("candidate_id", "")) for item in candidate_family}
-        candidate_family_complete = (
-            current_candidate_id is not None and str(current_candidate_id) in included_ids
-        )
-        family_p = float(family_report["family_wise_false_alarm_probability"])
-        candidate_family_significant = family_p <= maximum_predictive_p_value
-        candidate_selection_correction = {
-            **family_report,
-            "current_candidate_in_supplied_family": candidate_family_complete,
-            "significance_alpha": maximum_predictive_p_value,
-            "family_wise_transient_claim_supported": (
-                candidate_family_complete and candidate_family_significant
-            ),
-        }
+        from chronos_benchmark.runner import canonical_json
+        candidate_family_sha256 = hashlib.sha256(canonical_json(candidate_family)).hexdigest()
+        if candidate_family_complete_flag:
+            family_report = transient_candidate_family_bootstrap(
+                candidate_family, draws=transient_draws, seed=seed + 2
+            )
+            current_candidate_id = analysis.get("candidate_id")
+            included_ids = {str(item.get("candidate_id", "")) for item in candidate_family}
+            candidate_family_contains_current = (
+                current_candidate_id is not None and str(current_candidate_id) in included_ids
+            )
+            family_p = float(family_report["family_wise_false_alarm_probability"])
+            candidate_family_significant = family_p <= maximum_predictive_p_value
+            candidate_selection_correction = {
+                **family_report,
+                "candidate_family_sha256": candidate_family_sha256,
+                "candidate_family_declared_complete": True,
+                "candidate_family_completeness_independently_verified": False,
+                "current_candidate_in_supplied_family": candidate_family_contains_current,
+                "significance_alpha": maximum_predictive_p_value,
+                "family_wise_transient_claim_supported": (
+                    candidate_family_contains_current and candidate_family_significant
+                ),
+            }
+        else:
+            candidate_selection_correction = {
+                "status": "candidate_family_completeness_not_declared",
+                "candidate_selection_adjusted": False,
+                "candidate_family_sha256": candidate_family_sha256,
+                "candidate_family_declared_complete": False,
+                "candidate_family_completeness_independently_verified": False,
+                "family_wise_false_alarm_probability": None,
+                "reason": "Candidate-family adjustment is exploratory unless the caller declares the supplied set complete.",
+            }
     elif leading == "transient":
         candidate_selection_correction = {
             "status": "not_evaluated",
@@ -216,7 +235,10 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
 
     transient_family_pass = (
         leading != "transient"
-        or candidate_family_complete and candidate_family_significant
+        or candidate_family is not None
+        and candidate_family_complete_flag
+        and candidate_family_contains_current
+        and candidate_family_significant
     )
     if analysis["verdict"] == "unknown" or not predictive_pass or not uncertainties_verified or not plan_hash_matches or not transient_family_pass:
         verdict = "unknown"
@@ -230,7 +252,9 @@ def run_falsification_suite(observations: Sequence[Mapping[str, Any]], *,
         if not transient_family_pass:
             if candidate_family is None:
                 decision_reasons.append("transient candidate-family selection correction was not run")
-            elif not candidate_family_complete:
+            elif not candidate_family_complete_flag:
+                decision_reasons.append("candidate family was supplied but not declared complete")
+            elif not candidate_family_contains_current:
                 decision_reasons.append("supplied candidate family does not include this candidate")
             else:
                 decision_reasons.append("transient candidate family does not pass the predeclared family-wise false-alarm threshold")
