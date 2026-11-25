@@ -568,3 +568,18 @@ def test_electron_calibration_record_rehashes_file_and_requires_timezone(tmp_pat
     no_zone = dict(record, verified_utc="2026-11-25T00:00:00")
     with pytest.raises(ValueError, match="timezone"):
         validate_electron_calibration_record(no_zone)
+
+
+def test_native_map_crop_refuses_rotated_or_flipped_wcs_a():
+    from research_discovery.spherex.coordinate_transform import detector_origin_offset
+    header = {
+        "NAXIS1": 40, "NAXIS2": 30,
+        "CRPIX1A": -99.0, "CRPIX2A": -49.0,
+        "CTYPE1A": "LINEAR", "CTYPE2A": "LINEAR", "WCSAXESA": 2,
+        "CRVAL1A": 100.0, "CRVAL2A": 200.0,
+        "CDELT1A": 1.0, "CDELT2A": 1.0,
+        "PC1_1A": 0.0, "PC1_2A": -1.0,
+        "PC2_1A": 1.0, "PC2_2A": 0.0,
+    }
+    with pytest.raises(ValueError, match="identity-aligned"):
+        detector_origin_offset(header)
