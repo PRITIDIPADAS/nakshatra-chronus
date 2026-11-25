@@ -67,6 +67,7 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
     }
     private_fields = []
     public_fields = []
+    public_exposure_tokens_seen = set()
     allowed_controls = {
         "science", "empty_field", "negative_control",
         "shuffled_time_control", "detector_pattern_control",
@@ -105,6 +106,8 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
                 or any(not isinstance(value, str) or not value.strip() for value in supplied_public_ids)
                 or len(set(supplied_public_ids)) != len(supplied_public_ids)
                 or any(value in signature.get("exposure_ids", []) for value in supplied_public_ids)
+                or any(not value.startswith("exposure_") for value in supplied_public_ids)
+                or public_exposure_tokens_seen.intersection(supplied_public_ids)
             ):
                 raise ValueError(
                     f"{field_id}: public_exposure_ids must be unique opaque values, one per exposure, and must not reveal original IDs"
@@ -117,11 +120,12 @@ def create_blind_store(fields: Sequence[Mapping[str, Any]], key: bytes, *,
                     raise ValueError(
                         f"{field_id}: public_input_signature.{key} must match the private input signature"
                     )
-            if list(public_signature.get("exposure_ids") or []) != supplied_public_ids:
+            if sorted(public_signature.get("exposure_ids") or []) != sorted(supplied_public_ids):
                 raise ValueError(
-                    f"{field_id}: public_input_signature.exposure_ids must exactly match public_exposure_ids"
+                    f"{field_id}: public_input_signature.exposure_ids must match public_exposure_ids"
                 )
             exposure_tokens = list(supplied_public_ids)
+            public_exposure_tokens_seen.update(supplied_public_ids)
         else:
             exposure_tokens = [
                 "exposure_" + hashlib.sha256((token + "|" + str(value)).encode()).hexdigest()[:20]
