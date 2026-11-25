@@ -249,3 +249,36 @@ def test_detection_run_requires_real_preregistration_and_noninferiority_policy()
             blind["public_manifest"], blind["run_manifest"], bad, records,
             benchmark_id="unregistered-config",
         )
+
+
+
+def test_unblind_revalidates_nested_private_fields_before_custodian_or_truth_access():
+    from chronos_benchmark.blind import unblind_benchmark
+
+    _, blind, frozen, records = _fixture()
+    detection_run = build_blind_detection_run(
+        blind["public_manifest"], blind["run_manifest"], frozen, records,
+        benchmark_id="nested-leak-after-build",
+    )
+    detection_run["fields"][0]["methods"]["snr_only"]["detections"][0][
+        "provenance"
+    ]["truth_id"] = "secret-truth"
+    with pytest.raises(ValueError, match="nested private fields"):
+        unblind_benchmark(
+            blind["public_manifest"], blind["encrypted_truth_store"],
+            b"not-used-because-handoff-validation-precedes-decryption",
+            frozen, detection_run,
+        )
+
+
+def test_blind_builder_retains_field_thresholds_and_baseline_contract():
+    _, blind, frozen, records = _fixture()
+    result = build_blind_detection_run(
+        blind["public_manifest"], blind["run_manifest"], frozen, records,
+        benchmark_id="per-field-contract",
+    )
+    assert all(
+        row["score_thresholds"] == frozen["configuration"]["score_thresholds"]
+        for row in result["fields"]
+    )
+    assert all(row["baseline_contract"]["same_pipeline_state"] is True for row in result["fields"])
