@@ -48,7 +48,7 @@ def science_wavelength_cutout(cwave, cband, image_header, image_shape):
             "valid_fraction": float(valid.mean())}
 
 
-def audit(science_path, spectral_wcs_path, *, solid_angle_path=None,
+def audit(science_path, spectral_wcs_path, *, solid_angle_path=None, solid_angle_uri=None,
           compatibility_evidence=None, science_uri=None, spectral_wcs_uri=None):
     try:
         from astropy.io import fits
@@ -213,10 +213,14 @@ def audit(science_path, spectral_wcs_path, *, solid_angle_path=None,
                         "positive_fraction": float(valid_area.mean())}
                     area_ok = (area.shape == (2040, 2040) and valid_area.all() and detector_matches
                                and area_unit in {"arcsec2", "arcsec**2", "arcsec^2"})
+                    report["solid_angle"].update({
+                        "status": "pass" if area_ok else "review_required",
+                        "uri": solid_angle_uri, "detector": area_detector})
                     report["checks"]["solid_angle"] = {
                         "status": "pass" if area_ok else "review_required",
                         "science_detector": science_detector, "calibration_detector": area_detector,
-                        "bunit": hdu.header.get("BUNIT")}
+                        "bunit": hdu.header.get("BUNIT"), "sha256": report["solid_angle"]["sha256"],
+                        "shape": report["solid_angle"]["shape"], "uri": solid_angle_uri}
         else:
             report["checks"]["solid_angle"] = {
                 "status": "review_required",
@@ -248,6 +252,7 @@ def main():
     parser.add_argument("science_mef", type=Path)
     parser.add_argument("spectral_wcs", type=Path)
     parser.add_argument("--solid-angle", type=Path)
+    parser.add_argument("--solid-angle-uri")
     parser.add_argument("--compatibility-evidence", type=Path)
     parser.add_argument("--science-uri")
     parser.add_argument("--spectral-wcs-uri")
@@ -256,7 +261,8 @@ def main():
     args = parser.parse_args()
     evidence = json.loads(args.compatibility_evidence.read_text()) if args.compatibility_evidence else None
     result = audit(args.science_mef, args.spectral_wcs, solid_angle_path=args.solid_angle,
-                   compatibility_evidence=evidence, science_uri=args.science_uri,
+                   solid_angle_uri=args.solid_angle_uri, compatibility_evidence=evidence,
+                   science_uri=args.science_uri,
                    spectral_wcs_uri=args.spectral_wcs_uri)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2, default=str))
