@@ -25,6 +25,7 @@ from research_discovery.spherex.fetch_calibration import download_calibration
 from research_discovery.spherex.native_mef_audit import audit as audit_native_mef
 from research_discovery.spherex.extract_epsf_stamp import extract as extract_epsf
 from research_discovery.spherex.flag_policy import policy_mask
+from research_discovery.spherex.psf_physicality import enforce_nonnegative_interpolation_psf
 from research_discovery.spherex.run_provenance_calibration_audit import normalize_release
 from research_discovery.validation.injection_recovery import run_injection_recovery
 
@@ -400,7 +401,18 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         science_path, x=x_ref, y=y_ref, out=stamp_path, stamp_size=stamp_size
     )
     with fits.open(stamp_path) as psf_file:
-        psf = np.asarray(psf_file[0].data, dtype=float)
+        raw_psf = np.asarray(psf_file[0].data, dtype=float)
+        raw_psf_header = psf_file[0].header.copy()
+    psf, psf_correction = enforce_nonnegative_interpolation_psf(raw_psf)
+    physical_psf_path = out_dir / "native_epsf_stamp_nonnegative.fits"
+    physical_header = raw_psf_header.copy()
+    physical_header["PSFCLIP"] = (bool(psf_correction["correction_applied"]), "Tiny negative interpolation overshoot clipped")
+    physical_header["PSFNCLIP"] = (int(psf_correction["clipped_pixel_count"]), "Number of clipped negative samples")
+    physical_header["PSFNEGFR"] = (float(psf_correction["negative_to_positive_integrated_flux_fraction"]), "Clipped negative flux / positive flux")
+    physical_header["PSFMETH"] = ("bounded_clip_renorm", "Audited bounded interpolation correction")
+    fits.PrimaryHDU(data=psf.astype(np.float32), header=physical_header).writeto(
+        physical_psf_path, overwrite=True
+    )
     half = psf.shape[0] // 2
     x0, y0 = int(np.floor(x_ref)) - half, int(np.floor(y_ref)) - half
     sl = (slice(y0, y0 + psf.shape[0]), slice(x0, x0 + psf.shape[1]))
@@ -448,6 +460,13 @@ def run_calibrated_jy_injection(science_path: Path, science_uri: str,
         (np.max(local_omega) - np.min(local_omega)) / np.median(local_omega)
     )
     result["injection_flux_levels_jy"] = levels_jy
+    psf_correction.update({
+        "raw_stamp_path": str(stamp_path),
+        "raw_stamp_sha256": epsf_meta.get("output_sha256"),
+        "corrected_stamp_path": str(physical_psf_path),
+        "corrected_stamp_sha256": sha256(physical_psf_path),
+    })
+    result["psf_interpolation_correction"] = psf_correction
     result["psf_reference_selection"] = {
         "selection_method": "nearest-to-detector-centre position with a fully valid native ePSF footprint and 100-pixel injection zone",
         "reference_x": x_ref, "reference_y": y_ref,
