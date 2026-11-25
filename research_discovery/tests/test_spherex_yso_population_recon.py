@@ -127,3 +127,25 @@ def test_query_hash_is_deterministic_for_equivalent_mappings():
     assert recon.digest_json({"a": "query A", "b": "query B"}) == recon.digest_json(
         {"b": "query B", "a": "query A"}
     )
+
+def test_label_concordance_keeps_ml_only_candidates_separate_from_published_labels():
+    rows = [
+        {"source_id": 1, "designation": "A", "yso_pub": 12, "class_1": "YSO", "stype_ml": "YSO"},
+        {"source_id": 2, "designation": "B", "yso_pub": None, "class_1": "STAR", "stype_ml": "YSO",
+         "stype_ml_prob1": 0.91},
+        {"source_id": 3, "designation": "C", "yso_pub": 8, "class_1": "YSO", "stype_ml": "STAR"},
+    ]
+    profiles = [recon.label_profile(row) for row in rows]
+    assert profiles[0]["label_profile"] == "published_harmonised_ml_agree"
+    assert profiles[0]["independent_label_source_count"] == 3
+    assert profiles[1]["label_profile"] == "ml_only"
+    assert profiles[1]["machine_only_candidate"] is True
+    assert profiles[1]["interpretation"] == "ML-only candidate for independent review"
+    assert profiles[2]["label_profile"] == "non_ml_label_without_ml"
+    summary = recon.summarise_label_concordance(rows)
+    assert summary["all_three_label_sources_agree_count"] == 1
+    assert summary["ml_only_label_count"] == 1
+    assert summary["published_yso_pub_count"] == 2
+    assert summary["machine_stype_ml_yso_count"] == 2
+    assert "not independent validation" in summary["interpretation"]
+
