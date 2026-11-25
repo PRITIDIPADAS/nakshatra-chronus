@@ -76,8 +76,6 @@ def _revalidate_coverage(
             f"({verified.get('failure_counts')})"
         )
     if coverage_audit.get("input_fields_sha256") != verified.get("input_fields_sha256"):
-        raise ValueError("coverage_audit input digest does not match the exact field records")
-    if coverage_audit.get("input_fields_sha256") != verified.get("input_fields_sha256"):
         raise ValueError("coverage_audit field digest mismatch")
     return verified
 
