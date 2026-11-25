@@ -174,3 +174,53 @@ def test_feature_evolution_preserves_resolution_and_blend_reports():
     )
     assert result["epochs"][0]["resolution_diagnostics"]["status"] == "provided"
     assert result["epochs"][0]["blend_diagnostics"]["status"] == "possible_blend"
+
+
+def test_catalogue_association_applies_epoch_differential_parallax():
+    pytest.importorskip("astropy")
+    from chronos_identity.associations import _propagate
+    from chronos_addons.catalogs import angular_separation_arcsec
+
+    source = {
+        "ra": 10.0, "dec": 20.0, "epoch_year": 2016.0,
+        "pmra_cosdec_masyr": 0.0, "pmdec_masyr": 0.0,
+        "parallax_mas": 80.0,
+    }
+    ra_no_parallax, dec_no_parallax, no_parallax = _propagate(
+        {key: value for key, value in source.items() if key != "parallax_mas"}, 2016.25
+    )
+    ra_with_parallax, dec_with_parallax, parallax = _propagate(source, 2016.25)
+    assert parallax["parallax_applied"] is True
+    assert parallax["parallax_baseline_au"] > 0
+    assert abs(parallax["parallax_shift_east_mas"]) + abs(parallax["parallax_shift_north_mas"]) > 0
+    assert angular_separation_arcsec(
+        ra_no_parallax, dec_no_parallax, ra_with_parallax, dec_with_parallax
+    ) > 0.001
+    assert no_parallax["parallax_applied"] is False
+
+
+def test_catalogue_association_includes_parallax_uncertainty_in_position_error():
+    pytest.importorskip("astropy")
+    from chronos_identity.associations import _propagate, probabilistic_associations
+
+    source = {
+        "source_id": "PX-1",
+        "ra": 10.0, "dec": 20.0, "epoch_year": 2016.0,
+        "pmra_cosdec_masyr": 0.0, "pmdec_cosdec_masyr": 0.0,
+        "parallax_mas": 80.0, "position_sigma_arcsec": 0.05,
+        "parallax_error_mas": 0.0,
+        "survey": "synthetic catalogue fixture",
+        "bandpass": "reference",
+        "angular_resolution_arcsec": 0.4,
+    }
+    ra, dec, _ = _propagate(source, 2016.25)
+    candidate = {
+        "candidate_id": "C1", "ra": ra, "dec": dec,
+        "epoch_year": 2016.25, "position_sigma_arcsec": 0.05,
+    }
+    without_error = probabilistic_associations(candidate, [source])
+    with_error_source = dict(source, parallax_error_mas=10.0)
+    with_error = probabilistic_associations(candidate, [with_error_source])
+    assert with_error["matches"][0]["parallax_sigma_arcsec"] > 0
+    assert with_error["matches"][0]["combined_sigma_arcsec"] > without_error["matches"][0]["combined_sigma_arcsec"]
+    assert with_error["matches"][0]["survey_metadata"]["survey"] == "synthetic catalogue fixture"
