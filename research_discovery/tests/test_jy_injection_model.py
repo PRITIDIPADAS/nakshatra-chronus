@@ -170,6 +170,11 @@ def _pending_electron_record(tmp_path):
         "outputid": "science-plane",
         "science_native_uri": science_uri,
         "calibration_native_uri": calibration_uri,
+        "calibration_sha256": calibration_sha,
+        "artifact_planeid": "gain-plane",
+        "artifact_md5_status": "pass",
+        "query_sha256": "c" * 64,
+        "status": "verified_from_live_irsa_foreign_key_query",
     }
     return {
         "verification_status": "derived_pending_independent_review",
@@ -252,3 +257,11 @@ def test_pending_review_absolute_gain_enables_source_poisson_injection_only_with
     assert result["source_photon_noise"]["physically_modelled"] is True
     assert result["source_photon_noise"]["calibration_review_status"] == "pending"
     assert result["source_photon_noise"]["independent_human_reviewed"] is False
+
+
+def test_absolute_gain_bunit_normalization_accepts_space_around_slash():
+    from research_discovery.spherex.electron_conversion import _is_surface_brightness_unit
+
+    assert _is_surface_brightness_unit("MJy/sr")
+    assert _is_surface_brightness_unit("MJy / sr")
+    assert not _is_surface_brightness_unit("Jy/pixel")
