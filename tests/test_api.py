@@ -78,3 +78,15 @@ def test_static_and_lab_endpoints():
     assert get("/api/protocol").json()["seal"]
     assert C.get("/api/load?t=nothing").status_code == 404
     assert C.get("/api/frame/999.png").status_code == 404
+
+
+
+def test_population_rate_endpoint_requires_coverage_audit():
+    response = C.post("/api/v5/population/rate", json={"fields": []})
+    assert response.status_code == 422
+    errors = response.json()["detail"]
+    assert any(
+        error["loc"] == ["body", "coverage_audit"]
+        and error["type"] == "missing"
+        for error in errors
+    )
