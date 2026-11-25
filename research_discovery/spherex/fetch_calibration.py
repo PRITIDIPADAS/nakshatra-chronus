@@ -20,12 +20,12 @@ def archive_path_metadata(uri):
  product_version=None
  processing_date=None
  for segment in segments:
-  version_match=re.fullmatch(r"v(?P<version>[0-9]+(?:\\.[0-9]+)*)(?:[-_](?P<date>\\d{4}-\\d{3}))?",segment,re.I)
-  if version_match:
-   product_version=version_match.group("version")
-   processing_date=version_match.group("date")
+  match=re.fullmatch(r"v([0-9]+(?:[.][0-9]+)*)(?:[-_]([0-9]{4}-[0-9]{3}))?",segment,re.I)
+  if match:
+   product_version=match.group(1)
+   processing_date=match.group(2)
    continue
-  if re.fullmatch(r"\\d{4}-\\d{3}",segment) and processing_date is None:
+  if re.fullmatch(r"[0-9]{4}-[0-9]{3}",segment) and processing_date is None:
    processing_date=segment
  return {"product_version":product_version,"processing_date":processing_date}
 
