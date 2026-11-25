@@ -259,6 +259,89 @@ def results_unique_placeholder(completed: list[dict]) -> bool:
     )
 
 
+def validate_aggregate_report(report: dict) -> dict:
+    """Fail closed unless the aggregate itself proves the complete field contract."""
+    errors = []
+    if not isinstance(report, dict):
+        return {"valid": False, "errors": ["aggregate report must be an object"]}
+
+    expected = {row["name"]: row["role"] for row in FIELDS}
+    audit = report.get("field_manifest_audit") or {}
+    if audit.get("valid") is not True:
+        errors.append("predeclared field manifest is missing or invalid")
+    if audit.get("expected_field_count") != len(FIELDS):
+        errors.append("field manifest expected count differs from the predeclared protocol")
+    if audit.get("returned_field_count") != len(FIELDS):
+        errors.append("field manifest returned count differs from the predeclared protocol")
+    if any(audit.get(key) for key in (
+        "missing_fields", "duplicate_fields", "unexpected_fields", "role_mismatches"
+    )):
+        errors.append("field manifest contains missing, duplicate, unexpected or role-mismatched rows")
+
+    fields = report.get("field_results")
+    if not isinstance(fields, list) or len(fields) != len(FIELDS):
+        errors.append("aggregate must contain exactly one result row per predeclared field")
+        fields = fields if isinstance(fields, list) else []
+    names = [str((row.get("field") or {}).get("name") or "") for row in fields]
+    if set(names) != set(expected) or len(names) != len(expected):
+        errors.append("aggregate field names do not exactly match the predeclared field set")
+    for row in fields:
+        field = row.get("field") or {}
+        name = str(field.get("name") or "<unnamed>")
+        if expected.get(name) != field.get("role"):
+            errors.append(f"{name}: field role differs from the predeclared manifest")
+        if row.get("eligible_for_multi_field_pilot_summary") is not True:
+            errors.append(f"{name}: field-level eligibility gate did not pass")
+        checks = row.get("checks")
+        if not isinstance(checks, dict) or not checks or not all(value is True for value in checks.values()):
+            errors.append(f"{name}: one or more strict field checks are false or absent")
+        summary_digest = str(row.get("summary_sha256") or "").lower()
+        if len(summary_digest) != 64 or any(ch not in "0123456789abcdef" for ch in summary_digest):
+            errors.append(f"{name}: real-field summary SHA-256 is missing or invalid")
+        science = row.get("science") or {}
+        science_digest = str(science.get("sha256") or "").lower()
+        if len(science_digest) != 64 or any(ch not in "0123456789abcdef" for ch in science_digest):
+            errors.append(f"{name}: native science SHA-256 is missing or invalid")
+        if not science.get("observation_id"):
+            errors.append(f"{name}: science observation ID is missing")
+        if science.get("detector") != "D2" or str(science.get("release", "")).lower() != "dr1":
+            errors.append(f"{name}: science product is not the requested DR1 D2 product")
+
+    if report.get("field_count_requested") != len(FIELDS):
+        errors.append("requested field count differs from the predeclared protocol")
+    if report.get("field_count_returned") != len(FIELDS):
+        errors.append("returned field count differs from the predeclared protocol")
+    if report.get("field_count_completed") != len(FIELDS):
+        errors.append("not all predeclared fields completed")
+    if report.get("field_count_incomplete") != 0:
+        errors.append("aggregate contains incomplete fields")
+    if report.get("science_observation_ids_unique") is not True:
+        errors.append("science observation IDs are not unique")
+    if report.get("science_file_hashes_unique") is not True:
+        errors.append("native science-file SHA-256 values are not unique")
+
+    gate = (report.get("scientific_gate_status") or {}).get("multi_field_calibrated_jy_evaluation")
+    if gate != "completed_exploratory_for_predeclared_regions":
+        errors.append("multi-field exploratory scientific gate is not satisfied")
+
+    # The report digest is calculated over the complete report before this
+    # field is inserted. Recompute it so post-hoc edits cannot pass unnoticed.
+    claimed_digest = str(report.get("report_sha256") or "").lower()
+    digest_payload = dict(report)
+    digest_payload.pop("report_sha256", None)
+    actual_digest = sha256_json(digest_payload)
+    if len(claimed_digest) != 64 or claimed_digest != actual_digest:
+        errors.append("aggregate report SHA-256 is missing or does not match its contents")
+
+    return {
+        "valid": not errors,
+        "errors": errors,
+        "verified_field_count": len(fields),
+        "verified_field_names": sorted(names),
+        "aggregate_report_sha256": actual_digest,
+    }
+
+
 def run_field(field: dict, root: Path, *, release: str,
               bandpass: str, code_revision: str | None) -> dict:
     field_dir = root / "fields" / field["name"]
@@ -330,17 +413,22 @@ def main() -> None:
     )
     report_path = args.out / "multi_field_jy_pilot_summary.json"
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    final_gate = validate_aggregate_report(report)
     print(json.dumps({
         "report": str(report_path),
         "report_sha256": report["report_sha256"],
         "field_count_requested": report["field_count_requested"],
+        "field_count_returned": report.get("field_count_returned"),
         "field_count_completed": report["field_count_completed"],
         "field_count_incomplete": report["field_count_incomplete"],
         "gate_status": report["scientific_gate_status"]["multi_field_calibrated_jy_evaluation"],
+        "strict_aggregate_validation": final_gate,
     }, indent=2), flush=True)
-    if report["field_count_completed"] != len(FIELDS):
+    if not final_gate["valid"]:
         raise SystemExit(
-            f"Only {report['field_count_completed']}/{len(FIELDS)} predeclared field pilots completed; inspect per-field reports."
+            "Strict multi-field acceptance validation failed: "
+            + "; ".join(final_gate["errors"])
+            + f". Inspect {report_path} and the per-field runner logs."
         )
 
 
