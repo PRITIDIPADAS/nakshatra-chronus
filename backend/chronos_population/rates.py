@@ -7,11 +7,15 @@ def estimate_event_rate(fields: Sequence[Mapping[str, Any]], *, minimum_complete
                         draws: int = 10000, seed: int = 1) -> dict[str, Any]:
     if not fields:
         raise ValueError("at least one independent field is required")
-    if not 0 < minimum_completeness <= 1 or draws < 100:
-        raise ValueError("minimum_completeness must be in (0, 1] and draws must be at least 100")
+    if not math.isfinite(float(minimum_completeness)) or not 0 < minimum_completeness <= 1:
+        raise ValueError("minimum_completeness must be in (0, 1]")
+    draws = _count(draws, "draws")
+    if draws < 100:
+        raise ValueError("draws must be at least 100")
     rng = np.random.default_rng(int(seed))
     total_rate_draws = np.zeros(draws, dtype=float)
     included, skipped = [], []
+    seen_field_ids: set[str] = set()
     for index, raw in enumerate(fields):
         row = dict(raw)
         required = ("field_id", "observed_events", "null_events", "area_deg2",
@@ -19,11 +23,19 @@ def estimate_event_rate(fields: Sequence[Mapping[str, Any]], *, minimum_complete
         missing = [key for key in required if key not in row]
         if missing:
             raise ValueError(f"field {index} missing {missing}")
-        observed, null = int(row["observed_events"]), int(row["null_events"])
+        field_id = str(row["field_id"]).strip()
+        if not field_id:
+            raise ValueError(f"field {index} requires a non-empty field_id")
+        if field_id in seen_field_ids:
+            raise ValueError(f"duplicate field_id {field_id!r}; independent fields must appear only once")
+        seen_field_ids.add(field_id)
+        observed = _count(row["observed_events"], f"field {field_id} observed_events")
+        null = _count(row["null_events"], f"field {field_id} null_events")
+        injected = _count(row["n_injected"], f"field {field_id} n_injected")
+        recovered = _count(row["n_recovered"], f"field {field_id} n_recovered")
         area, days = float(row["area_deg2"]), float(row["baseline_days"])
-        injected, recovered = int(row["n_injected"]), int(row["n_recovered"])
-        if min(observed, null, injected, recovered) < 0 or recovered > injected:
-            raise ValueError(f"field {index} has invalid non-negative counts")
+        if recovered > injected:
+            raise ValueError(f"field {field_id} recovered count cannot exceed injected count")
         if not np.isfinite(area) or not np.isfinite(days) or area <= 0 or days <= 0:
             raise ValueError(f"field {index} area and baseline must be finite and positive")
         if injected <= 0:
