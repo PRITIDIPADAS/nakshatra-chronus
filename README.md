@@ -1,6 +1,6 @@
 # Nakshatra CHRONOS
 
-See [`docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md`](docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md) for the evidence-gated project status and [the completed M101 DR1/D2 real-data pilot](docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md) for archive provenance, calibration checks and Jy injection/recovery results.
+See [`docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md`](docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md) for the evidence-gated project status and [the completed M101 DR1/D2 real-data pilot](docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md) for archive provenance and calibration checks, plus [the live six-region SPLICES/DR1 reconnaissance](docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md).
 
 
 **An observatory for change in the SPHEREx infrared sky.** CHRONOS finds what changed between SPHEREx visits, tests whether the change is real, ranks five explanations, tries to prove its own answer wrong, and writes a report in which every sentence points to a measurement.
@@ -27,7 +27,7 @@ The research preview adds measurement-level sky/detector model competition, loca
 
 These are software capabilities, not completed real-sky results. The four-baseline acceptance gate still requires all four methods to be run on the same calibrated real held-out SPHEREx fields. The generic pixel model is not calibrated SPHEREx detector physics, and the conditional bootstrap is not a full Bayesian posterior-predictive analysis.
 
-This is a research preview. Relative BIC weights are not calibrated posterior probabilities. Generic detector experiments are not calibrated SPHEREx simulations. Synthetic challenge cases are not evidence of real-sky performance. The real-data calibration, blind-field benchmark and independent reproduction gates remain mandatory.
+This is a research preview. Relative BIC weights are not calibrated posterior probabilities. Generic detector experiments are not calibrated SPHEREx simulations. Synthetic challenge cases are not evidence of real-sky performance. A six-region SPLICES/DR1 catalogue reconnaissance is now recorded, and a six-region calibrated-Jy pilot workflow has been added. The blind-field benchmark, independent reproduction and validated-release gates remain mandatory.
 
 ## CHRONOS 4D: ten laboratories (new)
 
@@ -51,7 +51,7 @@ CHRONOS does not merely search for changes. It investigates whether they are rea
 
 **Real data, run on GitHub Actions** (workflow `real data`, `scripts/real_data_run.py`, results in `data/real_data_run.json`): image counts per release at three places (for example 226 DR1 and 110 QR3 images at RW Aurigae); a real DR1 All-Sky Cube spectrum (tile Npix277, 102 × 512 × 512, BLANKCH D3:17 and D4:01, the missing channels 51 and 52); 12 SPLICES ice targets near RW Aurigae; the official DR1 helium, aurora, shuttle glow, nonfunctional pixel, spectral WCS, ePSF and crosstalk files; and 3I/ATLAS, with SPHEREx DR1 images at its JPL Horizons positions in August and December 2025.
 
-Also added: the research extension pack (`backend/chronos_addons/`, 14 offline API routes; `research_discovery/`: DR1 and calibration discovery, native MEF download with checksums, ePSF stamps at sub-pixel phase, flag policy, detector-template reprojection, injection and recovery, Planet Nine population tools, citizen-study manifest and protocols) and two Kaggle notebooks for the real-data runs (`notebooks/kaggle/`). Physics first: no generative AI produces any result. The latest combined CI run passed 248 tests (2 warnings); see the empirical status record for the exact run.
+Also added: the research extension pack (`backend/chronos_addons/`, 14 offline API routes; `research_discovery/`: DR1 and calibration discovery, native MEF download with checksums, ePSF stamps at sub-pixel phase, flag policy, detector-template reprojection, injection and recovery, Planet Nine population tools, citizen-study manifest and protocols) and two Kaggle notebooks for the real-data runs (`notebooks/kaggle/`). Physics first: no generative AI produces any result. CI history and the latest evidence-gated result are recorded in the empirical status document; workflow outcomes must be read against the scientific gate each one actually tests.
 
 ## The problem: you cannot blink SPHEREx
 
