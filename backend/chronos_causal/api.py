@@ -315,3 +315,118 @@ def benchmark_synthetic_case(request: ScenarioRequest):
 def benchmark_summary(request: BenchmarkSummaryRequest):
     from chronos_benchmark.metrics import summarize_decisions
     return guarded(lambda: summarize_decisions(request.decisions))
+
+
+class BenchmarkPackageRequest(BaseModel):
+    package: dict[str, Any]
+    bootstrap_draws: int = 2000
+    seed: int = 20261125
+
+class JacobianAuditRequest(BaseModel):
+    jacobian: list[list[float]]
+    parameter_names: list[str]
+    covariance: Any = None
+    parameter_roles: dict[str, str] | None = None
+    measurement_options: list[dict[str, Any]] = Field(default_factory=list)
+    weak_condition_number: float = 1e3
+    severe_condition_number: float = 1e6
+    near_collinearity: float = 0.98
+    covariance_verified: bool = False
+
+class SpectralExposureRequest(BaseModel):
+    shape: list[int]
+    mjd: float
+    exposure_time_s: float
+    wavelengths_um: list[float]
+    bandwidths_um: list[float]
+    wavelength_response: list[list[list[float]]]
+    sources: list[dict[str, Any]]
+    psf_kernel: list[list[float]]
+    background_rate_electrons_per_s: Any = 0.0
+    dark_current_rate_electrons_per_s: Any = 0.0
+    read_noise_electrons: Any = 0.0
+    flat_field: Any = None
+    detector_fixed_electrons: Any = None
+    missing_pixel_mask: Any = None
+    flags: Any = None
+    bad_flag_bits: int = 0
+    wavelength_map_um: Any = None
+    calibration_nuisance: dict[str, float] = Field(default_factory=dict)
+    parameter_provenance: dict[str, Any] = Field(default_factory=dict)
+    seed: int = 1
+
+class FalsificationRequest(BaseModel):
+    observations: list[dict[str, Any]]
+    challenge_specs: list[dict[str, Any]] | None = None
+    challenge_plan_sha256: str | None = None
+    bootstrap_draws: int = 1000
+    transient_draws: int = 500
+    seed: int = 20261125
+    maximum_predictive_p_value: float = 0.01
+    min_relative_support: float = 0.65
+    min_delta_bic: float = 6.0
+
+@router.post("/benchmark/compare-package")
+def benchmark_compare_package(request: BenchmarkPackageRequest):
+    from chronos_benchmark.runner import compare_benchmark_package
+    return guarded(lambda: compare_benchmark_package(
+        request.package,
+        bootstrap_draws=request.bootstrap_draws,
+        seed=request.seed,
+    ))
+
+@router.post("/causal/identifiability/jacobian")
+def causal_identifiability_jacobian(request: JacobianAuditRequest):
+    from .identifiability import audit_forward_model_identifiability
+    return guarded(lambda: audit_forward_model_identifiability(
+        request.jacobian,
+        request.parameter_names,
+        covariance=request.covariance,
+        parameter_roles=request.parameter_roles,
+        measurement_options=request.measurement_options,
+        weak_condition_number=request.weak_condition_number,
+        severe_condition_number=request.severe_condition_number,
+        near_collinearity=request.near_collinearity,
+        covariance_verified=request.covariance_verified,
+    ))
+
+@router.post("/causal/forward-exposure")
+def causal_forward_exposure(request: SpectralExposureRequest):
+    from .pixel_forward import simulate_spectral_exposure
+    return guarded(lambda: simulate_spectral_exposure(
+        shape=request.shape,
+        mjd=request.mjd,
+        exposure_time_s=request.exposure_time_s,
+        wavelengths_um=request.wavelengths_um,
+        bandwidths_um=request.bandwidths_um,
+        wavelength_response=request.wavelength_response,
+        sources=request.sources,
+        psf_kernel=request.psf_kernel,
+        background_rate_electrons_per_s=request.background_rate_electrons_per_s,
+        dark_current_rate_electrons_per_s=request.dark_current_rate_electrons_per_s,
+        read_noise_electrons=request.read_noise_electrons,
+        flat_field=request.flat_field,
+        detector_fixed_electrons=request.detector_fixed_electrons,
+        missing_pixel_mask=request.missing_pixel_mask,
+        flags=request.flags,
+        bad_flag_bits=request.bad_flag_bits,
+        wavelength_map_um=request.wavelength_map_um,
+        calibration_nuisance=request.calibration_nuisance,
+        parameter_provenance=request.parameter_provenance,
+        seed=request.seed,
+    ))
+
+@router.post("/causal/falsify")
+def causal_falsify(request: FalsificationRequest):
+    from .falsification import run_falsification_suite
+    return guarded(lambda: run_falsification_suite(
+        request.observations,
+        challenge_specs=request.challenge_specs,
+        challenge_plan_sha256=request.challenge_plan_sha256,
+        bootstrap_draws=request.bootstrap_draws,
+        transient_draws=request.transient_draws,
+        seed=request.seed,
+        maximum_predictive_p_value=request.maximum_predictive_p_value,
+        min_relative_support=request.min_relative_support,
+        min_delta_bic=request.min_delta_bic,
+    ))
