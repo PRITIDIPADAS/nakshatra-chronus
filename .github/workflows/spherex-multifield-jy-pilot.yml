@@ -7,7 +7,10 @@ on:
       - "research_discovery/spherex/run_multifield_jy_pilot.py"
       - "research_discovery/spherex/run_real_field_audit.py"
       - "research_discovery/spherex/psf_physicality.py"
+      - "research_discovery/spherex/electron_conversion.py"
+      - "research_discovery/spherex/electron_calibration_record.schema.json"
       - "research_discovery/validation/injection_recovery.py"
+      - "research_discovery/tests/test_jy_injection_model.py"
       - "research_discovery/tests/test_multifield_jy_pilot.py"
       - ".github/workflows/spherex-multifield-jy-pilot.yml"
   workflow_dispatch:
