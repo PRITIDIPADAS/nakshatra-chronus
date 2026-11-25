@@ -64,6 +64,14 @@ C_i = \frac{t_{\mathrm{exp}}}{G_{\mathrm{abs},i}},
 ]
 The source signal's `1/\Omega_i` factor is the Jy-to-MJy/sr pixel conversion; (C_i) is the gain/time conversion. These are distinct operations. This dimensional check is supported by the published units, but the mission team or an independent instrument-calibration reviewer must still reproduce the exact per-pixel noise bookkeeping for the released Level-2 product and the selected exposure.
 
+## Authoritative SPHEREx product-definition reference
+
+The official [SPHEREx Explanatory Supplement, Version 2.1 (10 November 2026)](https://irsa.ipac.caltech.edu/data/SPHEREx/docs/SPHEREx_Expsupp.pdf) defines the absolute-gain matrix in units of `(MJy/sr)/(e-/s)` and describes Level-2 calibration as applying that matrix to the dark-subtracted L1 rate image. It describes the delivered Level-2 VARIANCE plane as the propagated variance from the combined Poisson and electronic-noise model, in `(MJy/sr)^2`. The Supplement also distinguishes dark-current treatment from the Poisson/electronic variance terms.
+
+Accordingly, the repository's dimensional conversion `exposure_time_s / absolute_gain` yields electrons per Level-2 surface-brightness unit. The Jy injection uses the solid-angle map to convert integrated flux into per-pixel MJy/sr; the solid angle is not multiplied into the gain-derived electron conversion again. The synthetic Poisson increment represents only the *added artificial source*; native Level-2 read/electronic and sky/source variance remain in the original variance image and must not be added a second time.
+
+The unresolved review is now narrower and implementation-specific: confirm the exposure-time normalization and exact gain product interpretation for each used observation; inspect whether the Level-2 variance already contains all background/source Poisson terms appropriate to the injected signal; and reproduce the added source variance from the native bytes. The authoritative unit definitions support the algebra but do not independently certify the code's noise bookkeeping or make the derived conversion approved.
+
 ## Implemented conversion — reviewer must independently verify
 
 The code interprets the absolute-gain map as
