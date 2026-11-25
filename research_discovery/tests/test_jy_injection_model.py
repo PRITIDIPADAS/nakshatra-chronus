@@ -118,3 +118,34 @@ def test_nonnegative_psf_helper_rejects_nonfinite_stamp():
     raw[0, 0] = np.nan
     with pytest.raises(ValueError, match="non-finite"):
         enforce_nonnegative_interpolation_psf(raw)
+
+def test_local_psf_region_position_search_enumerates_candidates_without_global_rejection():
+    from research_discovery.validation.injection_recovery import _choose_positions
+
+    shape = (4096, 4096)
+    valid = np.zeros(shape, dtype=bool)
+    center = (2048.25, 2048.75)
+    radius = 120.0
+    yy, xx = np.mgrid[-120:121, -120:121]
+    local_rng = np.random.default_rng(314)
+    local_valid = (
+        (xx ** 2 + yy ** 2 <= radius ** 2)
+        & (local_rng.random(xx.shape) < 0.25)
+    )
+    valid[2048 - 120:2048 + 121, 2048 - 120:2048 + 121] = local_valid
+
+    points = _choose_positions(
+        valid, n=20, margin=12,
+        rng=np.random.default_rng(2026),
+        min_distance=16,
+        phase=(0.25, 0.75),
+        reference_xy=center,
+        region_radius=radius,
+    )
+
+    assert points.shape == (20, 2)
+    assert np.all((points[:, 0] - center[0]) ** 2 + (points[:, 1] - center[1]) ** 2 <= radius ** 2)
+    assert all(valid[int(y), int(x)] for x, y in points)
+    distances = np.sqrt(((points[:, None, :] - points[None, :, :]) ** 2).sum(axis=2))
+    distances += np.eye(len(points)) * 1e9
+    assert float(distances.min()) >= 16.0
