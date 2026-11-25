@@ -81,6 +81,8 @@ def _verified_audit_fixture(tmp_path):
         "release": "DR1", "detector": "D2", "pipeline_version": "7.1",
         "processing_date": "2026-001", "coordinate_frame": "native_detector",
         "native_uri": uris["spectral"], "sha256": files["spectral"]["sha256"],
+        "local_path": str(files["spectral"]["path"]),
+        "solid_angle_map_path": str(files["area"]["path"]),
         "wavelength_audit_path": str(audit_path), "wavelength_audit_sha256": audit_sha,
         "solid_angle_map_uri": uris["area"], "solid_angle_map_sha256": files["area"]["sha256"]}
     products = [
