@@ -302,9 +302,17 @@ def inspect_region(region: dict) -> dict:
         record["last_time"] = max(record["last_time"], hi) if record["last_time"] is not None else hi
     counts["dr1_level2_exposure_rows_by_band"] = None if exposure_error else by_band
     counts["dr1_level2_exposure_rows_total"] = None if exposure_error else len(exposure_rows)
-    counts["dr1_level2_coverage_complete"] = (
+    query_below_cap = (
         not exposure_error and len(exposure_rows) < COVERAGE_ROW_LIMIT
     )
+    counts["dr1_level2_query_complete_under_declared_row_cap"] = query_below_cap
+    # Keep the original key for existing readers, but explicitly scope it to
+    # query completeness, not survey-wide or source-level completeness.
+    counts["dr1_level2_coverage_complete"] = query_below_cap
+    counts["dr1_level2_coverage_query_semantics"] = (
+        "region_center_point_inside_exposure_polygon"
+    )
+    counts["source_level_epoch_coverage_measured"] = False
 
     query_errors = {
         name: result["error"]
@@ -394,7 +402,9 @@ def main() -> None:
             "Machine-learning classification is not treated as independent confirmation.",
             "The regional counts are not a population rate; selection functions and contamination must be modelled.",
             "This reconnaissance does not establish a new YSO discovery.",
-            "L2 exposure counts are bounded spatial footprint-row counts, not source-level extracted spectra or epoch completeness.",
+            "The DR1 exposure query tests whether each fixed region-centre coordinate lies inside an exposure polygon; it does not enumerate every exposure intersecting the full region cone.",
+            "The DR1 row-cap check establishes only that the centre-point query returned fewer than 20000 rows; it does not establish survey-wide or source-level coverage completeness.",
+            "No source-level candidate-to-exposure matching or extracted spectra/epoch completeness is measured by this reconnaissance.",
         ],
         "report_sha256": None,
     }
