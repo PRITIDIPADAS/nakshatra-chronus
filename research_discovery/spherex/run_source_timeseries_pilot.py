@@ -68,7 +68,7 @@ def run_native_audit_with_retry(command:list[str],*,cwd:Path,audit_dir:Path,epoc
  combined=[]
  for attempt in attempts:
   log=epoch_dir/attempt["log"]
-  combined.append(f"===== ATTEMPT {attempt['attempt']} return_code={attempt['return_code']} =====\n")
+  combined.append(f"===== ATTEMPT {attempt['attempt']:02d} return_code={attempt['return_code']} =====\n")
   combined.append(log.read_text(encoding="utf-8",errors="replace"))
  (epoch_dir/"native_audit_runner.log").write_text("\n".join(combined),encoding="utf-8")
  return last,attempts
