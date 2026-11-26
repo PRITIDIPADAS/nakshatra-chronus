@@ -221,7 +221,8 @@ def test_source_timeseries_requires_common_native_passband_across_epochs(tmp_pat
     spectral_path = Path(second_product["spectral_wcs"]["local_path"])
     with fits.open(spectral_path, memmap=False) as hdul:
         hdus = [hdu.copy() for hdu in hdul]
-        hdus["CWAVE"].data = np.asarray(hdus["CWAVE"].data, dtype=np.float32) + 0.2
+        cwave_hdu = next(hdu for hdu in hdus if hdu.name == "CWAVE")
+        cwave_hdu.data = np.asarray(cwave_hdu.data, dtype=np.float32) + 0.2
     fits.HDUList(hdus).writeto(spectral_path, overwrite=True)
     new_sha = hashlib.sha256(spectral_path.read_bytes()).hexdigest()
     second_product["spectral_wcs"]["sha256"] = new_sha
