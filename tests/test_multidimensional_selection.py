@@ -418,3 +418,42 @@ def test_selection_function_rejects_valid_shape_but_invalid_ed25519_signature():
             _trials(), _bin_spec(), field_records=fields,
             minimum_trials_per_cell=20, minimum_independent_fields=5,
         )
+
+
+def test_selection_function_requires_out_of_band_custodian_identity_pin(monkeypatch):
+    from chronos_population.selection import fit_selection_function
+
+    fields = _field_records()
+    monkeypatch.setenv("CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_ID", "unrelated-custodian")
+    with pytest.raises(ValueError, match="does not match the out-of-band pinned custodian"):
+        fit_selection_function(
+            _trials(), _bin_spec(), field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+        )
+
+
+def test_selection_function_requires_out_of_band_custodian_independence_confirmation(monkeypatch):
+    from chronos_population.selection import fit_selection_function
+
+    fields = _field_records()
+    monkeypatch.delenv(
+        "CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_OUT_OF_BAND_INDEPENDENCE_VERIFIED",
+        raising=False,
+    )
+    with pytest.raises(ValueError, match="must be confirmed out-of-band"):
+        fit_selection_function(
+            _trials(), _bin_spec(), field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+        )
+
+
+def test_selection_function_requires_signed_custodian_independence_assertion():
+    from chronos_population.selection import fit_selection_function
+
+    fields = _field_records()
+    fields[0]["field_independence_attestation"]["payload"]["custodian_independent_of_analysis_team"] = False
+    with pytest.raises(ValueError, match="custodian attestation payload has missing or unexpected fields"):
+        fit_selection_function(
+            _trials(), _bin_spec(), field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+        )
