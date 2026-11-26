@@ -134,6 +134,12 @@ jobs:
           print("Electron-conversion review remains pending; this check does not mark it human-reviewed.")
           PY
 
+      - name: Independently recompute source-Poisson expectations from retained native bytes
+        run: |
+          python -m research_discovery.spherex.source_poisson_reproduction \
+            --audit-dir data/spherex_m101_audit \
+            --repository-commit "$GITHUB_SHA"
+
       - name: Upload native science and calibration files with audit records
         if: always()
         uses: actions/upload-artifact@v4
