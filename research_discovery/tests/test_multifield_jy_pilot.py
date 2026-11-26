@@ -576,3 +576,118 @@ def test_field_summary_rejects_reference_variance_peak_count_mismatch():
     )
     assert record["eligible_for_multi_field_pilot_summary"] is False
     assert record["checks"]["source_only_flux_bin_counts_match_injection_rows"] is False
+
+def test_field_runner_retries_transient_partial_native_mef_download(tmp_path, monkeypatch):
+    import subprocess
+    from research_discovery.spherex import run_multifield_jy_pilot as pilot
+
+    field_dir = tmp_path / "Taurus_Auriga"
+    data_dir = field_dir / "data"
+    data_dir.mkdir(parents=True)
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return subprocess.CompletedProcess(command, 1, "level2_native.fits: partial")
+        (data_dir / "real_field_audit_summary.json").write_text("{}", encoding="utf-8")
+        (data_dir / "native_mef_audit.json").write_text("{}", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "native audit passed")
+
+    sleeps = []
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+    monkeypatch.setattr(pilot.time, "sleep", sleeps.append)
+    completed, attempts = pilot.run_field_audit_with_retry(
+        ["python", "audit"], cwd=tmp_path, field_dir=field_dir, data_dir=data_dir,
+    )
+
+    assert completed.returncode == 0
+    assert len(calls) == 2
+    assert len(attempts) == 2
+    assert attempts[0]["transient_archive_failure"] is True
+    assert attempts[1]["summary_present"] is True
+    assert attempts[1]["native_audit_present"] is True
+    assert sleeps == [5]
+    log = (field_dir / "runner.log").read_text(encoding="utf-8")
+    assert "ATTEMPT 01" in log
+    assert "ATTEMPT 02" in log
+
+
+def test_field_runner_never_retries_scientific_or_flag_quality_failures(tmp_path, monkeypatch):
+    import subprocess
+    from research_discovery.spherex import run_multifield_jy_pilot as pilot
+
+    field_dir = tmp_path / "Orion_A"
+    data_dir = field_dir / "data"
+    data_dir.mkdir(parents=True)
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(1)
+        return subprocess.CompletedProcess(
+            command, 1, "ValueError: PSF footprint intersects an excluded SPHEREx flag"
+        )
+
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+    monkeypatch.setattr(pilot.time, "sleep", lambda _: pytest.fail("scientific exclusions must not be retried"))
+    completed, attempts = pilot.run_field_audit_with_retry(
+        ["python", "audit"], cwd=tmp_path, field_dir=field_dir, data_dir=data_dir,
+    )
+
+    assert completed.returncode == 1
+    assert len(calls) == 1
+    assert len(attempts) == 1
+    assert attempts[0]["transient_archive_failure"] is False
+
+
+def test_field_runner_does_not_retry_empty_archive_search(tmp_path, monkeypatch):
+    import subprocess
+    from research_discovery.spherex import run_multifield_jy_pilot as pilot
+
+    field_dir = tmp_path / "Empty"
+    data_dir = field_dir / "data"
+    data_dir.mkdir(parents=True)
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(1)
+        return subprocess.CompletedProcess(
+            command, 1, "RuntimeError: IRSA TAP returned no downloadable native science MEF for this field/bandpass"
+        )
+
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+    monkeypatch.setattr(pilot.time, "sleep", lambda _: pytest.fail("empty archive searches must not be retried"))
+    completed, attempts = pilot.run_field_audit_with_retry(
+        ["python", "audit"], cwd=tmp_path, field_dir=field_dir, data_dir=data_dir,
+    )
+
+    assert completed.returncode == 1
+    assert len(calls) == 1
+    assert len(attempts) == 1
+    assert attempts[0]["transient_archive_failure"] is False
+
+
+def test_field_runner_stops_after_three_transient_failures(tmp_path, monkeypatch):
+    import subprocess
+    from research_discovery.spherex import run_multifield_jy_pilot as pilot
+
+    field_dir = tmp_path / "Repeated_Failure"
+    data_dir = field_dir / "data"
+    data_dir.mkdir(parents=True)
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(1)
+        return subprocess.CompletedProcess(command, 1, "Connection reset by peer")
+
+    sleeps = []
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+    monkeypatch.setattr(pilot.time, "sleep", sleeps.append)
+    completed, attempts = pilot.run_field_audit_with_retry(
+        ["python", "audit"], cwd=tmp_path, field_dir=field_dir, data_dir=data_dir,
+    )
+
+    assert completed.returncode == 1
+    assert len(calls) == 3
+    assert len(attempts) == 3
+    assert sleeps == [5, 15]
