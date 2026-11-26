@@ -1,6 +1,7 @@
 """Signed independent astronomical reproduction records and fail-closed readiness."""
 from __future__ import annotations
 
+import math
 import base64
 import hashlib
 import json
