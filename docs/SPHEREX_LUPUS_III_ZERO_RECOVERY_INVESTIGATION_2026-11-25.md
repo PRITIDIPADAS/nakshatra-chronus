@@ -95,3 +95,12 @@ The component-only peak-list diagnostic returned 0/20, 8/20 and 20/20 at the thr
 A new six-field source-only aggregate-gated run was still pending at documentation time ([45685593223](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685593223)); the previous completed six-field artifact predates this diagnostic. No source-only outcome is assigned to Lupus III here.
 
 The root cause remains open. The archive metadata audit and compatible native MEF/calibration structure do not rule out a local ePSF/position-phase mismatch, background residual, flag footprint effects, noise covariance, crowding/blending, source-only/combined-scene peak selection differences, or an implementation/configuration error. These remain hypotheses only. The exact native Lupus image and the original 60 coordinate-level records must be examined together before selecting among them. The absolute-gain/electron convention also remains pending independent instrument review.
+
+
+## Latest independent six-field rerun — 26 November 2026
+
+The same predeclared Lupus III exposure was included in the strict aggregate workflow [#37 / run 45749547766](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45749547766), artifact 15085687674. The native science file SHA-256 remains `272df790de462a6f6cae8cfe6c92fe7a3a34294069234b96532a2fc8e233d570`; observation ID remains `2025W32_1A_0663_1`. The aggregate report returned 6/6 predeclared fields and 25/25 machine checks per field.
+
+Lupus III again recovered **0/20 at 0.5×, 0/20 at 1× and 0/20 at 2×** its local nominal 5σ reference (105.579, 211.158 and 422.317 µJy). The report digest is `031aacb4dd64345794d246883be141b935689f0de69affaf9965c39b512b60a9`, and its embedded SHA-256 was independently recomputed from the artifact JSON.
+
+This rerun reproduces the same adverse outcome in the same single exposure and local injection region. It does not identify the cause, establish a field-wide completeness limit or validate the gain-to-electron calibration. The absolute-gain conversion remains pending independent instrument review; raw-pixel diagnostic inspection, injection-position score audit and independent-seed tests remain required.
