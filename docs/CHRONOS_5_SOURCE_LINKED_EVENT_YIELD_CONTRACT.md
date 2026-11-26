@@ -19,7 +19,7 @@ Each accepted event record must contain:
 | `start_mjd`, `end_mjd` | Finite MJD interval with end later than start |
 | `measurement_ids` | At least two unique IDs from the source's verified measurement lineage, spanning at least two distinct MJDs |
 
-A source's measurement lineage is built from valid rows after native science/calibration file verification, CWAVE/CBAND checks, observation-product identity checks and source-position/WCS consistency checks. An event that cites a row outside that exact source series is rejected. The event interval must lie within the MJD span of the cited measurements.
+A source's measurement lineage is built from valid rows after native science/calibration file verification, CWAVE/CBAND checks, observation-product identity checks and source-position/WCS consistency checks. An event that cites a row outside that exact source series is rejected. The event interval must lie within the MJD span of the cited measurements. The API also checks the declared classifier version and evidence URI/hash fields. It does **not** retrieve those evidence bytes or rerun the classifier: `status='accepted'` remains an operator-supplied classifier result, not a recomputed event detection. The output explicitly sets `event_acceptance_recomputed=false`. An independent reviewer must retrieve the event evidence and reproduce the classifier before an event/population claim can be accepted.
 
 ## Field-level event counts and controls
 
