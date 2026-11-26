@@ -223,6 +223,15 @@ def estimate_source_linked_event_yield(
             raise ValueError(f"event {event_id} preregistration digest mismatch")
         if str(raw.get("event_definition_sha256", "")).lower() != event_definition:
             raise ValueError(f"event {event_id} event-definition digest mismatch")
+        event_evidence_uri = str(raw.get("event_evidence_uri", "")).strip()
+        if not event_evidence_uri.startswith("https://"):
+            raise ValueError(f"event {event_id} requires an HTTPS event_evidence_uri")
+        event_evidence_sha256 = str(raw.get("event_evidence_sha256", "")).lower()
+        if len(event_evidence_sha256) != 64 or any(ch not in "0123456789abcdef" for ch in event_evidence_sha256):
+            raise ValueError(f"event {event_id} requires a 64-character event_evidence_sha256")
+        classifier_version = str(raw.get("classifier_version", "")).strip()
+        if not classifier_version:
+            raise ValueError(f"event {event_id} requires an explicit classifier_version")
         try:
             start = float(raw.get("start_mjd"))
             end = float(raw.get("end_mjd"))
@@ -257,6 +266,9 @@ def estimate_source_linked_event_yield(
             "end_mjd": end,
             "measurement_ids": sorted(measurement_ids),
             "measurement_epochs_mjd": measurement_epochs,
+            "event_evidence_uri": event_evidence_uri,
+            "event_evidence_sha256": event_evidence_sha256,
+            "classifier_version": classifier_version,
             "selection_probability": eligible_sources[key]["selection_probability"],
             "selection_weight": eligible_sources[key]["selection_weight"],
         })
@@ -403,7 +415,20 @@ def estimate_source_linked_event_yield(
         "draws": draws,
         "seed": int(seed),
         "coverage_revalidated": True,
+        "event_acceptance_recomputed": False,
+        "event_evidence_records": [
+            {
+                "event_id": event["event_id"],
+                "event_evidence_uri": event["event_evidence_uri"],
+                "event_evidence_sha256": event["event_evidence_sha256"],
+                "classifier_version": event["classifier_version"],
+            }
+            for field_events in grouped_events.values()
+            for source_events in field_events.values()
+            for event in source_events
+        ],
         "limits": [
+            "Event status='accepted' is an operator-supplied result from the frozen classifier. This estimator validates its digest, evidence URI/hash declaration, source identity, measurement IDs and time bounds, but does not retrieve the evidence bytes or rerun the event classifier. Independent reproduction of event classification is still required.",
             "Source inclusion is corrected using the predeclared multidimensional source-selection function; cells outside its support are excluded upstream.",
             "Selection-probability uncertainty is propagated using a logit-normal approximation to the fitted field-cluster 95% interval; each joint selection cell shares one probability draw across its eligible sources.",
             "The logit-normal approximation is not a full hierarchical propagation of calibration and field-level covariance.",
