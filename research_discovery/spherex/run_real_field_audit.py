@@ -607,6 +607,7 @@ def main():
     p.add_argument("--release", choices=("dr1", "qr3"), default="dr1")
     p.add_argument("--limit-per-family", type=int, default=5)
     p.add_argument("--out", type=Path, default=Path("data/spherex_m101_audit"))
+    p.add_argument("--skip-calibrated-injection", action="store_true", help="Skip source-Poisson injection; source photometry uses delivered Level-2 VARIANCE")
     args = p.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     started = datetime.now(timezone.utc).isoformat()
@@ -870,7 +871,9 @@ def main():
                 }
 
     calibrated_injection = {"status": "not_run"}
-    if (
+    if args.skip_calibrated_injection:
+        calibrated_injection = {"status": "skipped_by_request", "reason": "Source photometry uses delivered Level-2 VARIANCE; source-Poisson injection and the pending gain-to-electron derivation are not used."}
+    elif (
         chosen_area and chosen_gain and provenance_links.get("absolute_gain")
         and (audit_report.get("calibration_compatibility") or {}).get("status") == "compatible"
     ):

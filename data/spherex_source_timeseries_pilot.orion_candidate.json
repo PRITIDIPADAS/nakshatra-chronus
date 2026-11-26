@@ -1,0 +1,95 @@
+{
+  "schema": "chronos-spherex-source-timeseries-pilot/1.0",
+  "status": "predeclared_products_metadata_only_pending_native_audit",
+  "source_catalogue": {
+    "archive": "NASA/IPAC IRSA SPHEREx SPLICES",
+    "source_id": "1914414087643594754",
+    "designation": "J053131.05-060841.7",
+    "ra_deg": 82.879379,
+    "dec_deg": -6.144907,
+    "region": "Orion_A",
+    "yso_pub": 7,
+    "class_1": "YSO_D",
+    "stype_ml": "Class II YSO",
+    "stype_ml_prob1": 0.8856,
+    "catalogue_labels_are_independent_confirmation": false,
+    "source_class_claim": "catalogue_candidate_only_not_independently_confirmed",
+    "selection_origin": {
+      "workflow_run_id": 45694565745,
+      "workflow_run_url": "https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45694565745",
+      "artifact_id": 15060892188,
+      "artifact_sha256": "2b1d7e7c4871d41f68f181a053f5df8a5d50b71f310b0e4dd748726bc8c65d5c",
+      "source_product_match_file": "candidate_source_product_matches_all_regions.csv",
+      "matching_method": "spherical-gnomonic-pip/1.0",
+      "association_type": "SIAv2 s_region coordinate-in-polygon metadata match",
+      "photometry_established_by_selection": false
+    }
+  },
+  "selection_policy": {
+    "release": "DR1",
+    "detector": "D2",
+    "bandpass": "SPHEREx-D2",
+    "minimum_epochs": 4,
+    "no_epoch_substitution": true,
+    "no_flux_imputation": true,
+    "no_calibrated_gain_to_electron_conversion_used_for_flux_fit": true,
+    "flux_fit_variance": "delivered Level-2 VARIANCE treated as diagonal covariance"
+  },
+  "products": [
+    {
+      "archive_product_id": "ivo://irsa.ipac/spherex_dr1?2025W36_2B_0638_1/D2",
+      "observation_id": "2025W36_2B_0638_1",
+      "detector": "D2",
+      "release": "DR1",
+      "bandpass": "SPHEREx-D2",
+      "t_min_mjd": 60925.595112,
+      "t_max_mjd": 60925.596444,
+      "mjd_midpoint": 60925.595778,
+      "native_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/2025W36_2B/l2b-v27-2026-234/2/level2_2025W36_2B_0638_1D2_spx_l2b-v27-2026-234.fits",
+      "selection_evidence": "run-56 exact source/product geometry-match row"
+    },
+    {
+      "archive_product_id": "ivo://irsa.ipac/spherex_dr1?2025W37_2A_0601_1/D2",
+      "observation_id": "2025W37_2A_0601_1",
+      "detector": "D2",
+      "release": "DR1",
+      "bandpass": "SPHEREx-D2",
+      "t_min_mjd": 60932.183896,
+      "t_max_mjd": 60932.185228,
+      "mjd_midpoint": 60932.184562,
+      "native_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/2025W37_2A/l2b-v27-2026-236/2/level2_2025W37_2A_0601_1D2_spx_l2b-v27-2026-236.fits",
+      "selection_evidence": "run-56 exact source/product geometry-match row"
+    },
+    {
+      "archive_product_id": "ivo://irsa.ipac/spherex_dr1?2026W10_1A_0337_2/D2",
+      "observation_id": "2026W10_1A_0337_2",
+      "detector": "D2",
+      "release": "DR1",
+      "bandpass": "SPHEREx-D2",
+      "t_min_mjd": 61102.726292,
+      "t_max_mjd": 61102.727624,
+      "mjd_midpoint": 61102.726958,
+      "native_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/2026W10_1A/l2b-v27-2026-229/2/level2_2026W10_1A_0337_2D2_spx_l2b-v27-2026-229.fits",
+      "selection_evidence": "run-56 exact source/product geometry-match row"
+    },
+    {
+      "archive_product_id": "ivo://irsa.ipac/spherex_dr1?2026W11_2A_0253_1/D2",
+      "observation_id": "2026W11_2A_0253_1",
+      "detector": "D2",
+      "release": "DR1",
+      "bandpass": "SPHEREx-D2",
+      "t_min_mjd": 61112.636266,
+      "t_max_mjd": 61112.637598,
+      "mjd_midpoint": 61112.636932,
+      "native_uri": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/level2/2026W11_2A/l2b-v27-2026-234/2/level2_2026W11_2A_0253_1D2_spx_l2b-v27-2026-234.fits",
+      "selection_evidence": "run-56 exact source/product geometry-match row"
+    }
+  ],
+  "scientific_boundary": [
+    "Catalogue labels are not independent YSO confirmation.",
+    "SIAv2 footprint matches are metadata only until native data and per-exposure calibration audits pass.",
+    "Only four verified distinct native observation epochs may be called a multi-epoch series.",
+    "Flux errors use delivered Level-2 VARIANCE as diagonal covariance; correlated noise and PSF systematics are not represented.",
+    "No population result, discovery, blind benchmark or performance advantage is claimed."
+  ]
+}

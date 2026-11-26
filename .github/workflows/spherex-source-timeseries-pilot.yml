@@ -1,0 +1,55 @@
+name: SPHEREx four-epoch Orion A source-photometry pilot
+on:
+  push:
+    branches: [chronos-5-causal-sky-twin]
+    paths:
+      - "data/spherex_source_timeseries_pilot.orion_candidate.json"
+      - "data/spherex_orion_source_catalogue_snapshot.json"
+      - "research_discovery/spherex/run_source_timeseries_pilot.py"
+      - "research_discovery/spherex/run_real_field_audit.py"
+      - "research_discovery/spherex/source_photometry.py"
+      - "research_discovery/spherex/source_timeseries.py"
+      - "research_discovery/spherex/extract_epsf_stamp.py"
+      - "research_discovery/tests/test_source_timeseries_pilot.py"
+      - ".github/workflows/spherex-source-timeseries-pilot.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: spherex-source-timeseries-pilot
+  cancel-in-progress: false
+jobs:
+  four-epoch-source-photometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out the exact triggering revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install archive and source-photometry dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r research_discovery/requirements-research.txt
+      - name: Test frozen roster and native-photometry contracts
+        run: |
+          python -m pytest research_discovery/tests/test_source_timeseries_pilot.py research_discovery/tests/test_source_photometry.py research_discovery/tests/test_source_timeseries.py -q
+      - name: Retrieve, audit and fit four exact DR1 D2 exposures
+        run: |
+          python -m research_discovery.spherex.run_source_timeseries_pilot \
+            --out data/spherex_source_timeseries_pilot \
+            --code-revision ${{ github.sha }}
+      - name: Upload source-series reports and native inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spherex-orion-four-epoch-source-photometry
+          path: |
+            data/spherex_source_timeseries_pilot/**
+          if-no-files-found: warn
+          retention-days: 30
