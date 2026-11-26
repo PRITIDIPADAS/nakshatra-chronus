@@ -293,11 +293,116 @@ def _verify_native_pixel(
     return output
 
 
+def _summarize_temporal_band_clusters(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    minimum_epochs: int,
+    minimum_overlap_fraction: float = 0.5,
+) -> dict[str, Any]:
+    """Find repeated temporal measurements with a common native passband.
+
+    Each measurement contributes its native CWAVE centre and CBAND width.
+    A cluster is temporally comparable only when the intersection of all
+    passbands retains at least the declared fraction of the narrowest band
+    and the cluster spans the requested number of distinct observation/MJD
+    epochs. This prevents a wavelength shift between visits from masquerading
+    as temporal variability.
+    """
+    if not math.isfinite(float(minimum_overlap_fraction)) or not 0 < minimum_overlap_fraction <= 1:
+        raise ValueError("minimum_overlap_fraction must be in (0, 1]")
+    prepared = []
+    for row in rows:
+        wavelength = _finite(row.get("wavelength_um"), "temporal wavelength_um")
+        bandwidth = _finite(row.get("bandwidth_um"), "temporal bandwidth_um")
+        if wavelength <= 0 or bandwidth <= 0:
+            raise ValueError("temporal wavelength and bandwidth must be positive")
+        observation_id = str(row.get("observation_id", "")).strip()
+        mjd = _finite(row.get("mjd"), "temporal MJD")
+        if not observation_id:
+            raise ValueError("temporal measurement requires observation_id")
+        prepared.append({
+            "observation_id": observation_id,
+            "mjd": mjd,
+            "lower_um": wavelength - bandwidth / 2.0,
+            "upper_um": wavelength + bandwidth / 2.0,
+            "bandwidth_um": bandwidth,
+            "measurement_id": str(row.get("measurement_id", "")),
+        })
+    prepared.sort(key=lambda row: (
+        (row["lower_um"] + row["upper_um"]) / 2.0,
+        row["mjd"], row["observation_id"], row["measurement_id"],
+    ))
+
+    raw_clusters: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    common_lower = common_upper = minimum_bandwidth = None
+    for item in prepared:
+        if not current:
+            current = [item]
+            common_lower, common_upper = item["lower_um"], item["upper_um"]
+            minimum_bandwidth = item["bandwidth_um"]
+            continue
+        next_lower = max(float(common_lower), item["lower_um"])
+        next_upper = min(float(common_upper), item["upper_um"])
+        next_minimum_bandwidth = min(float(minimum_bandwidth), item["bandwidth_um"])
+        overlap_fraction = max(0.0, next_upper - next_lower) / next_minimum_bandwidth
+        if next_upper > next_lower and overlap_fraction >= minimum_overlap_fraction:
+            current.append(item)
+            common_lower, common_upper = next_lower, next_upper
+            minimum_bandwidth = next_minimum_bandwidth
+        else:
+            raw_clusters.append(current)
+            current = [item]
+            common_lower, common_upper = item["lower_um"], item["upper_um"]
+            minimum_bandwidth = item["bandwidth_um"]
+    if current:
+        raw_clusters.append(current)
+
+    clusters = []
+    for index, cluster in enumerate(raw_clusters, start=1):
+        lower = max(row["lower_um"] for row in cluster)
+        upper = min(row["upper_um"] for row in cluster)
+        narrowest = min(row["bandwidth_um"] for row in cluster)
+        overlap_width = max(0.0, upper - lower)
+        overlap_fraction = overlap_width / narrowest
+        epochs = sorted({(row["observation_id"], row["mjd"]) for row in cluster})
+        usable = len(epochs) >= int(minimum_epochs) and overlap_fraction >= minimum_overlap_fraction
+        clusters.append({
+            "cluster_index": index,
+            "measurement_count": len(cluster),
+            "distinct_epoch_count": len(epochs),
+            "observation_ids": sorted({row["observation_id"] for row in cluster}),
+            "mjd_min": min((row["mjd"] for row in cluster), default=None),
+            "mjd_max": max((row["mjd"] for row in cluster), default=None),
+            "common_passband_lower_um": lower if overlap_width > 0 else None,
+            "common_passband_upper_um": upper if overlap_width > 0 else None,
+            "common_passband_width_um": overlap_width,
+            "narrowest_native_bandwidth_um": narrowest,
+            "common_overlap_fraction_of_narrowest_band": overlap_fraction,
+            "minimum_overlap_fraction_required": float(minimum_overlap_fraction),
+            "usable_temporal_band": usable,
+            "measurement_ids": sorted(
+                row["measurement_id"] for row in cluster if row["measurement_id"]
+            ),
+        })
+    usable = [row for row in clusters if row["usable_temporal_band"]]
+    return {
+        "rule": "native_CWAVE_CBand_common_interval_overlap",
+        "minimum_overlap_fraction": float(minimum_overlap_fraction),
+        "cluster_count": len(clusters),
+        "usable_temporal_band_cluster_count": len(usable),
+        "usable_temporal_band_clusters": usable,
+        "all_clusters": clusters,
+        "usable_multi_epoch_series": bool(usable),
+    }
+
+
 def assemble_source_timeseries(
     manifest: Mapping[str, Any],
     *,
     minimum_epochs: int = 2,
     verify_files: bool = True,
+    minimum_band_overlap_fraction: float = 0.5,
 ) -> dict[str, Any]:
     """Validate and assemble measured source flux rows into auditable time series.
 
@@ -613,6 +718,11 @@ def assemble_source_timeseries(
         )
         epoch_keys = {(row["observation_id"], row["mjd"]) for row in rows}
         mjds = sorted({row["mjd"] for row in rows})
+        temporal_bands = _summarize_temporal_band_clusters(
+            rows,
+            minimum_epochs=int(minimum_epochs),
+            minimum_overlap_fraction=minimum_band_overlap_fraction,
+        )
         source_series.append({
             **source,
             "dataset_class": "real",
@@ -627,7 +737,11 @@ def assemble_source_timeseries(
                 ),
                 "wavelength_count": len({row["wavelength_um"] for row in rows}),
                 "calibration_groups": sorted({row["calibration_group"] for row in rows}),
-                "usable_multi_epoch_series": len(epoch_keys) >= int(minimum_epochs),
+                "temporal_band_comparability": temporal_bands,
+                "usable_multi_epoch_series": (
+                    len(epoch_keys) >= int(minimum_epochs)
+                    and temporal_bands["usable_multi_epoch_series"]
+                ),
             },
         })
 
@@ -643,7 +757,8 @@ def assemble_source_timeseries(
         "sources": source_series,
         "measurement_count": len(seen_measurements),
         "minimum_epochs": int(minimum_epochs),
-        "note": "Assembled from supplied extraction measurements; this module verifies provenance but does not re-extract pixels.",
+        "minimum_band_overlap_fraction": float(minimum_band_overlap_fraction),
+        "note": "Assembled from supplied extraction measurements; this module verifies provenance but does not re-extract pixels. Temporal comparability also requires overlapping native CWAVE/CBAND intervals across epochs.",
     }
     canonical_bytes = json.dumps(
         canonical, sort_keys=True, separators=(",", ":"),
