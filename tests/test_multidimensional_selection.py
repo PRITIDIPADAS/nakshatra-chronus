@@ -255,6 +255,29 @@ def test_source_linked_yso_event_yield_revalidates_source_rows_and_selection_tri
     eligible = next(row for row in coverage["eligible_sources"] if row["source_id"] == "YSO-0")
     assert len(eligible["measurement_lineage"]) == 9
 
+    # A source sample without immutable measurement IDs cannot be used to
+    # create event records, even when its aggregate epoch/wavelength counts fit.
+    missing_id_fields = copy.deepcopy(fields)
+    missing_id_fields[0]["sources"][0]["observations"][0].pop("measurement_id")
+    missing_id_coverage = assess_population_coverage(
+        missing_id_fields,
+        feature_interval_um=[3.05, 3.15],
+        blue_continuum_um=[2.8, 2.95],
+        red_continuum_um=[3.25, 3.4],
+        selection_trials=trials,
+        selection_bin_spec=_bin_spec(),
+        minimum_independent_fields=5,
+        minimum_trials_per_selection_cell=20,
+        minimum_fields_per_cell=5,
+        minimum_completeness=0.5,
+    )
+    missing_id_source = next(
+        row for field in missing_id_coverage["fields"] if field["field_id"] == "F0"
+        for row in field["sources"] if row["source_id"] == "YSO-0"
+    )
+    assert missing_id_source["eligible"] is False
+    assert "invalid_or_unverified_measurement" in missing_id_source["reasons"]
+
     feature_measurements = [
         f"M-0-{epoch_index}-1" for epoch_index in range(3)
     ]
