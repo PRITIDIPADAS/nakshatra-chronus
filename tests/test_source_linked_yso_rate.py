@@ -27,11 +27,21 @@ def _fixture():
     ]
     coverage = {
         "thresholds": {"minimum_completeness": 0.5},
-        "eligible_sources": [{
-            "field_id": "FIELD-1", "source_id": "YSO-1",
-            "selection_probability": 0.5, "selection_weight": 2.0,
-            "measurement_lineage": measurements,
-        }],
+        "eligible_sources": [
+            {
+                "field_id": "FIELD-1", "source_id": "YSO-1",
+                "selection_probability": 0.5, "selection_weight": 2.0,
+                "measurement_lineage": measurements,
+            },
+            {
+                "field_id": "FIELD-1", "source_id": "YSO-ZERO",
+                "selection_probability": 0.25, "selection_weight": 4.0,
+                "measurement_lineage": [
+                    {"measurement_id": "M-Z1", "observation_id": "OBS-1", "mjd": 60000.0, "wavelength_um": 3.05},
+                    {"measurement_id": "M-Z2", "observation_id": "OBS-2", "mjd": 60002.0, "wavelength_um": 3.05},
+                ],
+            },
+        ],
         "selection_function": {
             "schema": "chronos-multidimensional-selection-function/1.0",
             "bin_spec_sha256": "c" * 64,
@@ -72,6 +82,8 @@ def test_source_linked_event_yield_applies_source_inverse_probability_weights(mo
     assert result["scientific_status"] == "source_selection_weighted_candidate_event_yield_not_population_result"
     assert result["accepted_event_count"] == 1
     assert result["total_source_selection_weighted_event_count"] == pytest.approx(2.0)
+    assert result["field_reports"][0]["eligible_source_count"] == 2
+    assert result["field_reports"][0]["source_count_with_events"] == 1
     assert result["field_reports"][0]["source_selection_weighted_events"] == pytest.approx(2.0)
     assert result["event_yield_per_sqdeg_day"]["median"] > 0
     assert any("Event-detection completeness is not corrected" in item for item in result["limits"])
