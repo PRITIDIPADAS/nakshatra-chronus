@@ -171,3 +171,26 @@ The primary recovery values, matching radius and threshold were not changed. The
 [Workflow 45677731011](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45677731011) completed successfully on the source/product manifest implementation. Artifact 15052808730 (70,934,685 bytes) has ZIP SHA-256 `9fb16d20ff2a621a4882a61275efc3591921f942f3521404bbd9e5fd0a3af08b`. It contains 2,421 candidate source IDs, 924,443 unique source/product pairs and 6,214 regional SIAv2 spectral-image product metadata records. All six per-region integrity reports are available and valid, with no duplicate pairs, pair IDs outside the candidate set, missing product IDs in the regional SIAv2 inventory, count mismatches, per-source product-set SHA-256 mismatches or product metadata inconsistencies. The high-latitude comparison has zero candidate sources and zero pairs; it is not a matched YSO/control population.
 
 **Boundary:** these are geometrical source-coordinate-in-`s_region` metadata associations. The 32 All-Sky Cube rows are metadata only; no native cubes or all source-level Level-2 pixels were downloaded in this reconnaissance. There are no validated source fluxes, independent temporal visits, light curves, or population-level YSO measurements from this run.
+
+ 
+## Latest completed six-field evaluation and current source-photometry pilot — 26 November 2026
+
+The strict six-field calibrated-Jy workflow [#37 / 45749547766](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45749547766) completed successfully on code revision `02c072ec58d5b216b8a6883ed6e2d18915823f90`. All six predeclared fields were returned exactly once, all six completed with no incomplete field, each passed 25/25 runner eligibility checks, and the six science observation IDs and native science hashes are unique. Artifact 15085687674 (219,691 bytes) has ZIP SHA-256 `4c34a822761d8ea57b4109ff67f3318d014259874fa835a399c69fb6bf7e4017`; the aggregate report SHA-256 `031aacb4dd64345794d246883be141b935689f0de69affaf9965c39b512b60a9` was recomputed and matched.
+
+Per-field primary recovery at each region's own 0.5× / 1× / 2× local 5σ flux levels:
+- Taurus/Auriga: 3/20, 3/20, 8/20.
+- Perseus/NGC 1333: 3/20, 5/20, 12/20.
+- Orion A: 3/20, 5/20, 11/20.
+- Rho Ophiuchi: 2/20, 4/20, 9/20.
+- Lupus III: **0/20, 0/20, 0/20**.
+- High-latitude comparison: 6/20, 13/20, 17/20.
+
+This completes the exploratory six-field injection/recovery workflow only. It remains non-blind, one exposure per region, and not a four-method benchmark or a population-completeness result. All six absolute-gain electron-conversion records remain `derived_pending_independent_review`; none is independently human reviewed. Lupus III remains a serious unresolved adverse result, not a universal sensitivity limit.
+
+The repository also contains a predeclared four-epoch Orion A DR1 D2 source-photometry pilot, a one-source catalogue snapshot, per-exposure native audit and Jy-extraction driver, integrity tests and a dedicated Actions workflow. It uses delivered Level-2 VARIANCE and skips gain-derived source-Poisson injection. The series is accepted only if exact native URI/OBSID, per-exposure calibration compatibility, five-second FITS-vs-SIAv2 time agreement and a common CWAVE/CBAND overlap of at least 50% of the narrowest band all pass. The source's catalogue labels remain non-independent. Pilot [#11 / run 45751641495](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45751641495) was still in progress at this refresh; no measured four-epoch flux series is claimed here.
+
+## Latest software and M101 verification — 26 November 2026
+
+On branch commit `626e6cf9`, push workflow [#1187 / 45751641501](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45751641501) completed successfully: **414 tests passed with 7 warnings**, both JavaScript syntax checks passed, and the live M101 native retrieval/compatibility/evidence/hash/upload job passed. M101 artifact 15086665024 is 91,225,921 bytes with SHA-256 `1b153542ef41f53443f38b98d74034655224672e2ebcccee651ec140e4d69c10`.
+
+The matching PR merge-context workflow [#1188 / 45751647128](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45751647128) passed **419 tests with 2 warnings**. The count differs because the PR check tests the synthetic merge with `main`, whereas the push check tests the feature-branch head. Both workflows passed. This remains software and one-exposure M101 archive evidence, not calibration sign-off or independent scientific reproduction.
