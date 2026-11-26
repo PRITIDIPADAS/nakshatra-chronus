@@ -198,6 +198,7 @@ def verify_review_record(
     expected_input_digests: Mapping[str, str],
     signed_report_path: str | Path | None = None,
     reproduction_artifact_path: str | Path | None = None,
+    external_identity_and_independence_confirmed: bool = False,
 ) -> dict[str, Any]:
     """Verify the signed review against out-of-band identity, commit and file-hash pins."""
     try:
@@ -259,6 +260,9 @@ def verify_review_record(
             "reviewer_public_key_sha256": fingerprint,
             "repository_commit": payload["repository_commit"],
             "disposition": payload["disposition"],
+            "external_identity_and_independence_confirmed": (
+                external_identity_and_independence_confirmed is True
+            ),
             "accepted_check_count": sum(x == "accepted" for x in payload["checks"].values()),
             "required_check_count": len(payload["checks"]),
             "rejected_check_count": sum(x == "rejected" for x in payload["checks"].values()),
