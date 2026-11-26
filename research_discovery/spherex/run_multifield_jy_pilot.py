@@ -12,8 +12,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -658,24 +660,117 @@ def validate_aggregate_report(report: dict) -> dict:
     }
 
 
+FIELD_AUDIT_MAX_ATTEMPTS = 3
+FIELD_AUDIT_RETRY_DELAYS_SECONDS = (5, 15)
+FIELD_AUDIT_TIMEOUT_SECONDS = 1800
+TRANSIENT_NATIVE_RETRIEVAL_PATTERNS = (
+    r":\\s*partial\\b",
+    r"Connection refused",
+    r"Connection reset",
+    r"Temporary failure in name resolution",
+    r"Max retries exceeded",
+    r"Read timed out",
+    r"ReadTimeout",
+    r"ConnectTimeout",
+    r"timed out",
+    r"HTTPError: 50[234]",
+    r"\\b50[234]\\b",
+    r"Service Unavailable",
+)
+
+
+def is_transient_native_retrieval_failure(output: str) -> bool:
+    """Classify transport/partial-download failures; never retry science exclusions."""
+    text = str(output or "")
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in TRANSIENT_NATIVE_RETRIEVAL_PATTERNS)
+
+
+def run_field_audit_with_retry(
+    command: list[str],
+    *,
+    cwd: Path,
+    field_dir: Path,
+    data_dir: Path,
+) -> tuple[subprocess.CompletedProcess, list[dict[str, Any]]]:
+    """Retry only transient archive failures when no native audit summary exists."""
+    field_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = data_dir / "real_field_audit_summary.json"
+    audit_path = data_dir / "native_mef_audit.json"
+    attempts: list[dict[str, Any]] = []
+    last: subprocess.CompletedProcess | None = None
+
+    for attempt in range(1, FIELD_AUDIT_MAX_ATTEMPTS + 1):
+        try:
+            completed = subprocess.run(
+                command, cwd=cwd, text=True, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, check=False,
+                timeout=FIELD_AUDIT_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            output = exc.stdout or ""
+            if isinstance(output, bytes):
+                output = output.decode("utf-8", errors="replace")
+            completed = subprocess.CompletedProcess(
+                command, 124,
+                str(output) + f"\\n[CHRONOS] field audit timed out after {FIELD_AUDIT_TIMEOUT_SECONDS} seconds\\n",
+            )
+        attempt_log = field_dir / f"runner_attempt_{attempt:02d}.log"
+        attempt_log.write_text(completed.stdout or "", encoding="utf-8")
+        summary_present = summary_path.is_file()
+        audit_present = audit_path.is_file()
+        transient = is_transient_native_retrieval_failure(completed.stdout)
+        attempts.append({
+            "attempt": attempt,
+            "return_code": int(completed.returncode),
+            "log": attempt_log.name,
+            "summary_present": summary_present,
+            "native_audit_present": audit_present,
+            "transient_archive_failure": transient,
+        })
+        last = completed
+        if completed.returncode == 0 and summary_present and audit_present:
+            break
+        if (
+            attempt == FIELD_AUDIT_MAX_ATTEMPTS
+            or summary_present
+            or audit_present
+            or not transient
+        ):
+            break
+        time.sleep(FIELD_AUDIT_RETRY_DELAYS_SECONDS[attempt - 1])
+
+    if last is None:
+        raise RuntimeError("field audit retry loop did not execute")
+    combined = []
+    for item in attempts:
+        combined.append(
+            f"===== ATTEMPT {item['attempt']:02d} return_code={item['return_code']} =====\\n"
+        )
+        combined.append(
+            (field_dir / item["log"]).read_text(encoding="utf-8", errors="replace")
+        )
+    (field_dir / "runner.log").write_text("\\n".join(combined), encoding="utf-8")
+    return last, attempts
+
+
 def run_field(field: dict, root: Path, *, release: str,
               bandpass: str, code_revision: str | None) -> dict:
     field_dir = root / "fields" / field["name"]
     field_dir.mkdir(parents=True, exist_ok=True)
     log_path = field_dir / "runner.log"
+    data_dir = field_dir / "data"
     command = [
         sys.executable, "-m", "research_discovery.spherex.run_real_field_audit",
         "--field", f"{field['name']},{field['ra_deg']},{field['dec_deg']}",
         "--bandpass", bandpass,
         "--release", release,
-        "--out", str(field_dir / "data"),
+        "--out", str(data_dir),
     ]
-    completed = subprocess.run(
-        command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        check=False,
+    completed, runner_attempts = run_field_audit_with_retry(
+        command, cwd=Path.cwd(), field_dir=field_dir, data_dir=data_dir,
     )
-    log_path.write_text(completed.stdout, encoding="utf-8")
-    summary_path = field_dir / "data" / "real_field_audit_summary.json"
+    summary_path = data_dir / "real_field_audit_summary.json"
     summary = None
     error = None
     if summary_path.is_file():
@@ -714,6 +809,8 @@ def run_field(field: dict, root: Path, *, release: str,
     if summary_path.is_file():
         record["summary_sha256"] = sha256_file(summary_path)
         record["summary_path"] = str(summary_path.relative_to(root))
+    record["runner_attempts"] = runner_attempts
+    record["runner_attempt_count"] = len(runner_attempts)
     return record
 
 
