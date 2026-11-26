@@ -82,13 +82,29 @@ def test_source_linked_event_yield_rejects_aggregate_counts_without_source_rows(
 
     fields, coverage, trials, events, prereg, event_definition = _fixture()
     _mock_revalidation(monkeypatch, coverage)
-    with pytest.raises(ValueError, match="source_event_records are required"):
+    with pytest.raises(ValueError, match="observed_events must equal"):
         estimate_source_linked_event_yield(
             fields, coverage_audit=coverage,
             selection_trials=trials, selection_bin_spec={"frozen": True},
             source_event_records=[], preregistration_sha256=prereg,
             event_definition_sha256=event_definition,
         )
+
+
+def test_source_linked_event_yield_accepts_an_explicit_zero_event_result(monkeypatch):
+    from chronos_population.source_linked import estimate_source_linked_event_yield
+
+    fields, coverage, trials, events, prereg, event_definition = _fixture()
+    fields[0]["observed_events"] = 0
+    _mock_revalidation(monkeypatch, coverage)
+    result = estimate_source_linked_event_yield(
+        fields, coverage_audit=coverage,
+        selection_trials=trials, selection_bin_spec={"frozen": True},
+        source_event_records=[], preregistration_sha256=prereg,
+        event_definition_sha256=event_definition, draws=2000, seed=11,
+    )
+    assert result["accepted_event_count"] == 0
+    assert result["event_yield_per_sqdeg_day"]["median"] == 0.0
 
 
 def test_source_linked_event_yield_rejects_event_rows_outside_source_measurement_lineage(monkeypatch):
