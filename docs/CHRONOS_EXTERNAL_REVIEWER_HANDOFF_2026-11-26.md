@@ -102,8 +102,11 @@ python scripts/verify_spherex_calibration_review.py \
   --expected-commit "<full 40-character commit SHA>" \
   --expected-input-digests /review/expected_input_digests.json \
   --signed-report /review/signed_report.pdf \
-  --reproduction-artifact /review/reproduction.zip
+  --reproduction-artifact /review/reproduction.zip \
+  --confirm-reviewer-identity-independence-out-of-band
 ```
+
+Use the final flag only after the maintainer has independently confirmed the reviewer’s real identity, expertise, affiliation and independence outside the review bundle. Without it, a valid signature still returns `external_identity_and_independence_confirmed=false` and cannot satisfy the release-readiness gate. The flag is a recorded human confirmation, not a cryptographic proof of credentials.
 
 The expected digest JSON must contain exactly the nine required keys listed above. Exit code 0 means the signature, pin, commit, report bytes and reproduction bytes verify; exit code 2 means the record did not verify.
 
