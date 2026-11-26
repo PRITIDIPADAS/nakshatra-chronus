@@ -42,8 +42,8 @@ def estimate_source_linked_event_yield(
     """
     if not fields:
         raise ValueError("real field records are required")
-    if not source_event_records:
-        raise ValueError("source_event_records are required; aggregate observed_events alone are not accepted")
+    if not isinstance(source_event_records, (list, tuple)):
+        raise ValueError("source_event_records must be a list, including an empty list for a verified zero-event result")
     if not isinstance(selection_bin_spec, Mapping):
         raise ValueError("the frozen multidimensional selection bin specification is required")
 
@@ -190,9 +190,8 @@ def estimate_source_linked_event_yield(
             "selection_weight": eligible_sources[key]["selection_weight"],
         })
 
-    if len(event_ids) == 0:
-        raise ValueError("no accepted source-linked events were supplied")
-
+    # An empty, explicit source_event_records list is a valid zero-event
+    # outcome only when every field's observed_events count is exactly zero.
     draws = _count(draws, "draws")
     if draws < 1000:
         raise ValueError("draws must be at least 1000")
