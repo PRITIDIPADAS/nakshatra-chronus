@@ -243,6 +243,7 @@ def assess_population_coverage(
             valid_measurement_ids: set[str] = set()
             valid_observation_ids: set[str] = set()
             valid_mjds: list[float] = []
+            measurement_lineage: list[dict[str, Any]] = []
             epoch_samples: dict[float, dict[str, set[float]]] = {}
             flux_units: set[str] = set()
             for index, row in enumerate(source.get("observations") or []):
@@ -270,7 +271,16 @@ def assess_population_coverage(
                         continue
                     measurement_keys.add(measurement_key)
                     if measurement_id:
+                        if measurement_id in valid_measurement_ids:
+                            source_reasons.append("duplicate_measurement_id")
+                            continue
                         valid_measurement_ids.add(measurement_id)
+                        measurement_lineage.append({
+                            "measurement_id": measurement_id,
+                            "observation_id": observation_id,
+                            "mjd": mjd,
+                            "wavelength_um": wavelength,
+                        })
                     valid_observation_ids.add(observation_id)
                     valid_mjds.append(mjd)
                     flux_units.add(flux_unit)
@@ -342,6 +352,7 @@ def assess_population_coverage(
                 "complete_feature_epochs": complete_feature_epochs,
                 "median_snr": median_snr,
                 "measurement_ids": sorted(valid_measurement_ids),
+                "measurement_lineage": sorted(measurement_lineage, key=lambda row: (row["mjd"], row["wavelength_um"], row["measurement_id"])),
                 "observation_ids": sorted(valid_observation_ids),
                 "mjd_min": min(valid_mjds) if valid_mjds else None,
                 "mjd_max": max(valid_mjds) if valid_mjds else None,
@@ -360,6 +371,7 @@ def assess_population_coverage(
                     "epoch_count": epoch_count,
                     "complete_feature_epochs": complete_feature_epochs,
                     "measurement_ids": sorted(valid_measurement_ids),
+                    "measurement_lineage": sorted(measurement_lineage, key=lambda row: (row["mjd"], row["wavelength_um"], row["measurement_id"])),
                     "observation_ids": sorted(valid_observation_ids),
                     "mjd_min": min(valid_mjds) if valid_mjds else None,
                     "mjd_max": max(valid_mjds) if valid_mjds else None,
