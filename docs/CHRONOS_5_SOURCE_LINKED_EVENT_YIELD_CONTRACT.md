@@ -29,7 +29,7 @@ The field also supplies science area and baseline, null-control area and baselin
 
 ## Selection correction
 
-Each eligible source receives an inverse-probability weight (1/p_i) from the predeclared multidimensional source-selection function. All event contributions from the same source share one Poisson bootstrap multiplier so repeated events are not treated as independent sources. The selection-trial set must carry the same `event_definition_sha256` as the submitted event records.
+Each eligible source receives an inverse-probability weight (1/p_i) from the predeclared multidimensional source-selection function. All event contributions from the same source share one Poisson bootstrap multiplier so repeated events are not treated as independent sources. The resampling universe contains every eligible source in each field, including sources with zero accepted events; conditioning only on event-bearing sources would understate source-sampling uncertainty. Field reports distinguish eligible-source count from event-bearing-source count. The selection-trial set must carry the same `event_definition_sha256` as the submitted event records.
 
 ## Scientific limits
 
