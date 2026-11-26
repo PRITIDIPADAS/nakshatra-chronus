@@ -237,16 +237,18 @@ def estimate_source_linked_event_yield(
         if not math.isclose(control_ratio, derived_ratio, rel_tol=1e-6, abs_tol=1e-12):
             raise ValueError(f"field {field_id} null-control exposure ratio disagrees with its area-time denominators")
 
-        # Resample source clusters, not individual wavelength rows or event
-        # rows. Multiple candidate events from one source share a bootstrap
-        # multiplier, avoiding a false independent-event assumption.
+        # Resample the complete eligible source sample, including zero-event
+        # sources. Omitting zero-event sources conditions the bootstrap on a
+        # positive outcome and understates source-sampling uncertainty.
         by_source = {}
-        for key, source_events in grouped_events[field_id].items():
+        for key, source_record in eligible_sources.items():
+            if key[0] != field_id:
+                continue
             if key in accepted_source_keys:
                 raise ValueError(f"source {key} appears in duplicate field contributions")
             accepted_source_keys.add(key)
-            weight = eligible_sources[key]["selection_weight"]
-            by_source[key[1]] = len(source_events) * weight
+            source_events = grouped_events[field_id].get(key, [])
+            by_source[key[1]] = len(source_events) * source_record["selection_weight"]
         source_contributions = np.asarray(list(by_source.values()), dtype=float)
         if source_contributions.size:
             source_event_draws = (
@@ -266,7 +268,11 @@ def estimate_source_linked_event_yield(
         total_exposure += exposure
         field_reports.append({
             "field_id": field_id,
-            "source_count_with_events": len(by_source),
+            "eligible_source_count": len(by_source),
+            "source_count_with_events": sum(
+                bool(grouped_events[field_id].get((field_id, source_id)))
+                for source_id in by_source
+            ),
             "accepted_source_events": observed,
             "source_selection_weighted_events": float(source_contributions.sum()),
             "null_events_control_exposure": null,
