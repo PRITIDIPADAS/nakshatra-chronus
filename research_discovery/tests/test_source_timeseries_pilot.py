@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 import pytest
-from research_discovery.spherex.run_source_timeseries_pilot import SCHEMA, validate_pilot_manifest
+from research_discovery.spherex.run_source_timeseries_pilot import (
+    SCHEMA,
+    validate_native_observation_time,
+    validate_pilot_manifest,
+)
 MANIFEST=Path(__file__).resolve().parents[2]/"data"/"spherex_source_timeseries_pilot.orion_candidate.json"
 def test_orion_candidate_pilot_manifest_has_four_distinct_native_dr1_d2_epochs():
  m=json.loads(MANIFEST.read_text(encoding="utf-8")); a=validate_pilot_manifest(m)
@@ -21,3 +25,21 @@ def test_pilot_manifest_rejects_duplicate_or_non_dr1_d2_products():
  with pytest.raises(ValueError,match="observation_id values must be unique"): validate_pilot_manifest(m)
  m=json.loads(MANIFEST.read_text(encoding="utf-8")); m["products"][0]["detector"]="D5"
  with pytest.raises(ValueError,match="not a DR1 D2"): validate_pilot_manifest(m)
+
+
+
+def test_native_fits_observation_time_must_match_frozen_archive_bounds():
+    product = {
+        "t_min_mjd": 60000.0,
+        "t_max_mjd": 60000.001,
+        "mjd_midpoint": 60000.0005,
+    }
+    science = {"mjd_obs": 60000.0, "exposure_time_s": 86.4}
+    result = validate_native_observation_time(science, product)
+    assert result["start_offset_seconds"] == pytest.approx(0.0)
+    assert result["end_offset_seconds"] == pytest.approx(0.0)
+    assert result["midpoint_offset_seconds"] == pytest.approx(0.0)
+
+    science["mjd_obs"] += 0.0002
+    with pytest.raises(ValueError, match="disagrees with frozen SIAv2 time bounds"):
+        validate_native_observation_time(science, product)
