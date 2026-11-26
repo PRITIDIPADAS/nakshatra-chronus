@@ -22,6 +22,8 @@ jobs:
   four-epoch-source-photometry:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      PYTHONPATH: backend
     steps:
       - name: Check out the exact triggering revision
         uses: actions/checkout@v4
