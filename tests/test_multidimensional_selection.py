@@ -21,6 +21,8 @@ def _sign_test_field(field, index, *, footprint=None):
     public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     os.environ["CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_KEY_ID"] = _TEST_CUSTODIAN_KEY_ID
     os.environ["CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_PUBLIC_KEY_B64"] = base64.b64encode(public).decode("ascii")
+    os.environ["CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_ID"] = "test-independent-custodian"
+    os.environ["CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_OUT_OF_BAND_INDEPENDENCE_VERIFIED"] = "true"
     fid = str(field["field_id"])
     group = str(field.get("independence_group_id") or f"REGION-{index}")
     field["independence_group_id"] = group
@@ -38,6 +40,7 @@ def _sign_test_field(field, index, *, footprint=None):
         "science_manifest_sha256": field["science_manifest_sha256"],
         "preregistration_sha256": field["preregistration_sha256"],
         "custodian_id": "test-independent-custodian", "custodian_role": "independent_custodian",
+        "custodian_independent_of_analysis_team": True,
         "attested_utc": "2026-11-26T00:00:00Z",
     }
     field["field_independence_attestation"] = {
