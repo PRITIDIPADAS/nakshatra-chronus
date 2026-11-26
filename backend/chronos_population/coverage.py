@@ -379,6 +379,7 @@ def assess_population_coverage(
                     "mjd_max": max(valid_mjds) if valid_mjds else None,
                     "baseline_days": max(valid_mjds) - min(valid_mjds) if len(valid_mjds) > 1 else 0.0,
                     "selection_probability": selection_prediction.get("selection_probability"),
+                    "selection_probability_95": selection_prediction.get("selection_probability_95"),
                     "selection_weight": selection_prediction.get("selection_weight"),
                     "selection_cell_id": selection_prediction.get("cell_id"),
                     "calibration_groups": source_report["calibration_groups"],

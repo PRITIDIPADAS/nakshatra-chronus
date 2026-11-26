@@ -30,12 +30,14 @@ def _fixture():
         "eligible_sources": [
             {
                 "field_id": "FIELD-1", "source_id": "YSO-1",
-                "selection_probability": 0.5, "selection_weight": 2.0,
+                "selection_probability": 0.5, "selection_probability_95": [0.3, 0.7],
+                "selection_weight": 2.0, "selection_cell_id": "CELL-1",
                 "measurement_lineage": measurements,
             },
             {
                 "field_id": "FIELD-1", "source_id": "YSO-ZERO",
-                "selection_probability": 0.25, "selection_weight": 4.0,
+                "selection_probability": 0.25, "selection_probability_95": [0.15, 0.35],
+                "selection_weight": 4.0, "selection_cell_id": "CELL-2",
                 "measurement_lineage": [
                     {"measurement_id": "M-Z1", "observation_id": "OBS-1", "mjd": 60000.0, "wavelength_um": 3.05},
                     {"measurement_id": "M-Z2", "observation_id": "OBS-2", "mjd": 60002.0, "wavelength_um": 3.05},
@@ -85,6 +87,8 @@ def test_source_linked_event_yield_applies_source_inverse_probability_weights(mo
     assert result["field_reports"][0]["eligible_source_count"] == 2
     assert result["field_reports"][0]["source_count_with_events"] == 1
     assert result["field_reports"][0]["source_selection_weighted_events"] == pytest.approx(2.0)
+    assert result["selection_function"]["selection_cell_count"] == 2
+    assert "logit-normal approximation" in result["selection_function"]["uncertainty_propagation"]
     assert result["event_yield_per_sqdeg_day"]["median"] > 0
     assert any("Event-detection completeness is not corrected" in item for item in result["limits"])
 
@@ -169,3 +173,34 @@ def test_source_linked_yso_event_yield_api_route_is_registered():
 
     paths = {route.path for route in router.routes}
     assert "/api/v5/population/yso/source-linked-event-yield" in paths
+
+
+
+def test_source_linked_event_yield_requires_cell_level_selection_uncertainty(monkeypatch):
+    from chronos_population.source_linked import estimate_source_linked_event_yield
+
+    fields, coverage, trials, events, prereg, event_definition = _fixture()
+    _mock_revalidation(monkeypatch, coverage)
+    del coverage["eligible_sources"][0]["selection_probability_95"]
+    with pytest.raises(ValueError, match="no 95% selection-probability interval"):
+        estimate_source_linked_event_yield(
+            fields, coverage_audit=coverage,
+            selection_trials=trials, selection_bin_spec={"frozen": True},
+            source_event_records=events, preregistration_sha256=prereg,
+            event_definition_sha256=event_definition,
+        )
+
+
+def test_source_linked_event_yield_rejects_inconsistent_summaries_within_one_selection_cell(monkeypatch):
+    from chronos_population.source_linked import estimate_source_linked_event_yield
+
+    fields, coverage, trials, events, prereg, event_definition = _fixture()
+    coverage["eligible_sources"][1]["selection_cell_id"] = "CELL-1"
+    _mock_revalidation(monkeypatch, coverage)
+    with pytest.raises(ValueError, match="inconsistent probability summaries"):
+        estimate_source_linked_event_yield(
+            fields, coverage_audit=coverage,
+            selection_trials=trials, selection_bin_spec={"frozen": True},
+            source_event_records=events, preregistration_sha256=prereg,
+            event_definition_sha256=event_definition,
+        )

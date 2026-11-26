@@ -36,3 +36,11 @@ Each eligible source receives an inverse-probability weight (1/p_i) from the pre
 This path corrects source-catalogue inclusion only. It does not yet model event-level detection efficiency, the source-level composition of contaminants, cross-field covariance, or the representativeness of the injection distribution. Null-control counts remain aggregate area-time controls rather than a matched source-level contaminant sample. The output must therefore not be described as a fully selection-corrected YSO population rate, a discovery, or a validated CHRONOS scientific result.
 
 The legacy `/api/v5/population/yso/rate` endpoint remains an aggregate field-level exploratory estimator and is explicitly labelled as not source-selection-corrected.
+
+
+
+## Selection-probability uncertainty in the source-linked yield
+
+Eligible source records carry the fitted selection-cell 95% interval as well as the point estimate. The source-linked estimator draws one probability per joint cell from a logit-normal approximation calibrated to that interval and shares that draw across all eligible sources in the same cell. Source-level Poisson cluster multipliers preserve repeated-event dependence within a source.
+
+This propagates the reported source-selection uncertainty into the candidate-yield interval. It is an approximation to the supplied field-cluster interval, not a full hierarchical posterior and not a model of calibration covariance. Event-detection completeness and source-level contamination remain separate open gates.

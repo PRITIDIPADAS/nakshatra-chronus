@@ -75,6 +75,15 @@ def estimate_source_linked_event_yield(
     if trial_event_definitions != {event_definition}:
         raise ValueError("event_definition_sha256 must be frozen identically into every source-selection injection trial")
 
+    # Validate and initialize the single reproducible stream before drawing
+    # shared selection-cell probabilities and source-cluster multipliers.
+    draws = _count(draws, "draws")
+    if draws < 1000:
+        raise ValueError("draws must be at least 1000")
+    if isinstance(seed, bool) or int(seed) != seed or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    rng = np.random.default_rng(int(seed))
+
     eligible_sources = {}
     for source in verified.get("eligible_sources") or []:
         field_id = str(source.get("field_id", "")).strip()
@@ -95,6 +104,22 @@ def estimate_source_linked_event_yield(
             weight, 1.0 / probability, rel_tol=1e-8, abs_tol=1e-10
         ):
             raise ValueError(f"eligible source {key} has an inconsistent inverse-probability weight")
+        raw_interval = source.get("selection_probability_95")
+        if not isinstance(raw_interval, (list, tuple)) or len(raw_interval) != 2:
+            raise ValueError(f"eligible source {key} has no 95% selection-probability interval")
+        try:
+            interval = [float(raw_interval[0]), float(raw_interval[1])]
+        except (TypeError, ValueError):
+            raise ValueError(f"eligible source {key} has a non-numeric selection-probability interval") from None
+        if (
+            not all(math.isfinite(value) for value in interval)
+            or interval[0] < 0 or interval[1] > 1
+            or interval[0] > probability or probability > interval[1]
+        ):
+            raise ValueError(f"eligible source {key} has an invalid 95% selection-probability interval")
+        cell_id = str(source.get("selection_cell_id", "")).strip()
+        if not cell_id:
+            raise ValueError(f"eligible source {key} has no predeclared selection_cell_id")
         lineage = source.get("measurement_lineage")
         if not isinstance(lineage, list) or not lineage:
             raise ValueError(f"eligible source {key} has no measurement-level lineage")
@@ -113,11 +138,57 @@ def estimate_source_linked_event_yield(
             }
         eligible_sources[key] = {
             "selection_probability": probability,
+            "selection_probability_95": interval,
+            "selection_cell_id": cell_id,
             "selection_weight": weight,
             "measurement_lineage": lineage_by_id,
             "mjd_min": min(row["mjd"] for row in lineage_by_id.values()),
             "mjd_max": max(row["mjd"] for row in lineage_by_id.values()),
         }
+
+    # One probability draw is shared by every source in the same fixed
+    # multidimensional selection cell.
+    selection_cells: dict[str, dict[str, Any]] = {}
+    for source_key, source_record in eligible_sources.items():
+        cell_id = source_record["selection_cell_id"]
+        cell_summary = {
+            "selection_probability": source_record["selection_probability"],
+            "selection_probability_95": source_record["selection_probability_95"],
+        }
+        previous = selection_cells.get(cell_id)
+        if previous is None:
+            selection_cells[cell_id] = cell_summary
+        elif (
+            not math.isclose(previous["selection_probability"], cell_summary["selection_probability"], rel_tol=0.0, abs_tol=1e-12)
+            or any(
+                not math.isclose(a, b, rel_tol=0.0, abs_tol=1e-12)
+                for a, b in zip(previous["selection_probability_95"], cell_summary["selection_probability_95"])
+            )
+        ):
+            raise ValueError(f"selection cell {cell_id} has inconsistent probability summaries across eligible sources")
+
+    selection_probability_draws: dict[str, np.ndarray] = {}
+    probability_epsilon = 1e-6
+    for cell_id, cell_summary in selection_cells.items():
+        probability = cell_summary["selection_probability"]
+        lower, upper = cell_summary["selection_probability_95"]
+        clipped_lower = min(max(lower, probability_epsilon), 1.0 - probability_epsilon)
+        clipped_upper = min(max(upper, probability_epsilon), 1.0 - probability_epsilon)
+        clipped_center = min(max(probability, probability_epsilon), 1.0 - probability_epsilon)
+        logit_center = math.log(clipped_center / (1.0 - clipped_center))
+        logit_width = (
+            math.log(clipped_upper / (1.0 - clipped_upper))
+            - math.log(clipped_lower / (1.0 - clipped_lower))
+        )
+        logit_sigma = max(0.0, logit_width / (2.0 * 1.959963984540054))
+        if logit_sigma <= 1e-12:
+            probability_draw = np.full(draws, probability, dtype=float)
+        else:
+            logits = rng.normal(logit_center, logit_sigma, size=draws)
+            probability_draw = 1.0 / (1.0 + np.exp(-np.clip(logits, -30.0, 30.0)))
+        selection_probability_draws[cell_id] = np.clip(
+            probability_draw, probability_epsilon, 1.0
+        )
 
     fields_by_id = {}
     for index, field in enumerate(fields):
@@ -192,13 +263,6 @@ def estimate_source_linked_event_yield(
 
     # An empty, explicit source_event_records list is a valid zero-event
     # outcome only when every field's observed_events count is exactly zero.
-    draws = _count(draws, "draws")
-    if draws < 1000:
-        raise ValueError("draws must be at least 1000")
-    if isinstance(seed, bool) or int(seed) != seed or seed < 0:
-        raise ValueError("seed must be a non-negative integer")
-    rng = np.random.default_rng(int(seed))
-
     total_excess = np.zeros(draws, dtype=float)
     total_exposure = 0.0
     field_reports = []
@@ -241,6 +305,8 @@ def estimate_source_linked_event_yield(
         # sources. Omitting zero-event sources conditions the bootstrap on a
         # positive outcome and understates source-sampling uncertainty.
         by_source = {}
+        source_selection_cells: list[str] = []
+        source_event_counts: list[int] = []
         for key, source_record in eligible_sources.items():
             if key[0] != field_id:
                 continue
@@ -248,13 +314,24 @@ def estimate_source_linked_event_yield(
                 raise ValueError(f"source {key} appears in duplicate field contributions")
             accepted_source_keys.add(key)
             source_events = grouped_events[field_id].get(key, [])
-            by_source[key[1]] = len(source_events) * source_record["selection_weight"]
+            event_count = len(source_events)
+            by_source[key[1]] = event_count * source_record["selection_weight"]
+            source_selection_cells.append(source_record["selection_cell_id"])
+            source_event_counts.append(event_count)
         source_contributions = np.asarray(list(by_source.values()), dtype=float)
         if source_contributions.size:
-            source_event_draws = (
-                rng.poisson(1.0, size=(draws, source_contributions.size))
-                @ source_contributions
+            source_cluster_multipliers = rng.poisson(
+                1.0, size=(draws, source_contributions.size)
             )
+            inverse_probability_draws = np.column_stack([
+                1.0 / selection_probability_draws[cell_id]
+                for cell_id in source_selection_cells
+            ])
+            source_event_draws = (
+                source_cluster_multipliers
+                * np.asarray(source_event_counts, dtype=float)[None, :]
+                * inverse_probability_draws
+            ).sum(axis=1)
         else:
             source_event_draws = np.zeros(draws, dtype=float)
 
@@ -314,6 +391,8 @@ def estimate_source_linked_event_yield(
         ).hexdigest(),
         "selection_function": {
             "schema": selection.get("schema"),
+            "uncertainty_propagation": "logit-normal approximation calibrated to field-cluster 95% selection-probability intervals; one probability draw shared per fixed joint cell",
+            "selection_cell_count": len(selection_cells),
             "bin_spec_sha256": selection.get("bin_spec_sha256"),
             "injection_trials_sha256": selection.get("injection_trials_sha256"),
             "frozen_provenance": frozen,
@@ -326,6 +405,8 @@ def estimate_source_linked_event_yield(
         "coverage_revalidated": True,
         "limits": [
             "Source inclusion is corrected using the predeclared multidimensional source-selection function; cells outside its support are excluded upstream.",
+            "Selection-probability uncertainty is propagated using a logit-normal approximation to the fitted field-cluster 95% interval; each joint selection cell shares one probability draw across its eligible sources.",
+            "The logit-normal approximation is not a full hierarchical propagation of calibration and field-level covariance.",
             "Event-detection completeness is not corrected by this estimator and requires a separate event-level injection/recovery model.",
             "Null-control events are scaled by the supplied area-time ratio; source-level control matching and contamination composition are not modelled.",
             "The event uncertainty resamples source clusters with a Poisson multiplier but does not model cross-field covariance or overdispersion.",
