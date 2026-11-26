@@ -512,7 +512,7 @@ The blind four-baseline evaluation on real held-out fields, independently review
 
 ## 26 November 2026 — outstanding Session 12–20 acceptance status
 
-See [the detailed remaining-work status](CHRONOS_5_SESSIONS_12_20_REMAINING_WORK_STATUS_2026-11-26.md). The code path now includes an IRSA source-photometry export adapter and native source-series verifier, a field-cluster multidimensional selection model tied to production-recovery diagnostics and field-level counts, and a strict independent astronomical reproduction protocol.
+See [the detailed remaining-work status](CHRONOS_5_SESSIONS_12_20_REMAINING_WORK_STATUS_2026-11-26.md). The code path now includes an IRSA source-photometry export adapter and native source-series verifier, a field-cluster multidimensional selection model tied to production-recovery diagnostics and field-level counts, a source-linked inverse-probability candidate-event yield endpoint with measurement-level lineage checks, and a strict independent astronomical reproduction protocol.
 
 These are implementation and synthetic-test deliverables only. Real source-level epochs still require an IRSA export plus exact native product/calibration files. The four-baseline blind evaluation still requires an independent custodian and held-out real fields. The YSO population remains unreported until the source sample, selection/contamination model, preregistration and null controls are empirical. No independent astronomical reproduction has been obtained. The CHRONOS scientific release gate remains closed.
 
