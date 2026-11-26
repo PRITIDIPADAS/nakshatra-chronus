@@ -14,6 +14,10 @@ This status note distinguishes implemented software from real-data acceptance an
 | 19 — YSO population investigation | Source-photometry import/verification path, multidimensional fixed-bin selection-function model, field-cluster uncertainty, recovery-evidence validation, per-field trial-count binding and preregistration digest binding implemented | **No YSO population result or discovery.** No real selection calibration or source-series sample is available from this run. The rate endpoint remains an exploratory field-level event-rate model, not a source-selection-corrected population estimator. | Real repeated source-level photometry, independent YSO classes, representative injections, retained detector output/truth/peak logs, independent fields, null controls, external preregistration and a source-linked event likelihood |
 | 20 — independent reproduction/release | External reproduction protocol and release-gate documentation prepared | **NOT SATISFIED.** No external astronomical researcher report was obtained | An independent astronomer must reproduce original measurements, calibration, selection curve, blind benchmark and any proposed population result; then the release gate can be reconsidered |
 
+### Source-linked event-yield implementation addendum
+
+The new `/api/v5/population/yso/source-linked-event-yield` endpoint requires source-linked accepted events, exact source measurement IDs, at least two distinct MJD epochs, and matching preregistration/event-definition digests. It applies inverse-probability source-selection weights and keeps repeated events from one source clustered. This is software infrastructure only. It deliberately does not correct event-detection completeness or source-level contamination composition, so the output is not a validated YSO population result.
+
 ## Scientific boundaries
 
 - The 2,421-source, 924,443-pair SIAv2 reconnaissance is a positional metadata association, not extracted source flux or usable cadence.
