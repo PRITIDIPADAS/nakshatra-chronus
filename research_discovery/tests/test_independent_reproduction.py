@@ -1,7 +1,7 @@
 import hashlib
 import pytest
 
-_TEST_READINESS_CUSTODIAN_SEED = bytes.fromhex("6b".repeat(32))
+_TEST_READINESS_CUSTODIAN_SEED = bytes.fromhex("6b" * 32)
 _TEST_READINESS_CUSTODIAN_KEY_ID = "unit-test-readiness-custodian-v1"
 
 
