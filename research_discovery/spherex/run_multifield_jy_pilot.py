@@ -664,7 +664,7 @@ FIELD_AUDIT_MAX_ATTEMPTS = 3
 FIELD_AUDIT_RETRY_DELAYS_SECONDS = (5, 15)
 FIELD_AUDIT_TIMEOUT_SECONDS = 1800
 TRANSIENT_NATIVE_RETRIEVAL_PATTERNS = (
-    r":\\s*partial\\b",
+    r":\s*partial\b",
     r"Connection refused",
     r"Connection reset",
     r"Temporary failure in name resolution",
@@ -674,7 +674,7 @@ TRANSIENT_NATIVE_RETRIEVAL_PATTERNS = (
     r"ConnectTimeout",
     r"timed out",
     r"HTTPError: 50[234]",
-    r"\\b50[234]\\b",
+    r"\b50[234]\b",
     r"Service Unavailable",
 )
 
@@ -713,7 +713,7 @@ def run_field_audit_with_retry(
                 output = output.decode("utf-8", errors="replace")
             completed = subprocess.CompletedProcess(
                 command, 124,
-                str(output) + f"\\n[CHRONOS] field audit timed out after {FIELD_AUDIT_TIMEOUT_SECONDS} seconds\\n",
+                str(output) + f"\n[CHRONOS] field audit timed out after {FIELD_AUDIT_TIMEOUT_SECONDS} seconds\n",
             )
         attempt_log = field_dir / f"runner_attempt_{attempt:02d}.log"
         attempt_log.write_text(completed.stdout or "", encoding="utf-8")
@@ -745,12 +745,12 @@ def run_field_audit_with_retry(
     combined = []
     for item in attempts:
         combined.append(
-            f"===== ATTEMPT {item['attempt']:02d} return_code={item['return_code']} =====\\n"
+            f"===== ATTEMPT {item['attempt']:02d} return_code={item['return_code']} =====\n"
         )
         combined.append(
             (field_dir / item["log"]).read_text(encoding="utf-8", errors="replace")
         )
-    (field_dir / "runner.log").write_text("\\n".join(combined), encoding="utf-8")
+    (field_dir / "runner.log").write_text("\n".join(combined), encoding="utf-8")
     return last, attempts
 
 
