@@ -68,6 +68,12 @@ def estimate_source_linked_event_yield(
     frozen = selection.get("frozen_provenance") or {}
     if frozen.get("preregistration_sha256") != preregistration:
         raise ValueError("source-event preregistration digest does not match the frozen selection trials")
+    trial_event_definitions = {
+        str(row.get("event_definition_sha256", "")).lower()
+        for row in selection_trials
+    }
+    if trial_event_definitions != {event_definition}:
+        raise ValueError("event_definition_sha256 must be frozen identically into every source-selection injection trial")
 
     eligible_sources = {}
     for source in verified.get("eligible_sources") or []:
