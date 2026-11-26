@@ -148,6 +148,10 @@ def test_joint_selection_function_uses_fixed_bins_and_jeffreys_intervals():
     assert fitted["trial_count"] == 20
     assert fitted["independent_field_count"] == 5
     assert fitted["supported_cell_count"] == 1
+    independence_audit = fitted["field_independence_audit"]
+    assert independence_audit["status"] == "verified_signed_independent_fields"
+    assert independence_audit["independent_group_count"] == 5
+    assert independence_audit["spatial_caps_pairwise_disjoint"] is True
     prediction = predict_selection_probability(fitted, {
         "flux_jy": 0.5, "wavelength_um": 2.5,
         "crowding_index": 0.4, "background_rms": 0.2,
@@ -389,3 +393,20 @@ def test_selection_function_rejects_overlapping_signed_independent_footprints():
     with pytest.raises(ValueError, match="overlap or cannot be proven disjoint"):
         fit_selection_function(_trials(), _bin_spec(), field_records=fields,
                                minimum_trials_per_cell=20, minimum_independent_fields=5)
+
+
+def test_selection_function_rejects_valid_shape_but_invalid_ed25519_signature():
+    import base64
+    from chronos_population.selection import fit_selection_function
+
+    fields = _field_records()
+    # Preserve the envelope/payload schema and field binding; only the
+    # cryptographic signature is replaced with an invalid 64-byte signature.
+    fields[0]["field_independence_attestation"]["signature_base64"] = base64.b64encode(
+        bytes(64)
+    ).decode("ascii")
+    with pytest.raises(ValueError, match="custodian field-independence signature is invalid"):
+        fit_selection_function(
+            _trials(), _bin_spec(), field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+        )
