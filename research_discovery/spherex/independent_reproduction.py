@@ -432,15 +432,30 @@ def evaluate_scientific_release_readiness(
     summary = source_timeseries.get("time_series_summary", {}) if isinstance(source_timeseries, Mapping) else {}
     digest = str(source_timeseries.get("verified_source_timeseries_manifest_sha256", "")).lower() if isinstance(source_timeseries, Mapping) else ""
     try:
+        requested_epochs = int(source_timeseries.get("requested_epoch_count", 0)) if isinstance(source_timeseries, Mapping) else 0
+        successful_epochs = int(source_timeseries.get("successful_photometry_epoch_count", 0)) if isinstance(source_timeseries, Mapping) else 0
+        distinct_epochs = int(summary.get("epoch_count", 0)) if isinstance(summary, Mapping) else 0
+        distinct_mjds = int(summary.get("distinct_mjd_count", 0)) if isinstance(summary, Mapping) else 0
         epochs_ok = (
             isinstance(source_timeseries, Mapping)
-            and int(source_timeseries.get("requested_epoch_count", 0)) >= 3
-            and int(source_timeseries.get("successful_photometry_epoch_count", 0))
-                >= int(source_timeseries.get("requested_epoch_count", 1))
-            and int(source_timeseries.get("successful_photometry_epoch_count", 0)) >= 3
+            and requested_epochs >= 4
+            and successful_epochs >= requested_epochs
+            and successful_epochs >= 4
+            and distinct_epochs >= 4
+            and distinct_mjds >= 4
         )
     except (TypeError, ValueError, OverflowError):
         epochs_ok = False
+
+    def accepted_full_scope_astronomical_reproduction(value: Mapping[str, Any] | None) -> bool:
+        if not accepted_review(value):
+            return False
+        scopes = value.get("scope_claims")
+        if not isinstance(scopes, (list, tuple)):
+            return False
+        # A narrow claim-scoped reproduction is valid for its declared scope,
+        # but cannot be promoted to a project-wide scientific release gate.
+        return set(scopes) == set(CLAIMS)
     try:
         selection_ok = (
             isinstance(source_selection, Mapping)
@@ -458,7 +473,7 @@ def evaluate_scientific_release_readiness(
 
     gates = {
         "independent_calibration_review": accepted_review(calibration_review),
-        "independent_astronomical_reproduction": accepted_review(astronomical_reproduction),
+        "independent_astronomical_reproduction": accepted_full_scope_astronomical_reproduction(astronomical_reproduction),
         "independent_blind_custodian": (
             isinstance(custodian_attestation, Mapping)
             and custodian_attestation.get("valid") is True
