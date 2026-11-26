@@ -108,3 +108,89 @@ def test_source_series_completion_gate_requires_assembler_confirmation_and_manif
     assert "lacks the assembler" in source_series_completion_error({
         **valid, "time_series_summary": {"usable_multi_epoch_series": False, "epoch_count": 4}
     })
+
+
+def test_native_audit_retry_recovers_only_transient_irsa_transport_failure(tmp_path, monkeypatch):
+    import subprocess
+    from research_discovery.spherex import run_source_timeseries_pilot as pilot
+
+    epoch_dir = tmp_path / "epoch"
+    audit_dir = epoch_dir / "audit"
+    epoch_dir.mkdir()
+    audit_dir.mkdir()
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return subprocess.CompletedProcess(command, 1, "Connection refused")
+        (audit_dir / "real_field_audit_summary.json").write_text("{}", encoding="utf-8")
+        (audit_dir / "native_mef_audit.json").write_text("{}", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, "audit passed")
+
+    sleeps = []
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+    monkeypatch.setattr(pilot.time, "sleep", sleeps.append)
+    completed, attempts = pilot.run_native_audit_with_retry(
+        ["python", "audit"], cwd=tmp_path, audit_dir=audit_dir, epoch_dir=epoch_dir
+    )
+    assert completed.returncode == 0
+    assert len(calls) == 2
+    assert len(attempts) == 2
+    assert attempts[0]["transient_irsa_failure"] is True
+    assert attempts[1]["native_audit_present"] is True
+    assert sleeps == [5]
+    assert "ATTEMPT 01" in (epoch_dir / "native_audit_runner.log").read_text(encoding="utf-8")
+
+
+def test_native_audit_retry_does_not_retry_scientific_or_flag_quality_failures(tmp_path, monkeypatch):
+    import subprocess
+    from research_discovery.spherex import run_source_timeseries_pilot as pilot
+
+    epoch_dir = tmp_path / "epoch"
+    audit_dir = epoch_dir / "audit"
+    epoch_dir.mkdir()
+    audit_dir.mkdir()
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(1)
+        return subprocess.CompletedProcess(
+            command, 1, "ValueError: PSF footprint intersects an excluded SPHEREx flag"
+        )
+
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+    monkeypatch.setattr(pilot.time, "sleep", lambda _: pytest.fail("scientific failures must not be retried"))
+    completed, attempts = pilot.run_native_audit_with_retry(
+        ["python", "audit"], cwd=tmp_path, audit_dir=audit_dir, epoch_dir=epoch_dir
+    )
+    assert completed.returncode == 1
+    assert len(calls) == 1
+    assert len(attempts) == 1
+    assert attempts[0]["transient_irsa_failure"] is False
+
+
+def test_native_audit_retry_stops_after_three_transient_failures(tmp_path, monkeypatch):
+    import subprocess
+    from research_discovery.spherex import run_source_timeseries_pilot as pilot
+
+    epoch_dir = tmp_path / "epoch"
+    audit_dir = epoch_dir / "audit"
+    epoch_dir.mkdir()
+    audit_dir.mkdir()
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(1)
+        return subprocess.CompletedProcess(command, 1, "Connection refused")
+
+    sleeps = []
+    monkeypatch.setattr(pilot.subprocess, "run", fake_run)
+    monkeypatch.setattr(pilot.time, "sleep", sleeps.append)
+    completed, attempts = pilot.run_native_audit_with_retry(
+        ["python", "audit"], cwd=tmp_path, audit_dir=audit_dir, epoch_dir=epoch_dir
+    )
+    assert completed.returncode == 1
+    assert len(calls) == 3
+    assert len(attempts) == 3
+    assert sleeps == [5, 15]
