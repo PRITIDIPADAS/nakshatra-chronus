@@ -4,12 +4,60 @@ import json
 import pytest
 
 
+_TEST_CUSTODIAN_SEED = bytes.fromhex("5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a")
+_TEST_CUSTODIAN_KEY_ID = "unit-test-independent-field-custodian-v1"
+
+
+def _test_private_key():
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    return Ed25519PrivateKey.from_private_bytes(_TEST_CUSTODIAN_SEED)
+
+
+def _sign_test_field(field, index, *, footprint=None):
+    import base64, hashlib, os
+    from cryptography.hazmat.primitives import serialization
+    from chronos_population.independence import FIELD_INDEPENDENCE_SCHEMA, canonical_field_independence_payload
+    key = _test_private_key()
+    public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    os.environ["CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_KEY_ID"] = _TEST_CUSTODIAN_KEY_ID
+    os.environ["CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_PUBLIC_KEY_B64"] = base64.b64encode(public).decode("ascii")
+    fid = str(field["field_id"])
+    group = str(field.get("independence_group_id") or f"REGION-{index}")
+    field["independence_group_id"] = group
+    field["release"] = str(field.get("release") or "DR1")
+    field["science_manifest_sha256"] = hashlib.sha256(f"test-manifest:{fid}".encode()).hexdigest()
+    field["preregistration_sha256"] = "d" * 64
+    footprint = dict(footprint or {"center_ra_deg": float(index*15), "center_dec_deg": -20.0, "maximum_radius_deg": 0.5})
+    field["footprint"] = footprint
+    fp_sha = hashlib.sha256(canonical_field_independence_payload(footprint)).hexdigest()
+    field["footprint_sha256"] = fp_sha
+    payload = {
+        "schema": FIELD_INDEPENDENCE_SCHEMA, "field_id": fid,
+        "dataset_class": str(field.get("dataset_class", "real")), "release": field["release"],
+        "independence_group_id": group, "footprint": footprint, "footprint_sha256": fp_sha,
+        "science_manifest_sha256": field["science_manifest_sha256"],
+        "preregistration_sha256": field["preregistration_sha256"],
+        "custodian_id": "test-independent-custodian", "custodian_role": "independent_custodian",
+        "attested_utc": "2026-11-26T00:00:00Z",
+    }
+    field["field_independence_attestation"] = {
+        "schema": FIELD_INDEPENDENCE_SCHEMA, "algorithm": "Ed25519", "key_id": _TEST_CUSTODIAN_KEY_ID,
+        "payload": payload,
+        "signature_base64": base64.b64encode(key.sign(canonical_field_independence_payload(payload))).decode("ascii"),
+    }
+
+
+
+
 def _field_records():
-    return [
+    fields = [
         {"field_id": f"F{i}", "dataset_class": "real", "independent_field": True,
          "independence_group_id": f"REGION-{i}"}
         for i in range(5)
     ]
+    for i, field in enumerate(fields):
+        _sign_test_field(field, i)
+    return fields
 
 
 def _bin_spec():
@@ -153,7 +201,7 @@ def test_selection_function_requires_independent_real_fields_and_calibration_has
 
     fields = _field_records()
     fields[0]["independent_field"] = False
-    with pytest.raises(ValueError, match="at least 5 independently attested real fields"):
+    with pytest.raises(ValueError, match="independent_field must be true"):
         fit_selection_function(_trials(), _bin_spec(), field_records=fields,
                                minimum_trials_per_cell=20, minimum_independent_fields=5)
     bad = _trials()
@@ -310,3 +358,34 @@ def test_source_linked_yso_event_yield_revalidates_source_rows_and_selection_tri
     assert result["accepted_event_count"] == 1
     assert result["total_source_selection_weighted_event_count"] > 1.0
     assert result["coverage_revalidated"] is True
+
+
+
+def test_selection_function_requires_out_of_band_pinned_custodian_key(monkeypatch):
+    from chronos_population.selection import fit_selection_function
+    fields = _field_records()
+    monkeypatch.delenv("CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_KEY_ID", raising=False)
+    monkeypatch.delenv("CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_PUBLIC_KEY_B64", raising=False)
+    with pytest.raises(ValueError, match="trusted external field-independence custodian"):
+        fit_selection_function(_trials(), _bin_spec(), field_records=fields,
+                               minimum_trials_per_cell=20, minimum_independent_fields=5)
+
+
+def test_selection_function_rejects_tampered_custodian_field_identity():
+    from chronos_population.selection import fit_selection_function
+    fields = _field_records()
+    fields[0]["field_independence_attestation"]["payload"]["independence_group_id"] = "FORGED-GROUP"
+    with pytest.raises(ValueError, match="signed custodian payload does not match field record"):
+        fit_selection_function(_trials(), _bin_spec(), field_records=fields,
+                               minimum_trials_per_cell=20, minimum_independent_fields=5)
+
+
+def test_selection_function_rejects_overlapping_signed_independent_footprints():
+    from chronos_population.selection import fit_selection_function
+    fields = _field_records()
+    _sign_test_field(fields[1], 1, footprint={
+        "center_ra_deg": 0.0, "center_dec_deg": -20.0, "maximum_radius_deg": 0.5,
+    })
+    with pytest.raises(ValueError, match="overlap or cannot be proven disjoint"):
+        fit_selection_function(_trials(), _bin_spec(), field_records=fields,
+                               minimum_trials_per_cell=20, minimum_independent_fields=5)

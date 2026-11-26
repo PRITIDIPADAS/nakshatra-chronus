@@ -622,6 +622,43 @@ def _population_selection_bin_spec():
     }
 
 
+
+def _sign_test_population_field(field, index, preregistration_sha256):
+    import base64, hashlib, os
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from chronos_population.independence import FIELD_INDEPENDENCE_SCHEMA, canonical_field_independence_payload
+    key = Ed25519PrivateKey.from_private_bytes(bytes.fromhex("5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"))
+    public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    key_id = "unit-test-population-custodian-v1"
+    os.environ["CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_KEY_ID"] = key_id
+    os.environ["CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_PUBLIC_KEY_B64"] = base64.b64encode(public).decode("ascii")
+    fid = str(field["field_id"])
+    group = str(field.get("independence_group_id") or fid)
+    field["independence_group_id"] = group
+    field["release"] = str(field.get("release") or "DR1")
+    field["science_manifest_sha256"] = hashlib.sha256(f"test-field-manifest:{fid}".encode()).hexdigest()
+    field["preregistration_sha256"] = preregistration_sha256
+    footprint = {"center_ra_deg": float(index*15), "center_dec_deg": -20.0, "maximum_radius_deg": 0.5}
+    field["footprint"] = footprint
+    fp_sha = hashlib.sha256(canonical_field_independence_payload(footprint)).hexdigest()
+    field["footprint_sha256"] = fp_sha
+    payload = {
+        "schema": FIELD_INDEPENDENCE_SCHEMA, "field_id": fid,
+        "dataset_class": str(field.get("dataset_class", "real")), "release": field["release"],
+        "independence_group_id": group, "footprint": footprint, "footprint_sha256": fp_sha,
+        "science_manifest_sha256": field["science_manifest_sha256"],
+        "preregistration_sha256": preregistration_sha256,
+        "custodian_id": "test-independent-population-custodian",
+        "custodian_role": "independent_custodian", "attested_utc": "2026-11-26T00:00:00Z",
+    }
+    field["field_independence_attestation"] = {
+        "schema": FIELD_INDEPENDENCE_SCHEMA, "algorithm": "Ed25519", "key_id": key_id,
+        "payload": payload,
+        "signature_base64": base64.b64encode(key.sign(canonical_field_independence_payload(payload))).decode("ascii"),
+    }
+
+
 def _population_selection_inputs(fields):
     from chronos_population.selection import (
         RECOVERY_RULE_ID,
@@ -644,8 +681,10 @@ def _population_selection_inputs(fields):
     quality_policy_sha256 = _canonical_sha256(quality_policy)
     preregistration_sha256 = "d" * 64
     trials = []
-    for field in fields:
+    for field_index, field in enumerate(fields):
         field_id = field["field_id"]
+        if str(field.get("dataset_class", "unverified")).lower() == "real" and field.get("independent_field") is True:
+            _sign_test_population_field(field, field_index, preregistration_sha256)
         detector_output_sha256 = _canonical_sha256({"field_id": field_id, "output": "frozen"})
         for index in range(4):
             recovered = index != 0

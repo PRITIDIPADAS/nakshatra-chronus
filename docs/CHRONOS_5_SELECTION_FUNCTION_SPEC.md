@@ -96,3 +96,15 @@ The legacy `/api/v5/population/yso/rate` endpoint still uses aggregate field-lev
 - Null/negative controls, field-level sensitivity checks and independent astronomical review.
 
 Until then, do not report a YSO population result.
+
+
+## Externally pinned field-independence attestation — 26 November 2026
+
+The selection fit no longer treats the independent_field boolean or a caller-supplied group ID as evidence. Every real field contributing to a selection calibration must carry an Ed25519 attestation from an independent custodian. The deployment pins the signer out of band using:
+
+- CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_KEY_ID
+- CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_PUBLIC_KEY_B64
+
+The signed payload binds the exact field ID, real dataset class, DR1/QR3 release, independence-group ID, science-manifest SHA-256, preregistration SHA-256, custodian identity/role, attestation time, and a conservative spherical footprint cap (centre and enclosing radius) with its SHA-256. The verifier checks the signed payload against the field record and the preregistered trial metadata. It then requires independent groups to have distinct, pairwise non-overlapping signed footprint caps. A field without a valid signature, a missing deployment key, a repeated group/footprint, a mismatched preregistration or an overlapping cap prevents the selection fit from being supported.
+
+This verifies a custodian's signed assertion; it does not itself establish that the signer is institutionally independent, inspect the original archive bytes, or prove the custodian's footprint declaration is correct. The deployment owner must pin a public key whose identity/authority has been independently confirmed, and the science-manifest bytes must still be downloaded and checked against the signed digest. Unit tests use deterministic test-only keys and fictional fields; those signatures are not scientific evidence and must never be configured in a deployment.

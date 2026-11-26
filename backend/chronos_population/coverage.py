@@ -1,9 +1,10 @@
 """Fail-closed coverage audit before a single population investigation.
 
-This gate checks the shape of supplied evidence. It does not independently
-authenticate a classification, a null control, or an assertion of field
-independence. A feature-evolution sample must cover the feature and both
-continuum sidebands repeatedly within the same distinct epochs.
+The selection model requires an externally pinned Ed25519 field custodian
+attestation and disjoint signed footprint caps. Classification identity and
+null-control independence remain separate review gates. A feature-evolution
+sample must cover the feature and both continuum sidebands repeatedly within
+the same distinct epochs.
 """
 from __future__ import annotations
 

@@ -15,6 +15,8 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
+from .independence import audit_independent_field_records
+
 SCHEMA = "chronos-multidimensional-selection-function/1.0"
 NUMERIC_DIMENSIONS = (
     "flux_jy",
@@ -314,8 +316,9 @@ def fit_selection_function(
 
     Every trial must come from an identified real DR1/QR3 field and the same
     detection method, frozen configuration, injection protocol and calibration
-    manifest. Independence groups are read from field_records and never
-    inferred from field names.
+    manifest. Field identity, preregistration, spatial footprint and independence
+    group must be signed by a custodian whose Ed25519 public key is pinned out
+    of band in the deployment environment.
     """
     if not isinstance(injection_trials, (list, tuple)) or not injection_trials:
         raise ValueError("real-field injection_trials are required for a selection function")
@@ -333,23 +336,15 @@ def fit_selection_function(
         raise ValueError("seed must be a non-negative integer")
     spec = validate_bin_spec(bin_spec)
 
+    verified_field_payloads, field_independence_audit = audit_independent_field_records(
+        field_records, minimum_independent_fields=int(minimum_independent_fields)
+    )
     field_by_id: dict[str, Mapping[str, Any]] = {}
-    groups: set[str] = set()
     for field in field_records:
         field_id = str(field.get("field_id", "")).strip()
         if not field_id or field_id in field_by_id:
             raise ValueError("field_records must have unique non-empty field_id values")
         field_by_id[field_id] = field
-        if str(field.get("dataset_class", field.get("data_class", "unverified"))).lower() != "real":
-            continue
-        if field.get("independent_field") is True:
-            group = str(field.get("independence_group_id") or field_id).strip()
-            if group:
-                groups.add(group)
-    if len(groups) < int(minimum_independent_fields):
-        raise ValueError(
-            f"selection calibration requires at least {minimum_independent_fields} independently attested real fields; found {len(groups)}"
-        )
 
     metadata_values: dict[str, set[str]] = {name: set() for name in REQUIRED_TRIAL_METADATA}
     cells: dict[tuple[int, ...], dict[str, Any]] = defaultdict(
@@ -379,12 +374,13 @@ def fit_selection_function(
         field = field_by_id[field_id]
         if str(field.get("dataset_class", field.get("data_class", "unverified"))).lower() != "real":
             raise ValueError(f"injection trial {trial_id} is not attached to a real field")
-        if field.get("independent_field") is not True:
-            raise ValueError(f"injection trial {trial_id} is not attached to an independently attested field")
+        attested_field = verified_field_payloads.get(field_id)
+        if attested_field is None:
+            raise ValueError(f"injection trial {trial_id} has no verified independent-field custodian attestation")
         if str(raw.get("dataset_class", "")).lower() != "real":
             raise ValueError(f"injection trial {trial_id} must be labelled dataset_class='real'")
-        if str(raw.get("release", "")).upper() not in {"DR1", "QR3"}:
-            raise ValueError(f"injection trial {trial_id} must use DR1 or QR3")
+        if str(raw.get("release", "")).upper() != attested_field["release"]:
+            raise ValueError(f"injection trial {trial_id} release does not match the signed field attestation")
         if not isinstance(raw.get("recovered"), bool):
             raise ValueError(f"injection trial {trial_id} recovered must be a boolean")
         for name in REQUIRED_TRIAL_METADATA:
@@ -401,7 +397,7 @@ def fit_selection_function(
         recovery = _validate_recovery_evidence(raw, trial_id)
         if raw.get("independence_group_id") is not None:
             declared_group = str(raw["independence_group_id"]).strip()
-            actual_group = str(field.get("independence_group_id") or field_id).strip()
+            actual_group = str(attested_field["independence_group_id"])
             if declared_group != actual_group:
                 raise ValueError(f"injection trial {trial_id} independence_group_id mismatch")
         covariates = raw.get("covariates")
@@ -439,8 +435,12 @@ def fit_selection_function(
         raise ValueError("selection trials mix frozen provenance fields: " + ", ".join(inconsistent))
     if not trial_fields:
         raise ValueError("selection trials do not cover any real field")
+    frozen_preregistration = next(iter(metadata_values["preregistration_sha256"]))
+    for field_id in trial_fields:
+        if verified_field_payloads[field_id]["preregistration_sha256"] != frozen_preregistration:
+            raise ValueError(f"{field_id}: signed field preregistration does not match injection-trial preregistration")
     groups_covered = {
-        str(field_by_id[field_id].get("independence_group_id") or field_id)
+        str(verified_field_payloads[field_id]["independence_group_id"])
         for field_id in trial_fields
     }
     if len(groups_covered) < int(minimum_independent_fields):
@@ -520,6 +520,7 @@ def fit_selection_function(
         "posterior_draws": int(posterior_draws),
         "seed": int(seed),
         "independent_field_count": len(groups_covered),
+        "field_independence_audit": field_independence_audit,
         "trial_count": len(trial_ids),
         "field_ids": sorted(trial_fields),
         "field_trial_counts": [
