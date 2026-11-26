@@ -41,6 +41,7 @@
 
 ### M101 DR1 D2
 
+- **Session 19 source-linked event path (26 November 2026):** `/api/v5/population/yso/source-linked-event-yield` now rejects aggregate-only event counts; binds accepted events to exact valid source measurement IDs and distinct MJD epochs; verifies preregistration/event-definition digests; applies Horvitz–Thompson (1/p_i) source-selection weights and source-cluster resampling. This corrects source inclusion only. Event-detection efficiency and source-level contamination are not modelled, so this output remains a candidate-event yield, not a YSO population result.
 The committed [four-product archive manifest](../data/spherex_archive_manifest.M101_DR1_D2.json) records the science MEF, exact spectral-WCS and absolute-gain provenance inputs, and the supplemental solid-angle map. It contains source URIs, archive plane IDs, byte counts, SHA-256 and archive MD5s where available. The four FITS binaries remain in the retained GitHub Actions artifact rather than being duplicated in Git. The manifest does not claim a direct provenance foreign key for the solid-angle map.
 
 - Latest completed combined test/M101 workflow: [push run #967 / 45657439621](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45657439621), commit f5fe73471c83d1e9639ebf204abbf139ae01da77; the matching [PR run #968 / 45657453959](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45657453959) also passed.
