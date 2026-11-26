@@ -196,4 +196,22 @@ def test_calibration_review_verification_cli_accepts_complete_signed_bundle(tmp_
         "--reproduction-artifact", str(artifact),
     ])
     assert exit_code == 0
-    assert json.loads(capsys.readouterr().out)["valid"] is True
+    verified = json.loads(capsys.readouterr().out)
+    assert verified["valid"] is True
+    assert verified["external_identity_and_independence_confirmed"] is False
+
+    exit_code = main([
+        "--review-record", str(record_path),
+        "--reviewer-public-key", str(key_path),
+        "--expected-reviewer-id", "independent-reviewer-01",
+        "--expected-public-key-sha256", public_key_fingerprint(public_pem),
+        "--expected-commit", "a" * 40,
+        "--expected-input-digests", str(digest_path),
+        "--signed-report", str(report),
+        "--reproduction-artifact", str(artifact),
+        "--confirm-reviewer-identity-independence-out-of-band",
+    ])
+    assert exit_code == 0
+    verified = json.loads(capsys.readouterr().out)
+    assert verified["valid"] is True
+    assert verified["external_identity_and_independence_confirmed"] is True
