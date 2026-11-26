@@ -65,3 +65,27 @@ The original six-field real-data pilot remains the primary recovery reference do
 The newer source-only pilot [45685593223](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685593223) had no job result or artifact available at the time of this addendum. The earlier attempt [45685127482](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45685127482) was based on revision `930885e89`, before the latest aggregate-gate enforcement. Neither can be promoted to a verified six-region source-only result unless the complete current report passes the exact six-field, per-injection, science/gain identity, report-hash and aggregate validators.
 
 The source-only diagnostic uses the post-injection-minus-baseline image and original VARIANCE map. It is a secondary experiment and does not replace primary combined-scene recovery. Lupus III remains an unresolved adverse result: 0/20 at 0.5×, 1× and 2× its local reference in the previously completed six-field run. No threshold/match-radius relaxation or field removal is justified by the current evidence.
+
+
+## Latest strict six-field rerun — workflow #37 (26 November 2026)
+
+The latest six-field real-data execution is [workflow #37 / run 45749547766](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45749547766), on code revision `02c072ec58d5b216b8a6883ed6e2d18915823f90`.
+
+- All six predeclared regions were returned exactly once: six requested, six returned, six completed, zero incomplete.
+- The exact field-name/role manifest passed; observation IDs and native science SHA-256 values are unique.
+- Each of the six field records passed 25/25 machine eligibility checks (150/150 true).
+- Artifact 15085687674 is 219,691 bytes; ZIP SHA-256: `4c34a822761d8ea57b4109ff67f3318d014259874fa835a399c69fb6bf7e4017`.
+- Aggregate report SHA-256: `031aacb4dd64345794d246883be141b935689f0de69affaf9965c39b512b60a9`. Recomputed from the downloaded JSON after removing its embedded digest; exact match.
+
+| Region | Observation ID | Local 5σ reference (µJy) | 0.5× / 1× / 2× recoveries |
+|---|---|---:|---:|
+| Taurus / Auriga | `2025W35_1A_0331_1` | 178.374 | 3/20 / 3/20 / 8/20 |
+| Perseus / NGC 1333 | `2025W34_1B_0227_1` | 161.588 | 3/20 / 5/20 / 12/20 |
+| Orion A | `2025W37_1A_0365_1` | 159.317 | 3/20 / 5/20 / 11/20 |
+| Rho Ophiuchi | `2025W31_2A_0170_1` | 204.960 | 2/20 / 4/20 / 9/20 |
+| Lupus III | `2025W32_1A_0663_1` | 211.158 | **0/20 / 0/20 / 0/20** |
+| High-latitude comparison | `2025W20_1C_0491_1` | 114.063 | 6/20 / 13/20 / 17/20 |
+
+The low/nominal/high fluxes are field-specific multiples of each local 5σ reference; they are not common absolute flux bins and must not be pooled as if they were.
+
+Every field report continues to mark the gain-derived electron conversion as pending independent review and `independent_human_reviewed=false`. The 25/25 checks validate the automated file/provenance/runner contract, not physical calibration. The workflow remains non-blind, uses one exposure per field, and does not execute the four CHRONOS comparison baselines. Lupus III remains an unresolved 0/20 adverse result and has not been removed or averaged away.
