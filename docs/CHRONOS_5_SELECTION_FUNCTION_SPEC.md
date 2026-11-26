@@ -83,7 +83,7 @@ This is an additional source-selection correction, not a full YSO population lik
 
 A supported selection function means only that the predeclared covariate cell has sufficient recorded injection evidence under this model. It does not prove that the injection distribution represents the target population, that the underlying detection output is correct, or that selection is independent of the science outcome.
 
-The current rate estimator still uses field-level aggregate event-detection completeness with scaled null-control counts. It does not use source-level inverse-probability weights as an event likelihood, because the repository's current field inputs do not provide event-to-source identity and source-specific event records. The API therefore remains exploratory and must not be presented as a selection-corrected YSO population estimate or discovery.
+The legacy `/api/v5/population/yso/rate` endpoint still uses aggregate field-level event counts and must not be presented as source-selection corrected. The new `/api/v5/population/yso/source-linked-event-yield` endpoint requires exact source-to-measurement lineage and applies source inverse-probability weights, but does not yet correct event-detection efficiency or the source-level composition of contaminants. Both paths remain exploratory and neither is a validated YSO population estimate or discovery.
 
 ## External evidence required before Session 19 can pass
 
