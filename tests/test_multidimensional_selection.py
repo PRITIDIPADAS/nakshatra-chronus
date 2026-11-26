@@ -396,7 +396,7 @@ def test_selection_function_rejects_overlapping_signed_independent_footprints():
     from chronos_population.selection import fit_selection_function
     fields = _field_records()
     _sign_test_field(fields[1], 1, footprint={
-        "center_ra_deg": 0.0, "center_dec_deg": -20.0, "maximum_radius_deg": 0.5,
+        "center_ra_deg": 0.25, "center_dec_deg": -20.0, "maximum_radius_deg": 0.5,
     })
     with pytest.raises(ValueError, match="overlap or cannot be proven disjoint"):
         fit_selection_function(_trials(), _bin_spec(), field_records=fields,
@@ -452,7 +452,7 @@ def test_selection_function_requires_signed_custodian_independence_assertion():
 
     fields = _field_records()
     fields[0]["field_independence_attestation"]["payload"]["custodian_independent_of_analysis_team"] = False
-    with pytest.raises(ValueError, match="custodian attestation payload has missing or unexpected fields"):
+    with pytest.raises(ValueError, match="custodian did not attest independence from the analysis team"):
         fit_selection_function(
             _trials(), _bin_spec(), field_records=fields,
             minimum_trials_per_cell=20, minimum_independent_fields=5,

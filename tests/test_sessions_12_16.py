@@ -633,6 +633,8 @@ def _sign_test_population_field(field, index, preregistration_sha256):
     key_id = "unit-test-population-custodian-v1"
     os.environ["CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_KEY_ID"] = key_id
     os.environ["CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_PUBLIC_KEY_B64"] = base64.b64encode(public).decode("ascii")
+    os.environ["CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_ID"] = "test-independent-population-custodian"
+    os.environ["CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_OUT_OF_BAND_INDEPENDENCE_VERIFIED"] = "true"
     fid = str(field["field_id"])
     group = str(field.get("independence_group_id") or fid)
     field["independence_group_id"] = group
@@ -650,7 +652,9 @@ def _sign_test_population_field(field, index, preregistration_sha256):
         "science_manifest_sha256": field["science_manifest_sha256"],
         "preregistration_sha256": preregistration_sha256,
         "custodian_id": "test-independent-population-custodian",
-        "custodian_role": "independent_custodian", "attested_utc": "2026-11-26T00:00:00Z",
+        "custodian_role": "independent_custodian",
+        "custodian_independent_of_analysis_team": True,
+        "attested_utc": "2026-11-26T00:00:00Z",
     }
     field["field_independence_attestation"] = {
         "schema": FIELD_INDEPENDENCE_SCHEMA, "algorithm": "Ed25519", "key_id": key_id,
