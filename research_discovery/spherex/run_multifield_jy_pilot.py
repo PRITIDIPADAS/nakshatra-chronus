@@ -28,6 +28,16 @@ FIELDS = (
     {"name": "Lupus_III", "ra_deg": 242.10, "dec_deg": -39.10, "role": "star_forming_region"},
     {"name": "HighLatitude_Control", "ra_deg": 180.0, "dec_deg": 60.0, "role": "control"},
 )
+# Held-out fields for the sky-aware noise test declared in
+# docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md. None was used to build or tune the variant.
+HOLDOUT_FIELDS = (
+    {"name": "Chamaeleon_I", "ra_deg": 167.0, "dec_deg": -77.3, "role": "star_forming_region"},
+    {"name": "Serpens_Main", "ra_deg": 277.45, "dec_deg": 1.25, "role": "star_forming_region"},
+    {"name": "Corona_Australis", "ra_deg": 285.4, "dec_deg": -36.95, "role": "star_forming_region"},
+    {"name": "NGC_2264", "ra_deg": 100.24, "dec_deg": 9.9, "role": "star_forming_region"},
+    {"name": "IC_348", "ra_deg": 56.13, "dec_deg": 32.16, "role": "star_forming_region"},
+    {"name": "HighLatitude_Control_South", "ra_deg": 30.0, "dec_deg": -60.0, "role": "control"},
+)
 SCHEMA = "chronos-spherex-multifield-jy-pilot/1.0"
 
 
@@ -821,7 +831,11 @@ def main() -> None:
     parser.add_argument("--bandpass", default="SPHEREx-D2")
     parser.add_argument("--code-revision", default=None)
     parser.add_argument("--stop-on-error", action="store_true")
+    parser.add_argument("--field-set", choices=("pilot", "holdout"), default="pilot")
     args = parser.parse_args()
+    global FIELDS
+    if args.field_set == "holdout":
+        FIELDS = HOLDOUT_FIELDS
     args.out.mkdir(parents=True, exist_ok=True)
     started = datetime.now(timezone.utc).isoformat()
     records = []
