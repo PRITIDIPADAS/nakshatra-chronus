@@ -1,0 +1,1810 @@
+{
+ "files": [
+  {
+   "path": "backend/app.py",
+   "lang": "Python",
+   "lines": 282,
+   "about": "CHRONOS API. Start with: python run.py"
+  },
+  {
+   "path": "backend/connectors.py",
+   "lang": "Python",
+   "lines": 587,
+   "about": "Connectors and plugins: IRSA SIA2 and cutouts, Gaia, JPL SBIdent, plain words. Add a plugin with @plugin(\"name\")."
+  },
+  {
+   "path": "backend/core.py",
+   "lang": "Python",
+   "lines": 731,
+   "about": "CHRONOS core: practice sky, fair pair rules, false change meter, difference map, astrometry, photometry, checks."
+  },
+  {
+   "path": "backend/engine.py",
+   "lang": "Python",
+   "lines": 59,
+   "about": "Five hypothesis engine. Reads the frozen model in data/engine.json."
+  },
+  {
+   "path": "backend/extras.py",
+   "lang": "Python",
+   "lines": 271,
+   "about": "Lab tools and helpers: safe JSON, image stretch, behavior label, fair time lapse, Planet X reach and search, sky path, movers, blind test, protocol."
+  },
+  {
+   "path": "backend/inject.py",
+   "lang": "Python",
+   "lines": 250,
+   "about": "Injection into real exposures."
+  },
+  {
+   "path": "backend/investigate.py",
+   "lang": "Python",
+   "lines": 958,
+   "about": "CHRONOS investigator."
+  },
+  {
+   "path": "backend/lab.py",
+   "lang": "Python",
+   "lines": 557,
+   "about": "CHRONOS 4D: space x time x wavelength x evidence."
+  },
+  {
+   "path": "backend/observatory.py",
+   "lang": "Python",
+   "lines": 262,
+   "about": "Observatory endpoints: one call investigates a whole field."
+  },
+  {
+   "path": "backend/pipeline.py",
+   "lang": "Python",
+   "lines": 770,
+   "about": "CHRONOS field pipeline: register, co add, and find change with three independent methods."
+  },
+  {
+   "path": "backend/sky.py",
+   "lang": "Python",
+   "lines": 283,
+   "about": "Practice observatory fields."
+  },
+  {
+   "path": "backend/study.py",
+   "lang": "Python",
+   "lines": 111,
+   "about": "The citizen lab study: a fixed set of cases, written instructions, training cases with feedback, and blind repeats."
+  },
+  {
+   "path": "backend/chronos_addons/README.md",
+   "lang": "Markdown",
+   "lines": 28,
+   "about": "CHRONOS research add-ons"
+  },
+  {
+   "path": "backend/chronos_addons/__init__.py",
+   "lang": "Python",
+   "lines": 6,
+   "about": "Measurement-first research extensions for Nakshatra CHRONOS."
+  },
+  {
+   "path": "backend/chronos_addons/api.py",
+   "lang": "Python",
+   "lines": 66,
+   "about": "Optional FastAPI router. No endpoint here performs a network request."
+  },
+  {
+   "path": "backend/chronos_addons/archive.py",
+   "lang": "Python",
+   "lines": 75,
+   "about": "Explicit readers for official SPHEREx calibration and instrument products."
+  },
+  {
+   "path": "backend/chronos_addons/bridge.py",
+   "lang": "Python",
+   "lines": 92,
+   "about": "Bridge CHRONOS forced PSF photometry to calibrated source F(lambda,t)."
+  },
+  {
+   "path": "backend/chronos_addons/catalogs.py",
+   "lang": "Python",
+   "lines": 32,
+   "about": "Offline spherical catalogue cross-match; positional matches are not identifications."
+  },
+  {
+   "path": "backend/chronos_addons/citizen.py",
+   "lang": "Python",
+   "lines": 33,
+   "about": "Aggregate multi-reviewer study responses with explicit incomplete-case handling."
+  },
+  {
+   "path": "backend/chronos_addons/forensics.py",
+   "lang": "Python",
+   "lines": 70,
+   "about": "Transparent, deterministic detector/contamination triage; not a classifier."
+  },
+  {
+   "path": "backend/chronos_addons/molecular.py",
+   "lang": "Python",
+   "lines": 245,
+   "about": "Measure pre-specified spectral features without assigning molecular identity."
+  },
+  {
+   "path": "backend/chronos_addons/orbits.py",
+   "lang": "Python",
+   "lines": 32,
+   "about": "Low-precision two-body orbit visualizer; not an ephemeris or discovery tool."
+  },
+  {
+   "path": "backend/chronos_addons/passport.py",
+   "lang": "Python",
+   "lines": 36,
+   "about": "Content-addressed evidence passports. SHA-256 is not a digital signature."
+  },
+  {
+   "path": "backend/chronos_addons/planner.py",
+   "lang": "Python",
+   "lines": 450,
+   "about": "Expected-information-gain planning with explicit feasibility provenance."
+  },
+  {
+   "path": "backend/chronos_addons/selection.py",
+   "lang": "Python",
+   "lines": 19,
+   "about": "Completeness/null corrected tile counts. Low-completeness tiles are excluded, not floored."
+  },
+  {
+   "path": "backend/chronos_addons/spectral.py",
+   "lang": "Python",
+   "lines": 215,
+   "about": "Spectral measurements and conservative SPHEREx DR1 FITS adapters."
+  },
+  {
+   "path": "backend/chronos_addons/validation.py",
+   "lang": "Python",
+   "lines": 97,
+   "about": "Injection/recovery and held-out-field validation metrics."
+  },
+  {
+   "path": "backend/chronos_benchmark/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "Synthetic challenge fixtures and blind benchmark accounting."
+  },
+  {
+   "path": "backend/chronos_benchmark/adapters.py",
+   "lang": "Python",
+   "lines": 403,
+   "about": "Adapters that put four CHRONOS baselines onto one field and mask contract."
+  },
+  {
+   "path": "backend/chronos_benchmark/baselines.py",
+   "lang": "Python",
+   "lines": 77,
+   "about": "Matched-threshold comparison for the four required detection baselines."
+  },
+  {
+   "path": "backend/chronos_benchmark/blind.py",
+   "lang": "Python",
+   "lines": 709,
+   "about": "Sealed field-level benchmark truth and configuration freeze."
+  },
+  {
+   "path": "backend/chronos_benchmark/custodian_attestation.py",
+   "lang": "Python",
+   "lines": 280,
+   "about": "Detached Ed25519 attestation for independent blind-benchmark custody."
+  },
+  {
+   "path": "backend/chronos_benchmark/custodian_cli.py",
+   "lang": "Python",
+   "lines": 401,
+   "about": "Independent-custodian CLI for blind field splits, freezing and unblinding."
+  },
+  {
+   "path": "backend/chronos_benchmark/metrics.py",
+   "lang": "Python",
+   "lines": 27,
+   "about": "Transparent accounting for benchmark decisions and abstentions."
+  },
+  {
+   "path": "backend/chronos_benchmark/runner.py",
+   "lang": "Python",
+   "lines": 752,
+   "about": "Common-input four-baseline benchmark and reproducible comparison reports."
+  },
+  {
+   "path": "backend/chronos_benchmark/scenarios.py",
+   "lang": "Python",
+   "lines": 83,
+   "about": "Deterministic measurement-level challenge fixtures."
+  },
+  {
+   "path": "backend/chronos_causal/__init__.py",
+   "lang": "Python",
+   "lines": 3,
+   "about": "CHRONOS causal inference research package."
+  },
+  {
+   "path": "backend/chronos_causal/api.py",
+   "lang": "Python",
+   "lines": 859,
+   "about": "HTTP endpoints for the CHRONOS research workspaces."
+  },
+  {
+   "path": "backend/chronos_causal/bayesian.py",
+   "lang": "Python",
+   "lines": 234,
+   "about": "Exact conjugate Bayesian inference for linear-Gaussian measurement models."
+  },
+  {
+   "path": "backend/chronos_causal/coordinates.py",
+   "lang": "Python",
+   "lines": 51,
+   "about": "Sky- and detector-coordinate persistence diagnostics."
+  },
+  {
+   "path": "backend/chronos_causal/counterfactual.py",
+   "lang": "Python",
+   "lines": 58,
+   "about": "Reproducible measurement-level counterfactuals; original rows are never mutated."
+  },
+  {
+   "path": "backend/chronos_causal/evidence_graph.py",
+   "lang": "Python",
+   "lines": 273,
+   "about": "Evidence graph linking archive inputs, calibration, measurements, tests and conclusions."
+  },
+  {
+   "path": "backend/chronos_causal/falsification.py",
+   "lang": "Python",
+   "lines": 326,
+   "about": "Predeclared falsification challenges for the measurement-level Sky\u2013Detector model."
+  },
+  {
+   "path": "backend/chronos_causal/forward_model.py",
+   "lang": "Python",
+   "lines": 126,
+   "about": "Electron-domain exposure simulator for controlled detector experiments."
+  },
+  {
+   "path": "backend/chronos_causal/identifiability.py",
+   "lang": "Python",
+   "lines": 229,
+   "about": "Forward-model Jacobian and nuisance-parameter identifiability auditing."
+  },
+  {
+   "path": "backend/chronos_causal/inference.py",
+   "lang": "Python",
+   "lines": 178,
+   "about": "Competing measurement-level explanations for an astronomical candidate."
+  },
+  {
+   "path": "backend/chronos_causal/investigation_package.py",
+   "lang": "Python",
+   "lines": 334,
+   "about": "Create and verify reproducible CHRONOS investigation ZIP packages."
+  },
+  {
+   "path": "backend/chronos_causal/noise_model.py",
+   "lang": "Python",
+   "lines": 79,
+   "about": "Gaussian weighted and generalized least-squares fits with explicit error models."
+  },
+  {
+   "path": "backend/chronos_causal/package_cli.py",
+   "lang": "Python",
+   "lines": 25,
+   "about": "Verify a downloaded CHRONOS investigation package."
+  },
+  {
+   "path": "backend/chronos_causal/pixel_forward.py",
+   "lang": "Python",
+   "lines": 320,
+   "about": "Inspectable pixel-level sky and detector forward model."
+  },
+  {
+   "path": "backend/chronos_causal/posterior_predictive.py",
+   "lang": "Python",
+   "lines": 399,
+   "about": "Residual diagnostics, conditional predictive checks and candidate-family scans."
+  },
+  {
+   "path": "backend/chronos_causal/provenance.py",
+   "lang": "Python",
+   "lines": 66,
+   "about": "Archive provenance manifests with completeness and integrity checks."
+  },
+  {
+   "path": "backend/chronos_causal/schema.py",
+   "lang": "Python",
+   "lines": 55,
+   "about": "Validated observation rows for the measurement-level Causal Sky Twin."
+  },
+  {
+   "path": "backend/chronos_causal/wavelength_gate.py",
+   "lang": "Python",
+   "lines": 119,
+   "about": "Fail-closed admission checks for scientific wavelength measurements."
+  },
+  {
+   "path": "backend/chronos_identity/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "Probabilistic, epoch-aware astronomical source association."
+  },
+  {
+   "path": "backend/chronos_identity/associations.py",
+   "lang": "Python",
+   "lines": 237,
+   "about": "Epoch-aware probabilistic source associations with optional annual parallax."
+  },
+  {
+   "path": "backend/chronos_identity/source_graph.py",
+   "lang": "Python",
+   "lines": 25,
+   "about": "Turn association results into a traceable source-observation graph."
+  },
+  {
+   "path": "backend/chronos_population/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "Selection-corrected population statistics for CHRONOS."
+  },
+  {
+   "path": "backend/chronos_population/coverage.py",
+   "lang": "Python",
+   "lines": 468,
+   "about": "Fail-closed coverage audit before a single population investigation."
+  },
+  {
+   "path": "backend/chronos_population/independence.py",
+   "lang": "Python",
+   "lines": 197,
+   "about": "Pinned-key verification of independent-field custodian attestations."
+  },
+  {
+   "path": "backend/chronos_population/rates.py",
+   "lang": "Python",
+   "lines": 303,
+   "about": "Exploratory event-rate estimates with completeness and scaled null controls."
+  },
+  {
+   "path": "backend/chronos_population/selection.py",
+   "lang": "Python",
+   "lines": 598,
+   "about": "Auditable, non-extrapolating multidimensional injection selection function."
+  },
+  {
+   "path": "backend/chronos_population/source_linked.py",
+   "lang": "Python",
+   "lines": 443,
+   "about": "Source-linked, inverse-probability weighted YSO event-yield estimator."
+  },
+  {
+   "path": "backend/chronos_spectrotemporal/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "Uncertainty-aware, sampling-aware spectral time-series tools."
+  },
+  {
+   "path": "backend/chronos_spectrotemporal/feature_evolution.py",
+   "lang": "Python",
+   "lines": 238,
+   "about": "Resolution-aware, predeclared spectral-feature evolution."
+  },
+  {
+   "path": "backend/chronos_spectrotemporal/reconstruction.py",
+   "lang": "Python",
+   "lines": 441,
+   "about": "Calibrated local reconstruction of F(lambda, t) from irregular samples."
+  },
+  {
+   "path": "research_discovery/README.md",
+   "lang": "Markdown",
+   "lines": 132,
+   "about": "CHRONOS real-data research discovery pack"
+  },
+  {
+   "path": "research_discovery/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "Reproducible real-data research discovery tools for CHRONOS."
+  },
+  {
+   "path": "research_discovery/citizen_science/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "citizen_science research tools."
+  },
+  {
+   "path": "research_discovery/citizen_science/build_task_manifest.py",
+   "lang": "Python",
+   "lines": 49,
+   "about": "Build blinded human-review tasks from real, pre-prepared SPHEREx epoch cutouts."
+  },
+  {
+   "path": "research_discovery/citizen_science/review.html",
+   "lang": "HTML",
+   "lines": 24,
+   "about": "CHRONOS Citizen Review Pilot"
+  },
+  {
+   "path": "research_discovery/docs/CITIZEN_CONSENT_TEMPLATE.md",
+   "lang": "Markdown",
+   "lines": 56,
+   "about": "CHRONOS volunteer research pilot: participant information and consent template"
+  },
+  {
+   "path": "research_discovery/docs/CITIZEN_PREREGISTRATION_TEMPLATE.md",
+   "lang": "Markdown",
+   "lines": 67,
+   "about": "CHRONOS citizen-science pilot: preregistration template"
+  },
+  {
+   "path": "research_discovery/docs/CITIZEN_SCIENCE_STUDY_PROTOCOL.md",
+   "lang": "Markdown",
+   "lines": 57,
+   "about": "CHRONOS citizen-science pilot protocol"
+  },
+  {
+   "path": "research_discovery/docs/EXECUTION_ATTEMPT_2026-11-14.md",
+   "lang": "Markdown",
+   "lines": 90,
+   "about": "CHRONOS empirical execution report \u2014 14 November 2026"
+  },
+  {
+   "path": "research_discovery/docs/INDEPENDENT_VALIDATION_PROTOCOL.md",
+   "lang": "Markdown",
+   "lines": 59,
+   "about": "SPHEREx real-sky validation protocol"
+  },
+  {
+   "path": "research_discovery/docs/PLANET_X_EPHEMERIS_ASSESSMENT.md",
+   "lang": "Markdown",
+   "lines": 43,
+   "about": "Planet X / Planet Nine: what can and cannot be predicted"
+  },
+  {
+   "path": "research_discovery/docs/PLANET_X_PUBLISHED_CANDIDATE_DIAGNOSTIC.md",
+   "lang": "Markdown",
+   "lines": 44,
+   "about": "Published IRAS\u2013AKARI Planet Nine candidate: independent coordinate diagnostic"
+  },
+  {
+   "path": "research_discovery/docs/REAL_DATA_DISCOVERY_AND_EVIDENCE.md",
+   "lang": "Markdown",
+   "lines": 141,
+   "about": "CHRONOS: real-data discovery and evidence report"
+  },
+  {
+   "path": "research_discovery/docs/REAL_DATA_RUNBOOK.md",
+   "lang": "Markdown",
+   "lines": 135,
+   "about": "CHRONOS real-data runbook"
+  },
+  {
+   "path": "research_discovery/docs/REAL_SAMPLE_OBSERVATION.md",
+   "lang": "Markdown",
+   "lines": 31,
+   "about": "Official public SPHEREx observation example"
+  },
+  {
+   "path": "research_discovery/docs/RESEARCH_STATUS.md",
+   "lang": "Markdown",
+   "lines": 30,
+   "about": "CHRONOS real-data research completion ledger"
+  },
+  {
+   "path": "research_discovery/docs/SOLO_REVIEW_NOT_CITIZEN_SCIENCE.md",
+   "lang": "Markdown",
+   "lines": 31,
+   "about": "Solo AI/researcher screening versus citizen science"
+  },
+  {
+   "path": "research_discovery/planet9/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "planet9 research tools."
+  },
+  {
+   "path": "research_discovery/planet9/compare_horizons.py",
+   "lang": "Python",
+   "lines": 36,
+   "about": "Compare predicted RA/Dec against an independently exported JPL Horizons table."
+  },
+  {
+   "path": "research_discovery/planet9/ensemble_ephemeris.py",
+   "lang": "Python",
+   "lines": 154,
+   "about": "Propagate a published Planet Nine posterior/reference population as an ensemble."
+  },
+  {
+   "path": "research_discovery/planet9/inspect_reference_population.py",
+   "lang": "Python",
+   "lines": 77,
+   "about": "Download and fully inspect the public CaltechDATA Planet Nine v3 files."
+  },
+  {
+   "path": "research_discovery/planet9/published_candidate_diagnostic.py",
+   "lang": "Python",
+   "lines": 93,
+   "about": "Reproduce the angular-motion diagnostic for the published IRAS/AKARI pair."
+  },
+  {
+   "path": "research_discovery/spherex/ARCHIVE_MANIFEST.md",
+   "lang": "Markdown",
+   "lines": 10,
+   "about": "CHRONOS archive manifest schema"
+  },
+  {
+   "path": "research_discovery/spherex/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "spherex research tools."
+  },
+  {
+   "path": "research_discovery/spherex/analyze_splices_candidate_inventory.py",
+   "lang": "Python",
+   "lines": 1209,
+   "about": "Audit SPLICES candidate-label overlap, IDs, missingness and DR1/QR3 footprints."
+  },
+  {
+   "path": "research_discovery/spherex/apply_compatibility_matrix.py",
+   "lang": "Python",
+   "lines": 134,
+   "about": "Apply only audit-revalidated, unambiguous calibration groups to an archive manifest."
+  },
+  {
+   "path": "research_discovery/spherex/archive_manifest.py",
+   "lang": "Python",
+   "lines": 175,
+   "about": "Versioned SPHEREx archive manifest, retrieval provenance and integrity checks."
+  },
+  {
+   "path": "research_discovery/spherex/audit_mef_calibration.py",
+   "lang": "Python",
+   "lines": 108,
+   "about": "Audit a SPHEREx Level-2 MEF and related calibration products without guessing provenance."
+  },
+  {
+   "path": "research_discovery/spherex/calibration_compatibility.py",
+   "lang": "Python",
+   "lines": 304,
+   "about": "Fail-closed science, spectral-WCS and pixel-area calibration compatibility."
+  },
+  {
+   "path": "research_discovery/spherex/calibration_matrix.py",
+   "lang": "Python",
+   "lines": 67,
+   "about": "Build the science/calibration candidate matrix from real, file-backed evidence."
+  },
+  {
+   "path": "research_discovery/spherex/coordinate_landmark_audit.py",
+   "lang": "Python",
+   "lines": 45,
+   "about": "Compare sky-to-detector predictions with independently sourced detector landmarks."
+  },
+  {
+   "path": "research_discovery/spherex/coordinate_transform.py",
+   "lang": "Python",
+   "lines": 163,
+   "about": "One fail-closed coordinate path between sky, cutout and native detector pixels."
+  },
+  {
+   "path": "research_discovery/spherex/discover_calibrations.py",
+   "lang": "Python",
+   "lines": 142,
+   "about": "Discover versioned public SPHEREx calibration products in IRSA directories."
+  },
+  {
+   "path": "research_discovery/spherex/discover_dr1.py",
+   "lang": "Python",
+   "lines": 190,
+   "about": "Discover/download public SPHEREx DR1 and QR3 Level-2 MEFs through IRSA SIA2."
+  },
+  {
+   "path": "research_discovery/spherex/electron_conversion.py",
+   "lang": "Python",
+   "lines": 82,
+   "about": "Derive a per-pixel electrons-per-image-unit map from SPHEREx absolute gain."
+  },
+  {
+   "path": "research_discovery/spherex/extract_epsf_stamp.py",
+   "lang": "Python",
+   "lines": 185,
+   "about": "Extract the position-specific SPHEREx DR1/QR3 ePSF as a native-pixel stamp."
+  },
+  {
+   "path": "research_discovery/spherex/fetch_calibration.py",
+   "lang": "Python",
+   "lines": 98,
+   "about": "Download one explicitly selected calibration URI without claiming it matches science data."
+  },
+  {
+   "path": "research_discovery/spherex/fetch_native_mefs.py",
+   "lang": "Python",
+   "lines": 248,
+   "about": "Query IRSA's documented SPHEREx TAP tables and fetch native Level-2 MEFs."
+  },
+  {
+   "path": "research_discovery/spherex/flag_policy.py",
+   "lang": "Python",
+   "lines": 62,
+   "about": "Named SPHEREx Level-2 flag bits and explicit mask policies."
+  },
+  {
+   "path": "research_discovery/spherex/independent_calibration_review.py",
+   "lang": "Python",
+   "lines": 286,
+   "about": "Signed independent SPHEREx calibration-review records."
+  },
+  {
+   "path": "research_discovery/spherex/independent_reproduction.py",
+   "lang": "Python",
+   "lines": 595,
+   "about": "Signed independent astronomical reproduction records and fail-closed readiness."
+  },
+  {
+   "path": "research_discovery/spherex/irsa_spectrophotometry.py",
+   "lang": "Python",
+   "lines": 524,
+   "about": "Import IRSA SPHEREx Spectrophotometry Tool rows into the CHRONOS source-series schema."
+  },
+  {
+   "path": "research_discovery/spherex/merge_archive_manifests.py",
+   "lang": "Python",
+   "lines": 33,
+   "about": "Merge science and calibration manifests without deduplicating away conflicts."
+  },
+  {
+   "path": "research_discovery/spherex/native_mef_audit.py",
+   "lang": "Python",
+   "lines": 382,
+   "about": "Inspect native SPHEREx Level-2 MEFs and detector-matched CWAVE/CBAND calibration."
+  },
+  {
+   "path": "research_discovery/spherex/probe_calibration_tap.py",
+   "lang": "Python",
+   "lines": 135,
+   "about": "Inspect IRSA TAP_SCHEMA for the live SPHEREx calibration inventory."
+  },
+  {
+   "path": "research_discovery/spherex/probe_irsa_calibration_access.py",
+   "lang": "Python",
+   "lines": 277,
+   "about": "Probe the documented IRSA DR1 calibration TAP collection and directory endpoints."
+  },
+  {
+   "path": "research_discovery/spherex/probe_spherex_s3_mirror.py",
+   "lang": "Python",
+   "lines": 93,
+   "about": "Probe the public NASA/IPAC IRSA SPHEREx S3 mirror for calibration keys."
+  },
+  {
+   "path": "research_discovery/spherex/psf_physicality.py",
+   "lang": "Python",
+   "lines": 79,
+   "about": "Conservative physicality checks for interpolated empirical PSF stamps."
+  },
+  {
+   "path": "research_discovery/spherex/query_provenance_inputs.py",
+   "lang": "Python",
+   "lines": 144,
+   "about": "Resolve calibration inputs linked to an exact SPHEREx science artifact via IRSA TAP."
+  },
+  {
+   "path": "research_discovery/spherex/reproject_detector_template.py",
+   "lang": "Python",
+   "lines": 178,
+   "about": "Map a detector-coordinate calibration template into a sky-aligned output grid."
+  },
+  {
+   "path": "research_discovery/spherex/retrieve_m101_dr1_calibrations.py",
+   "lang": "Python",
+   "lines": 368,
+   "about": "Download the original M101 DR1 D2 MEF and its release-specific D2 calibrations from IRSA's public S3 mirror."
+  },
+  {
+   "path": "research_discovery/spherex/run_chronos5_real_preflight.py",
+   "lang": "Python",
+   "lines": 523,
+   "about": "Pre-registered SPHEREx DR1 real-field calibration and injection/recovery preflight."
+  },
+  {
+   "path": "research_discovery/spherex/run_multifield_jy_pilot.py",
+   "lang": "Python",
+   "lines": 884,
+   "about": "Sequential multi-region SPHEREx DR1 D2 calibrated Jy injection pilot."
+  },
+  {
+   "path": "research_discovery/spherex/run_provenance_calibration_audit.py",
+   "lang": "Python",
+   "lines": 719,
+   "about": "Retrieve the exact calibration inputs linked to a SPHEREx Level-2 MEF."
+  },
+  {
+   "path": "research_discovery/spherex/run_real_field_audit.py",
+   "lang": "Python",
+   "lines": 1006,
+   "about": "Retrieve one real SPHEREx field and audit detector-matched public calibrations."
+  },
+  {
+   "path": "research_discovery/spherex/run_source_timeseries_pilot.py",
+   "lang": "Python",
+   "lines": 257,
+   "about": "Run a provenance-verified four-epoch native SPHEREx source-photometry pilot."
+  },
+  {
+   "path": "research_discovery/spherex/source_photometry.py",
+   "lang": "Python",
+   "lines": 782,
+   "about": "Provenance-bound PSF photometry for native SPHEREx Level-2 images."
+  },
+  {
+   "path": "research_discovery/spherex/source_poisson_reproduction.py",
+   "lang": "Python",
+   "lines": 319,
+   "about": "Independent recomputation of M101 calibrated-Jy source-Poisson bookkeeping."
+  },
+  {
+   "path": "research_discovery/spherex/source_timeseries.py",
+   "lang": "Python",
+   "lines": 774,
+   "about": "Assemble a provenance-verified source-level SPHEREx spectral time series."
+  },
+  {
+   "path": "research_discovery/spherex/summarize_injection_diagnostics.py",
+   "lang": "Python",
+   "lines": 164,
+   "about": "Print a compact per-field summary of injection/recovery diagnostics."
+  },
+  {
+   "path": "research_discovery/spherex/yso_population_recon.py",
+   "lang": "Python",
+   "lines": 1302,
+   "about": "Predeclared SPLICES/DR1 field reconnaissance for a future YSO population study."
+  },
+  {
+   "path": "research_discovery/tests/conftest.py",
+   "lang": "Python",
+   "lines": 10,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_calibration_tap.py",
+   "lang": "Python",
+   "lines": 57,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_committed_m101_archive_manifest.py",
+   "lang": "Python",
+   "lines": 66,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_independent_calibration_review.py",
+   "lang": "Python",
+   "lines": 218,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_independent_reproduction.py",
+   "lang": "Python",
+   "lines": 426,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_irsa_spectrophotometry.py",
+   "lang": "Python",
+   "lines": 202,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_jy_injection_model.py",
+   "lang": "Python",
+   "lines": 377,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_multifield_jy_pilot.py",
+   "lang": "Python",
+   "lines": 694,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_provenance_calibration_audit.py",
+   "lang": "Python",
+   "lines": 55,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_research_discovery.py",
+   "lang": "Python",
+   "lines": 239,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_source_photometry.py",
+   "lang": "Python",
+   "lines": 416,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_source_poisson_reproduction.py",
+   "lang": "Python",
+   "lines": 67,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_source_timeseries.py",
+   "lang": "Python",
+   "lines": 270,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_source_timeseries_pilot.py",
+   "lang": "Python",
+   "lines": 197,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_spherex_electron_conversion.py",
+   "lang": "Python",
+   "lines": 103,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_spherex_yso_population_recon.py",
+   "lang": "Python",
+   "lines": 410,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_splices_candidate_inventory.py",
+   "lang": "Python",
+   "lines": 789,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/tests/test_structured_background.py",
+   "lang": "Python",
+   "lines": 42,
+   "about": ""
+  },
+  {
+   "path": "research_discovery/validation/__init__.py",
+   "lang": "Python",
+   "lines": 2,
+   "about": "validation research tools."
+  },
+  {
+   "path": "research_discovery/validation/injection_recovery.py",
+   "lang": "Python",
+   "lines": 1183,
+   "about": "Blind injection/recovery experiment on a real SPHEREx Level-2 MEF."
+  },
+  {
+   "path": "matlab/diff_z.m",
+   "lang": "MATLAB",
+   "lines": 7,
+   "about": "Significance of a change between two fair co-adds:"
+  },
+  {
+   "path": "matlab/export_lvf_curves.m",
+   "lang": "MATLAB",
+   "lines": 17,
+   "about": "Curves for the website: apparent change of a constant star versus the colour offset"
+  },
+  {
+   "path": "matlab/fair_pair.m",
+   "lang": "MATLAB",
+   "lines": 19,
+   "about": "Fair pair rule for two SPHEREx exposures. Mirrors backend/core.py pair_score."
+  },
+  {
+   "path": "matlab/lvf_false_change.m",
+   "lang": "MATLAB",
+   "lines": 22,
+   "about": "Why SPHEREx cannot be blinked."
+  },
+  {
+   "path": "matlab/motion_court.m",
+   "lang": "MATLAB",
+   "lines": 43,
+   "about": "Motion court: fixed (H0), linear motion (H1), motion plus parallax (H2)."
+  },
+  {
+   "path": "matlab/run_crosscheck.m",
+   "lang": "MATLAB",
+   "lines": 27,
+   "about": "Read cases written by tests/test_matlab_crosscheck.py, compute with the MATLAB"
+  },
+  {
+   "path": "matlab/wilson.m",
+   "lang": "MATLAB",
+   "lines": 9,
+   "about": "Wilson score interval for h successes in n trials."
+  },
+  {
+   "path": "frontend/app.js",
+   "lang": "JavaScript",
+   "lines": 599,
+   "about": ""
+  },
+  {
+   "path": "frontend/causal-lab.css",
+   "lang": "CSS",
+   "lines": 83,
+   "about": ""
+  },
+  {
+   "path": "frontend/causal-lab.html",
+   "lang": "HTML",
+   "lines": 227,
+   "about": "Causal Sky Twin | Nakshatra CHRONOS"
+  },
+  {
+   "path": "frontend/causal-lab.js",
+   "lang": "JavaScript",
+   "lines": 678,
+   "about": ""
+  },
+  {
+   "path": "frontend/charts.js",
+   "lang": "JavaScript",
+   "lines": 137,
+   "about": ""
+  },
+  {
+   "path": "frontend/chronos-lab.css",
+   "lang": "CSS",
+   "lines": 2,
+   "about": ""
+  },
+  {
+   "path": "frontend/chronos-lab.html",
+   "lang": "HTML",
+   "lines": 60,
+   "about": "CHRONOS Research Laboratories"
+  },
+  {
+   "path": "frontend/chronos-lab.js",
+   "lang": "JavaScript",
+   "lines": 105,
+   "about": ""
+  },
+  {
+   "path": "frontend/extras.js",
+   "lang": "JavaScript",
+   "lines": 53,
+   "about": ""
+  },
+  {
+   "path": "frontend/home.css",
+   "lang": "CSS",
+   "lines": 240,
+   "about": ""
+  },
+  {
+   "path": "frontend/home.html",
+   "lang": "HTML",
+   "lines": 388,
+   "about": "Nakshatra CHRONOS: telling real change from false change in the SPHEREx infrared sky"
+  },
+  {
+   "path": "frontend/home.js",
+   "lang": "JavaScript",
+   "lines": 424,
+   "about": ""
+  },
+  {
+   "path": "frontend/index.html",
+   "lang": "HTML",
+   "lines": 193,
+   "about": "Nakshatra CHRONOS \u00b7 an observatory for change in the SPHEREx sky"
+  },
+  {
+   "path": "frontend/lab.html",
+   "lang": "HTML",
+   "lines": 52,
+   "about": "CHRONOS 4D \u00b7 ten laboratories for the changing infrared sky"
+  },
+  {
+   "path": "frontend/lab.js",
+   "lang": "JavaScript",
+   "lines": 139,
+   "about": ""
+  },
+  {
+   "path": "frontend/mode.js",
+   "lang": "JavaScript",
+   "lines": 2,
+   "about": ""
+  },
+  {
+   "path": "frontend/next.js",
+   "lang": "JavaScript",
+   "lines": 170,
+   "about": ""
+  },
+  {
+   "path": "frontend/story.html",
+   "lang": "HTML",
+   "lines": 380,
+   "about": "CHRONOS. The fair blink for the SPHEREx sky."
+  },
+  {
+   "path": "frontend/story_static.js",
+   "lang": "JavaScript",
+   "lines": 37,
+   "about": ""
+  },
+  {
+   "path": "frontend/style.css",
+   "lang": "CSS",
+   "lines": 109,
+   "about": ""
+  },
+  {
+   "path": "scripts/analyse_citizen_study.py",
+   "lang": "Python",
+   "lines": 29,
+   "about": "Pool the citizen lab study answers of several participants."
+  },
+  {
+   "path": "scripts/build_deck.py",
+   "lang": "Python",
+   "lines": 64,
+   "about": "Build the 7 slide deck as one HTML page and a PDF from docs/deck/slides. Run: python scripts/build_deck.py"
+  },
+  {
+   "path": "scripts/build_lab.py",
+   "lang": "Python",
+   "lines": 31,
+   "about": "Build site/data/lab/<field>.json, the ten CHRONOS 4D laboratories for every prepared field. Run after build_static.py (seconds)."
+  },
+  {
+   "path": "scripts/build_repo_map.py",
+   "lang": "Python",
+   "lines": 75,
+   "about": "Write site/data/repo_map.json: every folder and source file of the project with its size and first doc line."
+  },
+  {
+   "path": "scripts/build_static.py",
+   "lang": "Python",
+   "lines": 100,
+   "about": "Build the static observatory in site/ for GitHub Pages: the full page with prepared practice fields."
+  },
+  {
+   "path": "scripts/calibrate_engine.py",
+   "lang": "Python",
+   "lines": 236,
+   "about": "Train and test the five hypothesis engine on practice fields with a known truth."
+  },
+  {
+   "path": "scripts/chronos_benchmark.py",
+   "lang": "Python",
+   "lines": 196,
+   "about": "Run CHRONOS four-baseline comparisons and sealed blind-field evaluations."
+  },
+  {
+   "path": "scripts/inject_real.py",
+   "lang": "Python",
+   "lines": 185,
+   "about": "Inject known sources into real SPHEREx QR3 exposures, score CHRONOS on real noise, and retrain the engine."
+  },
+  {
+   "path": "scripts/make_architecture.py",
+   "lang": "Python",
+   "lines": 73,
+   "about": "Write frontend/architecture.svg: the CHRONOS data flow, from archive files to the evidence report."
+  },
+  {
+   "path": "scripts/make_figures.py",
+   "lang": "Python",
+   "lines": 254,
+   "about": "Figures for the documents and the deck, from a fresh run of the practice fields and from data/validation.json."
+  },
+  {
+   "path": "scripts/make_notebooks.py",
+   "lang": "Python",
+   "lines": 181,
+   "about": "Write and execute the four notebooks in notebooks/. Run: python scripts/make_notebooks.py"
+  },
+  {
+   "path": "scripts/make_sky_tiles.py",
+   "lang": "Python",
+   "lines": 229,
+   "about": "Whole sky tiles: a change map corrected for coverage, on the practice sky."
+  },
+  {
+   "path": "scripts/make_video.py",
+   "lang": "Python",
+   "lines": 163,
+   "about": "Build the 30 second demo video, docs/media/chronos_demo.mp4, from figures and captures of the observatory page."
+  },
+  {
+   "path": "scripts/prefetch.py",
+   "lang": "Python",
+   "lines": 11,
+   "about": "Fill the cache for the five targets so the demo works with a weak connection. Run: python prefetch.py"
+  },
+  {
+   "path": "scripts/real_data_run.py",
+   "lang": "Python",
+   "lines": 174,
+   "about": "Real-data run of the CHRONOS 4D case studies. Needs internet (run it on GitHub Actions: workflow 'real data')."
+  },
+  {
+   "path": "scripts/record_story.py",
+   "lang": "Python",
+   "lines": 116,
+   "about": "Record the guided story of every star from the full app, so that the hosted page can replay it without a server."
+  },
+  {
+   "path": "scripts/verify_independent_astronomical_reproduction.py",
+   "lang": "Python",
+   "lines": 46,
+   "about": "Verify a signed independent astronomical reproduction bundle."
+  },
+  {
+   "path": "scripts/verify_passport.py",
+   "lang": "Python",
+   "lines": 17,
+   "about": "Verify a CHRONOS evidence passport without trusting CHRONOS: python scripts/verify_passport.py passport.json"
+  },
+  {
+   "path": "scripts/verify_spherex_calibration_review.py",
+   "lang": "Python",
+   "lines": 72,
+   "about": "Verify an externally signed SPHEREx calibration review against pinned inputs."
+  },
+  {
+   "path": "scripts/addons/inspect_spherex_fits.py",
+   "lang": "Python",
+   "lines": 17,
+   "about": "Print FITS HDU names, shapes, table columns and selected header metadata."
+  },
+  {
+   "path": "scripts/addons/test_addons.py",
+   "lang": "Python",
+   "lines": 6,
+   "about": "Run add-on tests without modifying a CHRONOS checkout."
+  },
+  {
+   "path": "scripts/addons/verify_passport.py",
+   "lang": "Python",
+   "lines": 11,
+   "about": "Verify a saved CHRONOS evidence passport."
+  },
+  {
+   "path": "tests/conftest.py",
+   "lang": "Python",
+   "lines": 10,
+   "about": ""
+  },
+  {
+   "path": "tests/test_api.py",
+   "lang": "Python",
+   "lines": 93,
+   "about": "Every endpoint, for all five targets, on the practice sky."
+  },
+  {
+   "path": "tests/test_chronos5_research.py",
+   "lang": "Python",
+   "lines": 774,
+   "about": ""
+  },
+  {
+   "path": "tests/test_chronos_addons.py",
+   "lang": "Python",
+   "lines": 152,
+   "about": ""
+  },
+  {
+   "path": "tests/test_chronos_bayesian.py",
+   "lang": "Python",
+   "lines": 85,
+   "about": ""
+  },
+  {
+   "path": "tests/test_chronos_benchmark_superiority.py",
+   "lang": "Python",
+   "lines": 75,
+   "about": ""
+  },
+  {
+   "path": "tests/test_chronos_blind_detection_handoff.py",
+   "lang": "Python",
+   "lines": 296,
+   "about": ""
+  },
+  {
+   "path": "tests/test_chronos_custodian_attestation.py",
+   "lang": "Python",
+   "lines": 213,
+   "about": ""
+  },
+  {
+   "path": "tests/test_chronos_evidence_graph.py",
+   "lang": "Python",
+   "lines": 113,
+   "about": ""
+  },
+  {
+   "path": "tests/test_chronos_sessions_12_20.py",
+   "lang": "Python",
+   "lines": 238,
+   "about": ""
+  },
+  {
+   "path": "tests/test_core.py",
+   "lang": "Python",
+   "lines": 176,
+   "about": ""
+  },
+  {
+   "path": "tests/test_extras.py",
+   "lang": "Python",
+   "lines": 52,
+   "about": ""
+  },
+  {
+   "path": "tests/test_lab.py",
+   "lang": "Python",
+   "lines": 60,
+   "about": ""
+  },
+  {
+   "path": "tests/test_live.py",
+   "lang": "Python",
+   "lines": 268,
+   "about": "The real data path, offline. Files are built in the layout that the IRSA documents describe. The archive is not called."
+  },
+  {
+   "path": "tests/test_matlab_crosscheck.py",
+   "lang": "Python",
+   "lines": 81,
+   "about": "The MATLAB/Octave re-implementation in matlab/ must give the same answers as the Python code."
+  },
+  {
+   "path": "tests/test_multidimensional_selection.py",
+   "lang": "Python",
+   "lines": 460,
+   "about": ""
+  },
+  {
+   "path": "tests/test_next.py",
+   "lang": "Python",
+   "lines": 142,
+   "about": "The next steps: Rubin cross match, Hugging Face publishing, the citizen study and the sky tiles. No network is used."
+  },
+  {
+   "path": "tests/test_observatory.py",
+   "lang": "Python",
+   "lines": 194,
+   "about": "The observatory: practice sky rules, three detectors, the engine, the investigator, the API and the live path offline."
+  },
+  {
+   "path": "tests/test_research_discovery_sessions_02_06.py",
+   "lang": "Python",
+   "lines": 679,
+   "about": ""
+  },
+  {
+   "path": "tests/test_sessions_12_16.py",
+   "lang": "Python",
+   "lines": 1176,
+   "about": ""
+  },
+  {
+   "path": "tests/test_source_linked_yso_rate.py",
+   "lang": "Python",
+   "lines": 225,
+   "about": ""
+  },
+  {
+   "path": "tests/test_wavelength_provenance_gate.py",
+   "lang": "Python",
+   "lines": 179,
+   "about": ""
+  },
+  {
+   "path": "notebooks/01_fair_pairs_and_false_change.ipynb",
+   "lang": "Notebook",
+   "lines": 226,
+   "about": ""
+  },
+  {
+   "path": "notebooks/02_discovery_by_disagreement.ipynb",
+   "lang": "Notebook",
+   "lines": 239,
+   "about": ""
+  },
+  {
+   "path": "notebooks/03_validation_and_calibration.ipynb",
+   "lang": "Notebook",
+   "lines": 226,
+   "about": ""
+  },
+  {
+   "path": "notebooks/04_live_archive_walkthrough.ipynb",
+   "lang": "Notebook",
+   "lines": 177,
+   "about": ""
+  },
+  {
+   "path": "notebooks/kaggle/PlanetNine_Candidate_Assessment_Kaggle.ipynb",
+   "lang": "Notebook",
+   "lines": 620,
+   "about": ""
+  },
+  {
+   "path": "notebooks/kaggle/SPHEREx_DR1_Real_Data_Validation_Kaggle.ipynb",
+   "lang": "Notebook",
+   "lines": 1284,
+   "about": ""
+  },
+  {
+   "path": "docs/ARCHITECTURE.md",
+   "lang": "Markdown",
+   "lines": 40,
+   "about": "Architecture"
+  },
+  {
+   "path": "docs/CHANGELOG.md",
+   "lang": "Markdown",
+   "lines": 79,
+   "about": "Change log"
+  },
+  {
+   "path": "docs/CHRONOS_4D.md",
+   "lang": "Markdown",
+   "lines": 26,
+   "about": "CHRONOS 4D: space \u00d7 time \u00d7 wavelength \u00d7 evidence"
+  },
+  {
+   "path": "docs/CHRONOS_5_20_SESSION_WORKFLOW.md",
+   "lang": "Markdown",
+   "lines": 524,
+   "about": "CHRONOS 5.0: 20-session implementation and research workflow"
+  },
+  {
+   "path": "docs/CHRONOS_5_CAPABILITY_LEDGER.md",
+   "lang": "Markdown",
+   "lines": 182,
+   "about": "CHRONOS 5.0 capability ledger \u2014 25 November 2026"
+  },
+  {
+   "path": "docs/CHRONOS_5_EMPIRICAL_STATUS_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 210,
+   "about": "CHRONOS 5 empirical status \u2014 25 November 2026"
+  },
+  {
+   "path": "docs/CHRONOS_5_INDEPENDENT_REPRODUCTION_PROTOCOL.md",
+   "lang": "Markdown",
+   "lines": 64,
+   "about": "CHRONOS 5 independent astronomical reproduction protocol"
+  },
+  {
+   "path": "docs/CHRONOS_5_INDEPENDENT_REPRODUCTION_VERIFIER_2026-11-26.md",
+   "lang": "Markdown",
+   "lines": 41,
+   "about": "Independent astronomical reproduction verifier and release-readiness gate"
+  },
+  {
+   "path": "docs/CHRONOS_5_RESEARCH_SPEC.md",
+   "lang": "Markdown",
+   "lines": 99,
+   "about": "CHRONOS 5.0 research specification"
+  },
+  {
+   "path": "docs/CHRONOS_5_SELECTION_FUNCTION_SPEC.md",
+   "lang": "Markdown",
+   "lines": 111,
+   "about": "CHRONOS 5 source-selection function specification"
+  },
+  {
+   "path": "docs/CHRONOS_5_SESSIONS_07_11_IMPLEMENTATION.md",
+   "lang": "Markdown",
+   "lines": 318,
+   "about": "CHRONOS 5.0 Sessions 07\u201311 implementation notes"
+  },
+  {
+   "path": "docs/CHRONOS_5_SESSIONS_07_11_IMPLEMENTATION_STATUS_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 135,
+   "about": "CHRONOS 5.0 \u2014 Sessions 07\u201311 implementation and evidence status"
+  },
+  {
+   "path": "docs/CHRONOS_5_SESSIONS_12_16_IMPLEMENTATION.md",
+   "lang": "Markdown",
+   "lines": 145,
+   "about": "CHRONOS 5.0 Sessions 12\u201316 implementation notes"
+  },
+  {
+   "path": "docs/CHRONOS_5_SESSIONS_12_20_IMPLEMENTATION.md",
+   "lang": "Markdown",
+   "lines": 241,
+   "about": "CHRONOS 5 Sessions 12\u201320 implementation"
+  },
+  {
+   "path": "docs/CHRONOS_5_SESSIONS_12_20_REMAINING_WORK_STATUS_2026-11-26.md",
+   "lang": "Markdown",
+   "lines": 47,
+   "about": "CHRONOS 5 Sessions 12\u201320: remaining work status \u2014 26 November 2026"
+  },
+  {
+   "path": "docs/CHRONOS_5_SOURCE_LINKED_EVENT_YIELD_CONTRACT.md",
+   "lang": "Markdown",
+   "lines": 47,
+   "about": "CHRONOS source-linked event-yield input contract"
+  },
+  {
+   "path": "docs/CHRONOS_BAYESIAN_LINEAR_POSTERIOR_PREDICTIVE.md",
+   "lang": "Markdown",
+   "lines": 56,
+   "about": "Bayesian linear measurement inference in CHRONOS"
+  },
+  {
+   "path": "docs/CHRONOS_CUSTODIAN_OPERATIONS.md",
+   "lang": "Markdown",
+   "lines": 166,
+   "about": "CHRONOS independent custodian operations"
+  },
+  {
+   "path": "docs/CHRONOS_EXTERNAL_REVIEWER_HANDOFF_2026-11-26.md",
+   "lang": "Markdown",
+   "lines": 160,
+   "about": "CHRONOS external scientific-review handoff \u2014 26 November 2026"
+  },
+  {
+   "path": "docs/CHRONOS_FIELD_INDEPENDENCE_ATTESTATION.md",
+   "lang": "Markdown",
+   "lines": 58,
+   "about": "CHRONOS signed independent-field attestation contract"
+  },
+  {
+   "path": "docs/CHRONOS_PROSPECTIVE_PREREGISTRATION_AND_BLIND_SP_HEREX.md",
+   "lang": "Markdown",
+   "lines": 94,
+   "about": "CHRONOS prospective preregistration and SPHEREx blind evaluation protocol"
+  },
+  {
+   "path": "docs/CHRONOS_SESSIONS_02_06_IMPLEMENTATION.md",
+   "lang": "Markdown",
+   "lines": 122,
+   "about": "CHRONOS Sessions 02\u201306: archive, calibration, coordinates and injection"
+  },
+  {
+   "path": "docs/CITATIONS.md",
+   "lang": "Markdown",
+   "lines": 75,
+   "about": "Sources"
+  },
+  {
+   "path": "docs/DATA.md",
+   "lang": "Markdown",
+   "lines": 44,
+   "about": "Data"
+  },
+  {
+   "path": "docs/EMPIRICAL_ACCEPTANCE_STATUS_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 201,
+   "about": "CHRONOS 5 empirical acceptance status \u2014 2026-11-25"
+  },
+  {
+   "path": "docs/LIMITS.md",
+   "lang": "Markdown",
+   "lines": 59,
+   "about": "Limits"
+  },
+  {
+   "path": "docs/METHODS.md",
+   "lang": "Markdown",
+   "lines": 72,
+   "about": "Methods"
+  },
+  {
+   "path": "docs/OBSERVATION_FEASIBILITY_ATTESTATION.md",
+   "lang": "Markdown",
+   "lines": 78,
+   "about": "Observation-planner feasibility attestation"
+  },
+  {
+   "path": "docs/PITCH.md",
+   "lang": "Markdown",
+   "lines": 23,
+   "about": "Pitch"
+  },
+  {
+   "path": "docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md",
+   "lang": "Markdown",
+   "lines": 23,
+   "about": "Preregistration: the sky-aware noise rule on held-out fields"
+  },
+  {
+   "path": "docs/SPHEREX_GAIN_TO_ELECTRON_CALIBRATION_REVIEW_PACKET_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 163,
+   "about": "SPHEREx DR1 D2 absolute-gain to electron conversion \u2014 independent calibration review packet"
+  },
+  {
+   "path": "docs/SPHEREX_LOCAL_SNR_PEAK_SELECTION_DIAGNOSTICS_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 66,
+   "about": "SPHEREx M101 local-SNR versus peak-selection diagnostic"
+  },
+  {
+   "path": "docs/SPHEREX_LUPUS_III_ZERO_RECOVERY_INVESTIGATION_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 120,
+   "about": "SPHEREx Lupus III zero-recovery anomaly \u2014 evidence note"
+  },
+  {
+   "path": "docs/SPHEREX_M101_DR1_D2_REAL_DATA_PILOT_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 203,
+   "about": "SPHEREx M101 DR1 D2 real-data pilot"
+  },
+  {
+   "path": "docs/SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 92,
+   "about": "SPHEREx six-region calibrated-Jy exploratory pilot \u2014 25 November 2026"
+  },
+  {
+   "path": "docs/SPHEREX_ORION_FOUR_EPOCH_SOURCE_PHOTOMETRY_PILOT_2026-11-26.md",
+   "lang": "Markdown",
+   "lines": 78,
+   "about": "Orion A four-epoch SPHEREx source-photometry pilot"
+  },
+  {
+   "path": "docs/SPHEREX_SOURCE_TIMESERIES_IMPORT_2026-11-26.md",
+   "lang": "Markdown",
+   "lines": 154,
+   "about": "SPHEREx source-level time-series import and verification"
+  },
+  {
+   "path": "docs/SPHEREX_SPLICES_DR1_RECON_2026-11-25.md",
+   "lang": "Markdown",
+   "lines": 91,
+   "about": "SPHEREx DR1 / QR3 and SPLICES regional reconnaissance \u2014 25 November 2026"
+  },
+  {
+   "path": "docs/VALIDATION.md",
+   "lang": "Markdown",
+   "lines": 90,
+   "about": "Validation"
+  },
+  {
+   "path": "docs/addons/API_EXAMPLES.md",
+   "lang": "Markdown",
+   "lines": 47,
+   "about": "Optional API examples"
+  },
+  {
+   "path": "docs/addons/CHRONOS_RESEARCH_EXTENSIONS.md",
+   "lang": "Markdown",
+   "lines": 79,
+   "about": "Nakshatra CHRONOS: research extension roadmap"
+  },
+  {
+   "path": "docs/addons/INSTALLATION.md",
+   "lang": "Markdown",
+   "lines": 80,
+   "about": "Local installation and integration"
+  },
+  {
+   "path": "docs/addons/SPHEREX_DR1_ADAPTER_GUIDE.md",
+   "lang": "Markdown",
+   "lines": 140,
+   "about": "SPHEREx DR1 integration and scientific data handling"
+  },
+  {
+   "path": ".github/workflows/chronos5_real_data_preflight.yml",
+   "lang": "Workflow",
+   "lines": 49,
+   "about": "CHRONOS 5 DR1 real-data preflight"
+  },
+  {
+   "path": ".github/workflows/irsa-calibration-probe.yml",
+   "lang": "Workflow",
+   "lines": 42,
+   "about": "IRSA SPHEREx calibration access probe"
+  },
+  {
+   "path": ".github/workflows/irsa-provenance-inputs.yml",
+   "lang": "Workflow",
+   "lines": 42,
+   "about": "IRSA SPHEREx exact calibration provenance lookup"
+  },
+  {
+   "path": ".github/workflows/pages.yml",
+   "lang": "Workflow",
+   "lines": 29,
+   "about": "pages"
+  },
+  {
+   "path": ".github/workflows/real_data.yml",
+   "lang": "Workflow",
+   "lines": 30,
+   "about": "real data"
+  },
+  {
+   "path": ".github/workflows/real_injection.yml",
+   "lang": "Workflow",
+   "lines": 58,
+   "about": "real data injection"
+  },
+  {
+   "path": ".github/workflows/spherex-holdout-sky-aware-test.yml",
+   "lang": "Workflow",
+   "lines": 56,
+   "about": "SPHEREx held-out sky-aware noise test"
+  },
+  {
+   "path": ".github/workflows/spherex-m101-calibration-audit.yml",
+   "lang": "Workflow",
+   "lines": 55,
+   "about": "SPHEREx M101 real science and calibration audit"
+  },
+  {
+   "path": ".github/workflows/spherex-multifield-jy-pilot.yml",
+   "lang": "Workflow",
+   "lines": 73,
+   "about": "SPHEREx multi-field calibrated Jy pilot"
+  },
+  {
+   "path": ".github/workflows/spherex-real-field-audit.yml",
+   "lang": "Workflow",
+   "lines": 80,
+   "about": "SPHEREx real field retrieval and audit"
+  },
+  {
+   "path": ".github/workflows/spherex-s3-mirror-probe.yml",
+   "lang": "Workflow",
+   "lines": 42,
+   "about": "SPHEREx public S3 mirror calibration probe"
+  },
+  {
+   "path": ".github/workflows/spherex-source-timeseries-pilot.yml",
+   "lang": "Workflow",
+   "lines": 59,
+   "about": "SPHEREx four-epoch Orion A source-photometry pilot"
+  },
+  {
+   "path": ".github/workflows/spherex-yso-population-recon.yml",
+   "lang": "Workflow",
+   "lines": 60,
+   "about": "SPHEREx SPLICES YSO population reconnaissance"
+  },
+  {
+   "path": ".github/workflows/tests.yml",
+   "lang": "Workflow",
+   "lines": 166,
+   "about": "tests"
+  }
+ ],
+ "folders": [
+  {
+   "folder": "research_discovery/spherex",
+   "files": 39,
+   "lines": 13048
+  },
+  {
+   "folder": "tests",
+   "files": 22,
+   "lines": 5741
+  },
+  {
+   "folder": "backend",
+   "files": 12,
+   "lines": 5121
+  },
+  {
+   "folder": "docs",
+   "files": 43,
+   "lines": 4943
+  },
+  {
+   "folder": "research_discovery/tests",
+   "files": 18,
+   "lines": 4638
+  },
+  {
+   "folder": "frontend",
+   "files": 20,
+   "lines": 4078
+  },
+  {
+   "folder": "backend/chronos_causal",
+   "files": 18,
+   "lines": 3734
+  },
+  {
+   "folder": "notebooks",
+   "files": 6,
+   "lines": 2772
+  },
+  {
+   "folder": "backend/chronos_benchmark",
+   "files": 9,
+   "lines": 2734
+  },
+  {
+   "folder": "scripts",
+   "files": 22,
+   "lines": 2286
+  },
+  {
+   "folder": "backend/chronos_population",
+   "files": 6,
+   "lines": 2011
+  },
+  {
+   "folder": "backend/chronos_addons",
+   "files": 15,
+   "lines": 1496
+  },
+  {
+   "folder": "research_discovery/validation",
+   "files": 2,
+   "lines": 1185
+  },
+  {
+   "folder": ".github/workflows",
+   "files": 14,
+   "lines": 841
+  },
+  {
+   "folder": "research_discovery/docs",
+   "files": 12,
+   "lines": 784
+  },
+  {
+   "folder": "backend/chronos_spectrotemporal",
+   "files": 3,
+   "lines": 681
+  },
+  {
+   "folder": "research_discovery/planet9",
+   "files": 5,
+   "lines": 362
+  },
+  {
+   "folder": "backend/chronos_identity",
+   "files": 3,
+   "lines": 264
+  },
+  {
+   "folder": "matlab",
+   "files": 7,
+   "lines": 144
+  },
+  {
+   "folder": "research_discovery",
+   "files": 2,
+   "lines": 134
+  },
+  {
+   "folder": "research_discovery/citizen_science",
+   "files": 3,
+   "lines": 75
+  }
+ ],
+ "lines_by_language": {
+  "Python": 43316,
+  "Markdown": 5897,
+  "HTML": 1324,
+  "MATLAB": 144,
+  "JavaScript": 2344,
+  "CSS": 434,
+  "Notebook": 2772,
+  "Workflow": 841
+ },
+ "test_functions": 456,
+ "workflows": 14,
+ "docs": 58
+}

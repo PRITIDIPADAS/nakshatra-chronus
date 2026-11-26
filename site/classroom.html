@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nakshatra CHRONOS classroom kit: why a telescope can fake a change</title>
+<link rel="stylesheet" href="home.css">
+<style>
+.kit { max-width: 980px; margin: 0 auto; padding: 40px clamp(18px, 4vw, 48px) 80px; }
+.kit h1 { font-family: var(--display); font-size: clamp(2.2rem, 4.5vw, 3.6rem); margin-bottom: .2em; }
+.kit .meta { font-family: var(--sans); color: var(--graphite); margin-bottom: 28px; }
+.lesson { list-style: none; padding: 0; counter-reset: s; display: grid; gap: 18px; }
+.lesson li { counter-increment: s; background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 22px 18px 76px; position: relative; }
+.lesson li::before { content: counter(s); position: absolute; left: 22px; top: 14px; font-family: var(--display); font-weight: 700; font-size: 2.4rem; color: var(--sky); }
+.lesson h3 { margin-bottom: .2em; }
+.lesson .t { font-family: var(--sans); font-size: .9rem; color: var(--graphite); }
+.sheet { margin-top: 40px; border-top: 2px solid var(--ink); padding-top: 24px; }
+.sheet table { width: 100%; border-collapse: collapse; font-family: var(--sans); margin: 10px 0 20px; }
+.sheet th, .sheet td { border: 1px solid var(--rule); padding: 8px 10px; text-align: left; }
+.sheet .blank { height: 34px; }
+details { background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 16px; margin-top: 16px; }
+summary { font-family: var(--sans); font-weight: 600; cursor: pointer; }
+.toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0 30px; }
+@media print { .bar, .toolbar, details { display: none; } body { background: #fff; } .lesson li { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="index.html"><span>Nakshatra <b>CHRONOS</b></span></a>
+  <nav aria-label="Pages"><a href="index.html#physics">Filter lab</a><a href="index.html">Project</a><a href="story.html">Story in Bangla</a></nav>
+  <a class="btn small" href="observatory.html">Open the observatory</a>
+</header>
+<main class="kit">
+  <h1>Why a telescope can fake a change</h1>
+  <p class="meta">A 45 minute lesson for ages 14 to 18. Needs one screen per pair of students and this page. No installation.</p>
+  <div class="toolbar">
+    <button class="btn" onclick="window.print()">Print the worksheet</button>
+    <a class="btn ghost" href="index.html#top">Open the blink</a>
+    <a class="btn ghost" href="index.html#physics">Open the filter lab</a>
+  </div>
+
+  <ol class="lesson">
+    <li><h3>Blink two pictures</h3><p class="t">5 minutes</p><p>Open the project page. The left panel flicks between two pictures of the same patch of sky. Count the circled spots in the difference with “Naive pair”, then with “Fair pair”. Pluto was found in 1930 by flicking two photographs like this.</p></li>
+    <li><h3>Move the star across the filter</h3><p class="t">10 minutes</p><p>In the filter lab, drag marker 2 away from marker 1. The star never changes, yet the camera reports a change. Fill in the first table for three star temperatures.</p></li>
+    <li><h3>Work it out by hand</h3><p class="t">10 minutes</p><p>Array 2 runs from 1.10 to 1.62 µm with resolving power R = 41. The colour at column fraction x is λ = 1.10 × (1.62/1.10)<sup>x</sup>. Compute λ at x = 0.32 and x = 0.52, the channel width λ/R, and whether the pair is fair (colours within half a channel).</p></li>
+    <li><h3>Read the real sky</h3><p class="t">10 minutes</p><p>Scroll to “On the real SPHEREx sky”. In which field were the most planted stars found? Which found none, and what does the sky-noise chart say about why?</p></li>
+    <li><h3>Argue about “unknown”</h3><p class="t">10 minutes</p><p>The engine said “unknown” to all 29 sources it found in real QR3 images instead of guessing. Is that a failure or a strength? Each pair writes two sentences, then the class votes.</p></li>
+  </ol>
+
+  <section class="sheet" aria-labelledby="ws">
+    <h2 id="ws">Worksheet</h2>
+    <p>Name ______________________ &nbsp; Partner ______________________</p>
+    <h3>1. Blink</h3>
+    <table><tr><th>Pair</th><th>Spots that look changed</th><th>Really changed</th></tr><tr><td>Naive</td><td class="blank"></td><td class="blank"></td></tr><tr><td>Fair</td><td class="blank"></td><td class="blank"></td></tr></table>
+    <h3>2. Filter lab, array 2, markers about 3 channels apart</h3>
+    <table><tr><th>Star temperature</th><th>Apparent change (%)</th><th>Fair pair? (yes or no)</th></tr><tr><td>3,000 K</td><td class="blank"></td><td class="blank"></td></tr><tr><td>5,800 K</td><td class="blank"></td><td class="blank"></td></tr><tr><td>12,000 K</td><td class="blank"></td><td class="blank"></td></tr></table>
+    <h3>3. By hand</h3>
+    <table><tr><th>Quantity</th><th>Your answer</th></tr><tr><td>λ₁ at x = 0.32</td><td class="blank"></td></tr><tr><td>λ₂ at x = 0.52</td><td class="blank"></td></tr><tr><td>Channel width λ/R</td><td class="blank"></td></tr><tr><td>Offset in channels</td><td class="blank"></td></tr><tr><td>Fair pair?</td><td class="blank"></td></tr></table>
+    <h3>4 and 5. Your argument</h3>
+    <p style="border-bottom:1px solid var(--rule); height: 90px;"></p>
+  </section>
+
+  <details>
+    <summary>Answer key for teachers</summary>
+    <p>1. The naive pair shows 17 spots; the fair pair shows 2, both real (one moving asteroid, one brightening star).</p>
+    <p>2. Hotter stars look fainter when the second visit is redder, cooler stars change little or brighten. None of these pairs is fair.</p>
+    <p>3. λ₁ = 1.245 µm, λ₂ = 1.345 µm, channel width about 0.032 µm, offset about 3.2 channels: not fair. A 5,800 K star reads about 5.7 percent fainter though it never changed.</p>
+    <p>4. Highest recovery was the quiet high-latitude control and M101; Lupus III found none, because glowing dust in the cloud makes the sky 5.5 times noisier than the camera alone.</p>
+    <p>5. There is no single right answer. A good one says that a wrong confident answer costs more than an honest “unknown”, and that “unknown” tells you which measurement to take next.</p>
+  </details>
+</main>
+</body>
+</html>

@@ -16,12 +16,15 @@
   </a>
   <nav aria-label="Sections">
     <a href="#physics">Physics</a>
+    <a href="#workbench">Tools</a>
+    <a href="#film">Film</a>
     <a href="#method">Method</a>
-    <a href="#results">Results</a>
     <a href="#real">Real sky</a>
     <a href="#code">Code</a>
-    <a href="#limits">Limits</a>
+    <a href="#sims">Simulations</a>
+    <a href="#teach">Classroom</a>
   </nav>
+  <button class="btn small ghost" id="atlasOpen" aria-haspopup="dialog">Index <kbd>/</kbd></button>
   <a class="btn small" href="observatory.html">Open the observatory<span class="sr"> (interactive)</span></a>
 </header>
 
@@ -86,6 +89,43 @@
     <a class="g" href="story.html"><span class="g-num">2 languages</span><span class="g-txt">the five minute story of one star, in English and Bangla</span></a>
     <a class="g" href="#real"><span class="g-num">2,421</span><span class="g-txt">young star candidates in five star forming regions matched to 6,214 SPHEREx images</span></a>
     <a class="g" href="#limits"><span class="g-num">0 of 60</span><span class="g-txt">recovered in Lupus III, traced to a sky 5.5 times noisier than the camera, and kept on the record</span></a>
+  </div>
+</section>
+
+
+
+<section id="workbench" class="workbench" aria-labelledby="wbH">
+  <div class="wrap">
+    <h2 id="wbH">Every tool, on this page</h2>
+    <p class="intro">The observatory, the labs, the causal sky twin, the research tools, the story, the slides and the classroom kit all open here. Pick one; press Full screen to work in it.</p>
+    <div class="wb-tabs" role="tablist" aria-label="Tools">
+      <button role="tab" aria-selected="true" data-src="observatory.html" data-note="Twelve chapters on practice fields: sky and time, fair pairs, the difference microscope, candidates, dossiers, validation, Planet X, the citizen lab.">Observatory</button>
+      <button role="tab" aria-selected="false" data-src="lab.html" data-note="Ten laboratories, including the real-data run record and the crosstalk court.">Ten labs</button>
+      <button role="tab" aria-selected="false" data-src="causal-lab.html" data-note="Sky model against detector model, tested measurement by measurement.">Causal sky twin</button>
+      <button role="tab" aria-selected="false" data-src="chronos-lab.html" data-note="Population tools, evidence packages and the young-star reconnaissance.">Research tools</button>
+      <button role="tab" aria-selected="false" data-src="story.html" data-note="The five minute story of one star, in English and Bangla.">Story</button>
+      <button role="tab" aria-selected="false" data-src="deck.html" data-note="The ten slides, with PDF and PowerPoint downloads.">Slides</button>
+      <button role="tab" aria-selected="false" data-src="classroom.html" data-note="A 45 minute lesson with a printable worksheet.">Classroom</button>
+    </div>
+    <div class="wb-frame" id="wbFrame">
+      <div class="wb-bar"><span id="wbNote"></span><span class="wb-actions"><button class="btn small ghost" id="wbFull">Full screen</button><a class="btn small ghost" id="wbOpen" href="observatory.html" target="_blank" rel="noopener">Open in a new tab</a></span></div>
+      <iframe id="wbIframe" title="Observatory" loading="lazy" src="about:blank"></iframe>
+    </div>
+  </div>
+</section>
+
+<section id="film" class="dark film" aria-labelledby="filmH">
+  <div class="wrap">
+    <h2 id="filmH">The whole idea in forty seconds</h2>
+    <div class="film-box">
+      <canvas id="filmCanvas" width="1280" height="720" aria-label="Animated explainer: SPHEREx, its rainbow filter, a false change, fair pairs, five explanations and the real sky"></canvas>
+      <div class="film-ui">
+        <button id="filmPlay" class="btn small ghost light">Pause</button>
+        <div class="film-scenes" id="filmScenes" role="tablist" aria-label="Scenes"></div>
+      </div>
+      <p class="film-cap" id="filmCap" aria-live="polite"></p>
+    </div>
+    <p class="film-alt">Prefer a recording? <a href="media/chronos_demo.mp4">Watch the 30 second walk through the observatory</a>.</p>
   </div>
 </section>
 
@@ -157,6 +197,39 @@
   </div>
 </section>
 
+
+<section id="sims" class="wrap" aria-labelledby="simsH">
+  <h2 id="simsH">Four simulations you can run here</h2>
+  <p class="intro">The blink and the filter lab above are two. These are the other two: how a distant planet moves on the sky, and why a cloud’s own glow hides a star.</p>
+  <div class="two">
+    <article class="sim">
+      <h3>Planet X: parallax against orbit</h3>
+      <canvas id="pxSky" width="560" height="420" aria-label="Apparent path of a distant planet on the sky"></canvas>
+      <div class="sim-controls">
+        <label>Distance <output id="pxDout">480 au</output><input type="range" id="pxD" min="40" max="1200" step="10" value="480"></label>
+        <label>Ecliptic latitude <output id="pxBout">20°</output><input type="range" id="pxB" min="0" max="90" step="1" value="20"></label>
+        <label>Years observed <output id="pxYout">2.0</output><input type="range" id="pxY" min="0.5" max="6" step="0.5" value="2"></label>
+        <label>Position error per visit <output id="pxEout">2.0″</output><input type="range" id="pxE" min="0.5" max="30" step="0.5" value="2"></label>
+      </div>
+      <p class="sim-out" id="pxOut" aria-live="polite"></p>
+    </article>
+    <article class="sim">
+      <h3>A star hidden by a glowing cloud</h3>
+      <div class="sky3">
+        <figure><canvas id="nbImg" width="192" height="192" aria-label="Sky image"></canvas><figcaption>sky with the planted star</figcaption></figure>
+        <figure><canvas id="nbSnr" width="192" height="192" aria-label="Signal to noise with the camera noise only"></canvas><figcaption>camera noise only</figcaption></figure>
+        <figure><canvas id="nbFix" width="192" height="192" aria-label="Signal to noise with the sky-aware noise"></canvas><figcaption>sky-aware noise</figcaption></figure>
+      </div>
+      <div class="sim-controls">
+        <label>Glowing structure <output id="nbAout">7.0</output><input type="range" id="nbA" min="0" max="12" step="0.5" value="7"></label>
+        <label>Planted star <output id="nbKout">2.00 × 5σ</output><input type="range" id="nbK" min="0.5" max="6" step="0.25" value="2"></label>
+        <button class="btn small ghost" id="nbNew">New sky</button>
+      </div>
+      <p class="sim-out" id="nbOut" aria-live="polite"></p>
+    </article>
+  </div>
+</section>
+
 <section id="method" class="wrap" aria-labelledby="methodH">
   <h2 id="methodH">Five questions for every change</h2>
   <ol class="flow">
@@ -167,6 +240,10 @@
     <li><h3>What would prove us wrong?</h3><p>The leading explanation is attacked with the tests most likely to break it before any word of the report is written.</p></li>
   </ol>
   <svg class="flowline" viewBox="0 0 1000 8" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="4" x2="1000" y2="4"/><circle r="4" cy="4" cx="0"><animate attributeName="cx" from="0" to="1000" dur="6s" repeatCount="indefinite"/></circle></svg>
+  <h3 class="flow-h" id="flowH">Where each step lives in the code</h3>
+  <div class="pipe" id="pipe" aria-labelledby="flowH"></div>
+  <div class="pipe-detail" id="pipeDetail" aria-live="polite"></div>
+
 
   <div class="two method-charts">
     <figure>
@@ -232,6 +309,12 @@
       <p>Modelling that structured sky moves the honest 5σ limit in Lupus III up by a factor of 3.1. Planted at that limit, 12 of 40 are found instead of none. The primary rule stays as it was, and both answers are published.</p>
     </div>
   </div>
+
+  <div class="holdout" id="holdout">
+    <h3>A prediction made before looking</h3>
+    <p>The sky-aware rule was built on the seven pilot fields, so those fields cannot test it. Before downloading six new fields (Chamaeleon I, Serpens, Corona Australis, NGC 2264, IC 348 and a southern control), the predictions and the rule for adopting it were committed to the repository: <a href="https://github.com/PRITIDIPADAS/nakshatra-chronus/blob/main/docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md">the preregistration</a>.</p>
+    <div id="holdoutResult" class="holdout-result"><p>The held-out run is on GitHub Actions; its result appears here once published.</p></div>
+  </div>
   <div class="two">
     <figure>
       <img src="figures/sky_tiles_pair.png" alt="Whole sky tiles: raw rate and coverage-corrected rate" loading="lazy">
@@ -259,18 +342,14 @@
   </div>
 </section>
 
-<section class="wrap gallery" aria-labelledby="galH">
-  <h2 id="galH">See it run</h2>
-  <div class="gal">
+<section id="gallery" class="wrap gallery" aria-labelledby="galH">
+  <h2 id="galH">Every figure, screen and film</h2>
+  <p class="intro">Click any picture to open it full size. All are drawn by the project’s own code from simulated data or NASA archive data.</p>
+  <div class="gal" id="gal">
     <figure class="gal-video">
       <video src="media/chronos_demo.mp4" controls muted playsinline preload="metadata" poster="figures/app_sky.png"></video>
       <figcaption>Thirty seconds through the observatory.</figcaption>
     </figure>
-    <figure><a href="observatory.html"><img src="figures/app_sky.png" alt="Observatory, sky and time chapter" loading="lazy"></a><figcaption>Sky and time: every exposure on one grid.</figcaption></figure>
-    <figure><a href="observatory.html"><img src="figures/app_dossier.png" alt="Candidate dossier" loading="lazy"></a><figcaption>A candidate dossier with its evidence.</figcaption></figure>
-    <figure><img src="figures/fair_plane.png" alt="Coverage plane of wavelength against time" loading="lazy"><figcaption>Which exposures make fair pairs.</figcaption></figure>
-    <figure><img src="figures/invisible_motion.png" alt="Motion too small to see by eye, measured" loading="lazy"><figcaption>Motion smaller than a pixel, measured.</figcaption></figure>
-    <figure><img src="figures/calibration.png" alt="Calibration of the five hypothesis engine" loading="lazy"><figcaption>Probabilities that mean what they say.</figcaption></figure>
   </div>
 </section>
 
@@ -317,12 +396,33 @@ python run.py                                   <span class="cm"># full observat
 python -m pytest tests research_discovery/tests <span class="cm"># the whole test suite</span>
 octave --eval "addpath('matlab'); export_lvf_curves('site/data/lvf_curves.json')"
 python scripts/calibrate_engine.py              <span class="cm"># retrain and rescore the engine</span></code></pre>
+
+    <h3 class="flow-h">The whole repository</h3>
+    <div class="repo" id="repo"></div>
+    <div class="repo-search"><label for="repoQ">Find a file</label><input id="repoQ" type="search" placeholder="motion, fair pair, Lupus, matlab"></div>
+    <ul class="repo-files" id="repoFiles"></ul>
     <ul class="stack-list">
       <li><b>Data</b> SPHEREx QR2, QR3 and DR1 from NASA IRSA; Gaia DR3; AllWISE; JPL Horizons and SBIdent; Rubin alerts through ALeRCE</li>
       <li><b>Science code</b> numpy, scipy, astropy, astroquery, scikit-learn, FastAPI</li>
       <li><b>Checks</b> pytest on every push, real archive runs on GitHub Actions, MATLAB cross-check in Octave, SHA-256 sealed evidence passports</li>
       <li><b>Interface</b> plain JavaScript, canvas and SVG, no build step, works offline</li>
     </ul>
+  </div>
+</section>
+
+
+<section id="teach" class="band" aria-labelledby="teachH">
+  <div class="wrap two">
+    <div>
+      <h2 id="teachH">Take it into a classroom</h2>
+      <p>A 45 minute lesson for ages 14 to 18 uses the blink, the filter lab and the real-sky chart. Students count false changes, compute a wavelength by hand and argue about whether “unknown” is a good answer. Printable worksheet and answer key included; the five minute story of one star is in English and Bangla.</p>
+      <div class="ctas"><a class="btn" href="classroom.html">Open the classroom kit</a><a class="btn ghost" href="story.html">Read the story</a></div>
+    </div>
+    <div>
+      <h2>Check it yourself</h2>
+      <p>Every result has a command that reproduces it, and a script that compares a fresh real-data run with the recorded numbers field by field. Written for an astronomer outside the project.</p>
+      <div class="ctas"><a class="btn" href="https://github.com/PRITIDIPADAS/nakshatra-chronus/blob/main/docs/REPRODUCE.md">Reproduction guide</a><a class="btn ghost" href="https://github.com/PRITIDIPADAS/nakshatra-chronus/actions">Real-data runs</a></div>
+    </div>
   </div>
 </section>
 
@@ -369,6 +469,7 @@ python scripts/calibrate_engine.py              <span class="cm"># retrain and r
         <li><a href="causal-lab.html">Causal sky twin workspace</a></li>
         <li><a href="chronos-lab.html">Research tools</a></li>
         <li><a href="story.html">The story of one star, English and Bangla</a></li>
+        <li><a href="classroom.html">Classroom kit and worksheet</a></li>
         <li><a href="deck.html">Slides</a></li>
         <li><a href="media/chronos_demo.mp4">Demo video</a></li>
         <li><a href="https://github.com/PRITIDIPADAS/nakshatra-chronus">Source code on GitHub</a></li>
@@ -382,6 +483,13 @@ python scripts/calibrate_engine.py              <span class="cm"># retrain and r
 </section>
 
 </main>
+
+<nav class="rail" id="rail" aria-label="Chapters"></nav>
+<dialog class="atlas" id="atlas" aria-labelledby="atlasH">
+  <div class="atlas-head"><h2 id="atlasH">Everything in Nakshatra CHRONOS</h2><button class="btn small ghost" id="atlasClose">Close</button></div>
+  <input id="atlasQ" type="search" placeholder="Search pages, simulations, figures, data, code" aria-label="Search the index">
+  <div class="atlas-body" id="atlasBody"></div>
+</dialog>
 <script src="home.js"></script>
 </body>
 </html>
