@@ -522,6 +522,7 @@ def assemble_source_photometry_series(
     *,
     minimum_epochs: int = 2,
     verify_files: bool = True,
+    minimum_band_overlap_fraction: float = 0.5,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Combine native per-exposure fits into one provenance-verified source series.
@@ -539,6 +540,8 @@ def assemble_source_photometry_series(
         or minimum_epochs < 2
     ):
         raise ValueError("minimum_epochs must be an integer of at least two")
+    if not math.isfinite(float(minimum_band_overlap_fraction)) or not 0 < minimum_band_overlap_fraction <= 1:
+        raise ValueError("minimum_band_overlap_fraction must be in (0, 1]")
 
     accepted_products: list[dict[str, Any]] = []
     accepted_measurements: list[dict[str, Any]] = []
@@ -732,7 +735,10 @@ def assemble_source_photometry_series(
             "measurements": accepted_measurements,
         }
         verified_series = assemble_source_timeseries(
-            manifest, minimum_epochs=minimum_epochs, verify_files=verify_files
+            manifest,
+            minimum_epochs=minimum_epochs,
+            verify_files=verify_files,
+            minimum_band_overlap_fraction=minimum_band_overlap_fraction,
         )
         source_summary = verified_series["sources"][0]["time_series_summary"]
         series_status = (
@@ -750,6 +756,8 @@ def assemble_source_photometry_series(
         "input_extraction_results": result_bindings,
         "accepted_measurement_count": len(accepted_measurements),
         "excluded_measurement_count": len(excluded_measurements),
+        "minimum_epochs": int(minimum_epochs),
+        "minimum_band_overlap_fraction": float(minimum_band_overlap_fraction),
         "excluded_measurements": excluded_measurements,
         "series_status": series_status,
         "verified_source_timeseries": verified_series,
