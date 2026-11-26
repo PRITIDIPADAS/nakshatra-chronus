@@ -1,6 +1,6 @@
 """Run a provenance-verified four-epoch native SPHEREx source-photometry pilot."""
 from __future__ import annotations
-import argparse,hashlib,json,os,subprocess,sys,math,traceback
+import argparse,hashlib,json,os,subprocess,sys,math,traceback,re,time
 from datetime import datetime,timezone
 from pathlib import Path
 from typing import Any,Mapping
@@ -11,6 +11,67 @@ SOURCE_CATALOGUE=ROOT/"data"/"spherex_orion_source_catalogue_snapshot.json"
 REPOSITORY="PRITIDIPADAS/nakshatra-chronus"
 SCHEMA="chronos-spherex-source-timeseries-pilot/1.0"
 EPOCH_AUDIT_TIMEOUT_SECONDS=1500
+EPOCH_AUDIT_MAX_ATTEMPTS=3
+EPOCH_AUDIT_RETRY_DELAYS_SECONDS=(5,15)
+TRANSIENT_IRSA_ERROR_PATTERNS=(
+ r"Connection refused",
+ r"Connection reset",
+ r"Temporary failure in name resolution",
+ r"Max retries exceeded",
+ r"Read timed out",
+ r"ConnectTimeout",
+ r"\b502\b",
+ r"\b503\b",
+ r"\b504\b",
+ r"Service Unavailable",
+)
+
+def is_transient_irsa_failure(output:str)->bool:
+ text=str(output or "")
+ return any(re.search(pattern,text,re.IGNORECASE) for pattern in TRANSIENT_IRSA_ERROR_PATTERNS)
+
+def run_native_audit_with_retry(command:list[str],*,cwd:Path,audit_dir:Path,epoch_dir:Path)->tuple[subprocess.CompletedProcess,list[dict[str,Any]]]:
+ """Retry only transient IRSA transport failures when no native audit was produced."""
+ attempts=[]
+ summary_path=audit_dir/"real_field_audit_summary.json"
+ audit_path=audit_dir/"native_mef_audit.json"
+ last=None
+ for attempt in range(1,EPOCH_AUDIT_MAX_ATTEMPTS+1):
+  completed=subprocess.run(
+   command,cwd=cwd,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+   check=False,timeout=EPOCH_AUDIT_TIMEOUT_SECONDS,
+  )
+  attempt_log=epoch_dir/f"native_audit_attempt_{attempt:02d}.log"
+  attempt_log.write_text(completed.stdout or "",encoding="utf-8")
+  attempt_record={
+   "attempt":attempt,
+   "return_code":int(completed.returncode),
+   "log":str(attempt_log.name),
+   "native_summary_present":summary_path.is_file(),
+   "native_audit_present":audit_path.is_file(),
+   "transient_irsa_failure":is_transient_irsa_failure(completed.stdout),
+  }
+  attempts.append(attempt_record)
+  last=completed
+  if completed.returncode==0 and summary_path.is_file() and audit_path.is_file():
+   break
+  if (
+   attempt==EPOCH_AUDIT_MAX_ATTEMPTS
+   or not attempt_record["transient_irsa_failure"]
+   or summary_path.is_file()
+   or audit_path.is_file()
+  ):
+   break
+  time.sleep(EPOCH_AUDIT_RETRY_DELAYS_SECONDS[attempt-1])
+ if last is None:
+  raise RuntimeError("native audit retry loop did not execute")
+ combined=[]
+ for attempt in attempts:
+  log=epoch_dir/attempt["log"]
+  combined.append(f"===== ATTEMPT {attempt['attempt']} return_code={attempt['return_code']} =====\n")
+  combined.append(log.read_text(encoding="utf-8",errors="replace"))
+ (epoch_dir/"native_audit_runner.log").write_text("\n".join(combined),encoding="utf-8")
+ return last,attempts
 def sha256_file(path:Path)->str:
  d=hashlib.sha256()
  with path.open("rb") as h:
@@ -103,8 +164,11 @@ def run_pilot(manifest_path:Path,output_dir:Path,*,code_revision:str,skip_source
   if skip_source_poisson_injection: command.append("--skip-calibrated-injection")
   record={"index":index,"archive_product_id":product["archive_product_id"],"observation_id":obsid,"native_uri":product["native_uri"],"mjd_midpoint":product["mjd_midpoint"],"status":"pending","runner_log":str(log_path.relative_to(output_dir))}
   try:
-   completed=subprocess.run(command,cwd=ROOT,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=False,timeout=EPOCH_AUDIT_TIMEOUT_SECONDS)
-   log_path.write_text(completed.stdout,encoding="utf-8"); record["audit_return_code"]=completed.returncode
+   completed,audit_attempts=run_native_audit_with_retry(
+    command,cwd=ROOT,audit_dir=audit_dir,epoch_dir=epoch_dir
+   )
+   record["audit_attempts"]=audit_attempts
+   record["audit_return_code"]=completed.returncode
    summary_path=audit_dir/"real_field_audit_summary.json"; audit_path=audit_dir/"native_mef_audit.json"
    if not summary_path.is_file() or not audit_path.is_file(): raise RuntimeError("native audit did not produce summary and native_mef_audit.json")
    summary=json.loads(summary_path.read_text(encoding="utf-8")); audit=json.loads(audit_path.read_text(encoding="utf-8"))
