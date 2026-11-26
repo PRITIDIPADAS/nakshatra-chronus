@@ -2,7 +2,7 @@ import hashlib
 import pytest
 
 from research_discovery.spherex.independent_reproduction import (
-    REQUIRED_CHECKS, SCHEMA, SCOPE_CHECKS,
+    CLAIMS, REQUIRED_CHECKS, SCHEMA, SCOPE_CHECKS,
     evaluate_scientific_release_readiness, sign_reproduction_payload,
     verify_reproduction_record,
 )
@@ -190,9 +190,13 @@ def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass():
             "comparisons": comparisons,
         },
     }
+    accepted_full_reproduction = {
+        **accepted,
+        "scope_claims": sorted(CLAIMS),
+    }
     ready_inputs = dict(
         calibration_review=accepted,
-        astronomical_reproduction=accepted,
+        astronomical_reproduction=accepted_full_reproduction,
         custodian_attestation={
             "valid": True,
             "custodian_identity_verified_out_of_band": True,
@@ -203,7 +207,11 @@ def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass():
             "status": "verified_multi_epoch_source_series",
             "successful_photometry_epoch_count": 4, "requested_epoch_count": 4,
             "verified_source_timeseries_manifest_sha256": "1" * 64,
-            "time_series_summary": {"usable_multi_epoch_series": True},
+            "time_series_summary": {
+                "usable_multi_epoch_series": True,
+                "epoch_count": 4,
+                "distinct_mjd_count": 4,
+            },
         },
         source_selection={"supported": True, "independent_field_count": 5, "cells": [{"supported": True}]},
         event_detection={
@@ -227,6 +235,37 @@ def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass():
     ready = evaluate_scientific_release_readiness(**ready_inputs)
     assert ready["release_allowed"]
     assert ready["decision"] == "all_evidence_gates_passed_pending_human_release_authorization"
+
+    # A signed narrow review is valid for its declared scope, but it cannot
+    # satisfy a project-wide release requirement for independent reproduction.
+    narrow_scope_inputs = {
+        **ready_inputs,
+        "astronomical_reproduction": {
+            **accepted,
+            "scope_claims": ["source_timeseries"],
+        },
+    }
+    narrow_scope_result = evaluate_scientific_release_readiness(**narrow_scope_inputs)
+    assert narrow_scope_result["gates"]["independent_astronomical_reproduction"] is False
+    assert narrow_scope_result["release_allowed"] is False
+
+    # Three epochs are useful research data, but they do not satisfy the
+    # four-observation release gate.
+    three_epoch_series = {
+        **ready_inputs["source_timeseries"],
+        "successful_photometry_epoch_count": 3,
+        "requested_epoch_count": 3,
+        "time_series_summary": {
+            "usable_multi_epoch_series": True,
+            "epoch_count": 3,
+            "distinct_mjd_count": 3,
+        },
+    }
+    three_epoch_result = evaluate_scientific_release_readiness(
+        **{**ready_inputs, "source_timeseries": three_epoch_series}
+    )
+    assert three_epoch_result["gates"]["verified_multi_epoch_source_timeseries"] is False
+    assert three_epoch_result["release_allowed"] is False
 
     # A completed benchmark with the same inputs is still not enough if the
     # preregistered paired superiority/non-inferiority gate does not pass.
