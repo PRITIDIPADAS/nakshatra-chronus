@@ -23,7 +23,7 @@ The new `/api/v5/population/yso/source-linked-event-yield` endpoint requires sou
 - The 2,421-source, 924,443-pair SIAv2 reconnaissance is a positional metadata association, not extracted source flux or usable cadence.
 - All-Sky Cube metadata are not independent temporal visits.
 - An IRSA Spectrophotometry Tool row is forced/position-targeted photometry, not a blind detection. It must be attached to the exact LVF product and checked against local native FITS.
-- Source-selection completeness and transient/event-detection completeness are different quantities. The current event-rate estimator uses aggregate field completeness and null-control assumptions; it does not yet apply a source-level inverse-probability event likelihood.
+- Source-selection completeness and transient/event-detection completeness are different quantities. The legacy aggregate event-rate estimator uses field-level counts and is not source-selection corrected. The new source-linked endpoint applies inverse-probability source weights, but it does not yet correct event-detection completeness or source-level contamination.
 - The field-cluster selection interval is conditional on the supplied independent-group labels and fixed bins; it is not a full hierarchical model or a substitute for independent custody.
 - SHA-256 fields are evidence references. A hash does not prove the scientific correctness or authenticity of bytes that have not been independently obtained and inspected.
 
