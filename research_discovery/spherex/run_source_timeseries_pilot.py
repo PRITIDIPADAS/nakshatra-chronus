@@ -1,6 +1,6 @@
 """Run a provenance-verified four-epoch native SPHEREx source-photometry pilot."""
 from __future__ import annotations
-import argparse,hashlib,json,os,subprocess,sys,math
+import argparse,hashlib,json,os,subprocess,sys,math,traceback
 from datetime import datetime,timezone
 from pathlib import Path
 from typing import Any,Mapping
@@ -10,6 +10,7 @@ DEFAULT_MANIFEST=ROOT/"data"/"spherex_source_timeseries_pilot.orion_candidate.js
 SOURCE_CATALOGUE=ROOT/"data"/"spherex_orion_source_catalogue_snapshot.json"
 REPOSITORY="PRITIDIPADAS/nakshatra-chronus"
 SCHEMA="chronos-spherex-source-timeseries-pilot/1.0"
+EPOCH_AUDIT_TIMEOUT_SECONDS=1500
 def sha256_file(path:Path)->str:
  d=hashlib.sha256()
  with path.open("rb") as h:
@@ -102,7 +103,7 @@ def run_pilot(manifest_path:Path,output_dir:Path,*,code_revision:str,skip_source
   if skip_source_poisson_injection: command.append("--skip-calibrated-injection")
   record={"index":index,"archive_product_id":product["archive_product_id"],"observation_id":obsid,"native_uri":product["native_uri"],"mjd_midpoint":product["mjd_midpoint"],"status":"pending","runner_log":str(log_path.relative_to(output_dir))}
   try:
-   completed=subprocess.run(command,cwd=ROOT,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=False)
+   completed=subprocess.run(command,cwd=ROOT,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=False,timeout=EPOCH_AUDIT_TIMEOUT_SECONDS)
    log_path.write_text(completed.stdout,encoding="utf-8"); record["audit_return_code"]=completed.returncode
    summary_path=audit_dir/"real_field_audit_summary.json"; audit_path=audit_dir/"native_mef_audit.json"
    if not summary_path.is_file() or not audit_path.is_file(): raise RuntimeError("native audit did not produce summary and native_mef_audit.json")
@@ -127,7 +128,12 @@ def run_pilot(manifest_path:Path,output_dir:Path,*,code_revision:str,skip_source
     code_commit=revision,output_dir=epoch_dir/"photometry",stamp_size=11)
    extraction_results.append(result); m=result["measurements"][0]
    record.update({"status":"photometry_extracted" if m.get("valid") else "fit_review_required","native_time_validation":timing,"native_mef_audit_status":audit.get("status"),"calibration_compatibility_status":decision.get("status"),"calibration_group":decision.get("compatibility_group"),"science_sha256":science.get("sha256"),"spectral_wcs_sha256":spectral.get("sha256"),"solid_angle_sha256":area.get("sha256"),"native_mef_audit_sha256":audit_file["sha256"],"measurement_id":m.get("measurement_id"),"flux_jy":m.get("flux_jy"),"sigma_jy":m.get("sigma_jy"),"snr":m.get("fit_diagnostics",{}).get("snr"),"wavelength_um":m.get("wavelength_um"),"bandwidth_um":m.get("bandwidth_um"),"fit_status":m.get("fit_status"),"photometry_output":result.get("output_path")})
-  except Exception as exc: record.update({"status":"epoch_failed","error":f"{type(exc).__name__}: {exc}"})
+  except subprocess.TimeoutExpired as exc:
+   partial=exc.stdout or ""
+   if isinstance(partial,bytes): partial=partial.decode("utf-8",errors="replace")
+   log_path.write_text(str(partial)+"\n[CHRONOS] native audit subprocess timed out after "+str(EPOCH_AUDIT_TIMEOUT_SECONDS)+" seconds\n",encoding="utf-8")
+   record.update({"status":"epoch_failed","error":f"TimeoutError: native audit exceeded {EPOCH_AUDIT_TIMEOUT_SECONDS} seconds","traceback":traceback.format_exc()})
+  except Exception as exc: record.update({"status":"epoch_failed","error":f"{type(exc).__name__}: {exc}","traceback":traceback.format_exc()})
   epoch_records.append(record); write_json(output_dir/"epoch_records.json",epoch_records)
   print(json.dumps({"epoch":index,"observation_id":obsid,"status":record["status"],"error":record.get("error")}),flush=True)
  series_result=None; series_error=None
@@ -142,7 +148,45 @@ def run_pilot(manifest_path:Path,output_dir:Path,*,code_revision:str,skip_source
  write_json(output_dir/"pilot_summary.json",report)
  print(json.dumps({"status":status,"source_id":source["source_id"],"successful_epochs":extracted,"requested_epochs":len(epoch_records),"series_error":series_error},indent=2))
  return report
+
+
+def source_series_completion_error(report:Mapping[str,Any])->str|None:
+ """Fail closed unless every predeclared epoch contributes to a verified series."""
+ try:
+  requested=int(report.get("requested_epoch_count",0))
+  successful=int(report.get("successful_photometry_epoch_count",0))
+ except (TypeError,ValueError,OverflowError):
+  return "Pilot summary has invalid requested/successful epoch counts."
+ if report.get("status")!="verified_multi_epoch_source_series":
+  return (
+   "Source-series pilot did not produce a verified multi-epoch series: "
+   f"status={report.get('status')!r}, successful_epochs={successful}/{requested}, "
+   f"series_error={report.get('series_error')!r}"
+  )
+ if requested<2 or successful!=requested:
+  return f"Source-series pilot has only {successful}/{requested} successful predeclared epochs."
+ summary=report.get("time_series_summary")
+ if not isinstance(summary,Mapping) or summary.get("usable_multi_epoch_series") is not True:
+  return "Source-series pilot lacks the assembler's usable_multi_epoch_series confirmation."
+ try:
+  assembled_epochs=int(summary.get("epoch_count",0))
+ except (TypeError,ValueError,OverflowError):
+  return "Source-series pilot has an invalid assembled epoch_count."
+ if assembled_epochs<requested:
+  return f"Verified series contains {assembled_epochs}/{requested} requested epochs."
+ digest=str(report.get("verified_source_timeseries_manifest_sha256") or "").lower()
+ if len(digest)!=64 or any(char not in "0123456789abcdef" for char in digest):
+  return "Verified source series is missing its canonical SHA-256 manifest digest."
+ return None
+
 def main():
- parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--manifest",type=Path,default=DEFAULT_MANIFEST); parser.add_argument("--out",type=Path,default=ROOT/"data"/"spherex_source_timeseries_pilot"); parser.add_argument("--code-revision",required=True); parser.add_argument("--allow-calibrated-source-poisson",action="store_true"); args=parser.parse_args()
- run_pilot(args.manifest,args.out,code_revision=args.code_revision,skip_source_poisson_injection=not args.allow_calibrated_source_poisson)
+ parser=argparse.ArgumentParser(description=__doc__)
+ parser.add_argument("--manifest",type=Path,default=DEFAULT_MANIFEST)
+ parser.add_argument("--out",type=Path,default=ROOT/"data"/"spherex_source_timeseries_pilot")
+ parser.add_argument("--code-revision",required=True)
+ parser.add_argument("--allow-calibrated-source-poisson",action="store_true")
+ args=parser.parse_args()
+ report=run_pilot(args.manifest,args.out,code_revision=args.code_revision,skip_source_poisson_injection=not args.allow_calibrated_source_poisson)
+ failure=source_series_completion_error(report)
+ if failure: raise SystemExit(failure)
 if __name__=="__main__": main()

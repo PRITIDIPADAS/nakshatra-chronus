@@ -65,3 +65,46 @@ def test_native_field_audit_still_requires_completed_injection_when_not_skipped(
     from research_discovery.spherex.run_real_field_audit import validate_calibrated_injection_exit
 
     validate_calibrated_injection_exit("completed", skipped_by_request=False)
+
+
+
+def test_source_series_completion_gate_rejects_incomplete_or_partial_four_epoch_runs():
+    from research_discovery.spherex.run_source_timeseries_pilot import source_series_completion_error
+
+    incomplete = {
+        "status": "incomplete_no_verified_multi_epoch_source_series",
+        "requested_epoch_count": 4,
+        "successful_photometry_epoch_count": 0,
+        "series_error": None,
+        "time_series_summary": {},
+        "verified_source_timeseries_manifest_sha256": None,
+    }
+    assert "did not produce a verified multi-epoch series" in source_series_completion_error(incomplete)
+
+    partial = {
+        "status": "verified_multi_epoch_source_series",
+        "requested_epoch_count": 4,
+        "successful_photometry_epoch_count": 3,
+        "time_series_summary": {"usable_multi_epoch_series": True, "epoch_count": 4},
+        "verified_source_timeseries_manifest_sha256": "a" * 64,
+    }
+    assert "only 3/4" in source_series_completion_error(partial)
+
+
+def test_source_series_completion_gate_requires_assembler_confirmation_and_manifest_digest():
+    from research_discovery.spherex.run_source_timeseries_pilot import source_series_completion_error
+
+    valid = {
+        "status": "verified_multi_epoch_source_series",
+        "requested_epoch_count": 4,
+        "successful_photometry_epoch_count": 4,
+        "time_series_summary": {"usable_multi_epoch_series": True, "epoch_count": 4},
+        "verified_source_timeseries_manifest_sha256": "a" * 64,
+    }
+    assert source_series_completion_error(valid) is None
+    assert "canonical SHA-256" in source_series_completion_error({
+        **valid, "verified_source_timeseries_manifest_sha256": None
+    })
+    assert "lacks the assembler" in source_series_completion_error({
+        **valid, "time_series_summary": {"usable_multi_epoch_series": False, "epoch_count": 4}
+    })
