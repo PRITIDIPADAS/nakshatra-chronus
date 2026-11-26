@@ -7,10 +7,13 @@ from typing import Any, Mapping, Sequence
 FIELD_INDEPENDENCE_SCHEMA = "chronos-field-independence-attestation/1.0"
 KEY_ID_ENV = "CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_KEY_ID"
 PUBLIC_KEY_ENV = "CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_PUBLIC_KEY_B64"
+CUSTODIAN_ID_ENV = "CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_ID"
+CUSTODIAN_INDEPENDENCE_ENV = "CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_OUT_OF_BAND_INDEPENDENCE_VERIFIED"
 _PAYLOAD_KEYS = {
     "schema", "field_id", "dataset_class", "release", "independence_group_id",
     "footprint", "footprint_sha256", "science_manifest_sha256",
-    "preregistration_sha256", "custodian_id", "custodian_role", "attested_utc",
+    "preregistration_sha256", "custodian_id", "custodian_role",
+    "custodian_independent_of_analysis_team", "attested_utc",
 }
 
 
@@ -65,8 +68,12 @@ def verify_field_independence_attestation(field: Mapping[str, Any]) -> dict[str,
     if field.get("independent_field") is not True:
         raise ValueError(f"{fid}: independent_field must be true in addition to custodian attestation")
     key_id, public_b64 = os.environ.get(KEY_ID_ENV, "").strip(), os.environ.get(PUBLIC_KEY_ENV, "").strip()
+    expected_custodian_id = os.environ.get(CUSTODIAN_ID_ENV, "").strip()
+    independence_confirmed = os.environ.get(CUSTODIAN_INDEPENDENCE_ENV, "").strip().lower() == "true"
     if not key_id or not public_b64:
         raise ValueError("trusted external field-independence custodian Ed25519 key is not configured")
+    if not expected_custodian_id or not independence_confirmed:
+        raise ValueError("custodian identity and independence from the analysis team must be confirmed out-of-band")
     envelope = field.get("field_independence_attestation")
     if not isinstance(envelope, Mapping) or envelope.get("schema") != FIELD_INDEPENDENCE_SCHEMA:
         raise ValueError(f"{fid}: signed field_independence_attestation is required")
@@ -96,8 +103,14 @@ def verify_field_independence_attestation(field: Mapping[str, Any]) -> dict[str,
     actual_sha = hashlib.sha256(canonical_field_independence_payload(footprint)).hexdigest()
     if fp_sha != actual_sha or field.get("footprint_sha256") != fp_sha:
         raise ValueError(f"{fid}: signed footprint SHA-256 does not match its geometry")
-    if not str(payload.get("custodian_id", "")).strip() or payload.get("custodian_role") != "independent_custodian":
-        raise ValueError(f"{fid}: an identified independent_custodian is required")
+    if (
+        not str(payload.get("custodian_id", "")).strip()
+        or payload.get("custodian_role") != "independent_custodian"
+        or payload.get("custodian_id") != expected_custodian_id
+    ):
+        raise ValueError(f"{fid}: signed custodian identity does not match the out-of-band pinned custodian")
+    if payload.get("custodian_independent_of_analysis_team") is not True:
+        raise ValueError(f"{fid}: custodian did not attest independence from the analysis team")
     try:
         stamp = datetime.fromisoformat(str(payload.get("attested_utc")).replace("Z", "+00:00"))
     except ValueError as exc:
@@ -156,6 +169,8 @@ def audit_independent_field_records(field_records: Sequence[Mapping[str, Any]], 
     summary = {
         "status": "verified_signed_independent_fields", "schema": FIELD_INDEPENDENCE_SCHEMA,
         "pinned_key_id": os.environ.get(KEY_ID_ENV, "").strip() or None,
+        "custodian_identity_verified_out_of_band": True,
+        "custodian_independence_verified_out_of_band": True,
         "verified_real_field_count": len(verified), "independent_group_count": len(group_ids),
         "verified_field_ids": sorted(verified), "independence_group_ids": group_ids,
         "custodian_ids": sorted({v for g in groups.values() for v in g["custodians"]}),
