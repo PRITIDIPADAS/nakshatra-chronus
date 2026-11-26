@@ -124,3 +124,33 @@ Verification returning `valid=true` establishes that a pinned key signed a revie
 | Validated scientific release | Closed | All relevant empirical gates closed and claims limited to what reviewers reproduced |
 
 No single review, green workflow, or checksum closes every gate. Keep the scientific release closed until the specific release requirements are met.
+
+
+
+## 7. Signed independent astronomical reproduction record
+
+The repository includes a separate verifier for an astronomer's reproduction.
+
+Module: research_discovery.spherex.independent_reproduction
+CLI: scripts/verify_independent_astronomical_reproduction.py
+Tests: research_discovery/tests/test_independent_reproduction.py
+
+The signed record binds the astronomer's declared identity, role, affiliation, independence/conflicts, exact repository commit, claim scope, per-domain scientific checks, input manifest, native source data, source time series, calibration audit, selection trials, analysis output, environment, signed report and reproduction artifact. Verification requires an out-of-band pinned Ed25519 public-key fingerprint and the actual signed report/reproduction artifact bytes.
+
+Example command after an external reviewer supplies the bundle:
+
+    python scripts/verify_independent_astronomical_reproduction.py \
+      --record /review/reproduction_record.json \
+      --reviewer-public-key /review/reviewer_public.pem \
+      --expected-reviewer-id "<independently confirmed reviewer ID>" \
+      --expected-public-key-sha256 "<out-of-band public-key fingerprint>" \
+      --expected-commit "<full repository commit SHA>" \
+      --expected-input-digests /review/expected_input_digests.json \
+      --signed-report /review/signed_report.pdf \
+      --reproduction-artifact /review/reproduction.zip
+
+The verifier supports claim-scoped reviews. Unconditional acceptance requires all checks within that scope to be accepted. It does not allow required checks to be hidden as out-of-scope.
+
+The readiness evaluator reports every blocking gate: independent calibration sign-off, astronomical reproduction, blind custody and four-baseline evaluation, usable source series, supported multi-field selection, event-detection efficiency, source-level contamination, independent classifications, and external preregistration. It only reports readiness; it never creates a release tag or publishes a scientific claim.
+
+No external astronomer report, reviewer public-key pin, custodian signature, independent source classifications, or externally timestamped preregistration receipt has been supplied. The verifier's unit tests use synthetic keys and fixtures only; they are not scientific evidence.

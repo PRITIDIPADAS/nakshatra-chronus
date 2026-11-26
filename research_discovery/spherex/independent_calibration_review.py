@@ -260,6 +260,7 @@ def verify_review_record(
             "repository_commit": payload["repository_commit"],
             "disposition": payload["disposition"],
             "accepted_check_count": sum(x == "accepted" for x in payload["checks"].values()),
+            "required_check_count": len(payload["checks"]),
             "rejected_check_count": sum(x == "rejected" for x in payload["checks"].values()),
             "not_assessed_check_count": sum(x == "not_assessed" for x in payload["checks"].values()),
             "review_payload_sha256": sha256_json(payload),

@@ -92,7 +92,8 @@ def test_independent_review_signature_is_bound_to_reviewer_commit_and_exact_inpu
     assert result["valid"] is True
     assert result["disposition"] == "accepted"
     assert result["accepted_check_count"] == len(REQUIRED_CHECKS)
-    assert result["reproduction_artifact_path"] == str(artifact.resolve())
+    assert result["required_check_count"] == len(REQUIRED_CHECKS)
+    assert result["reproduction_artifact_path" == str(artifact.resolve())
 
 
 def test_independent_review_rejects_unpinned_key_or_changed_commit():
