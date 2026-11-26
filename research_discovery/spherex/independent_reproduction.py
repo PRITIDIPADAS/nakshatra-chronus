@@ -376,29 +376,41 @@ def evaluate_scientific_release_readiness(
         if not isinstance(processed_tokens, (list, tuple)) or not processed_tokens:
             return False
         paired = value.get("paired_superiority") or {}
+        if not isinstance(paired, Mapping):
+            return False
         margin = paired.get("predeclared_false_candidate_noninferiority_margin")
+        try:
+            independent_groups = int(paired.get("independent_group_count", 0))
+        except (TypeError, ValueError, OverflowError):
+            return False
+        correction = paired.get("multiple_comparator_correction") or {}
+        if not isinstance(correction, Mapping):
+            return False
         if (
             paired.get("status") != "paired_field_group_bootstrap_completed"
             or paired.get("verdict_status") != "superiority_gate_passed"
             or paired.get("superiority_supported") is not True
-            or int(paired.get("independent_group_count", 0)) < 5
+            or independent_groups < 5
+            or isinstance(margin, bool)
             or not isinstance(margin, (int, float))
             or not math.isfinite(float(margin))
             or float(margin) < 0
-            or (paired.get("multiple_comparator_correction") or {}).get("method") != "bonferroni_95_familywise"
-            or (paired.get("multiple_comparator_correction") or {}).get("verified_predeclared") is not True
+            or correction.get("method") != "bonferroni_95_familywise"
+            or correction.get("verified_predeclared") is not True
         ):
             return False
         comparisons = paired.get("comparisons") or {}
-        if set(comparisons) != {"snr_only", "chronos_pda", "instrument_forensics"}:
+        if not isinstance(comparisons, Mapping) or set(comparisons) != {"snr_only", "chronos_pda", "instrument_forensics"}:
             return False
         for comparison in comparisons.values():
-            completeness_ci = (
-                comparison.get("delta_completeness_twin_minus_comparator") or {}
-            ).get("familywise_95_interval_bonferroni")
-            false_candidate_ci = (
-                comparison.get("delta_false_candidates_per_field_twin_minus_comparator") or {}
-            ).get("familywise_95_interval_bonferroni")
+            if not isinstance(comparison, Mapping):
+                return False
+            completeness = comparison.get("delta_completeness_twin_minus_comparator") or {}
+            false_candidates = comparison.get("delta_false_candidates_per_field_twin_minus_comparator") or {}
+            if not isinstance(completeness, Mapping) or not isinstance(false_candidates, Mapping):
+                return False
+            completeness_ci = completeness.get("familywise_95_interval_bonferroni")
+            false_candidate_ci = false_candidates.get("familywise_95_interval_bonferroni")
             if (
                 not isinstance(completeness_ci, (list, tuple)) or len(completeness_ci) != 2
                 or not isinstance(false_candidate_ci, (list, tuple)) or len(false_candidate_ci) != 2
@@ -410,6 +422,12 @@ def evaluate_scientific_release_readiness(
             except (TypeError, ValueError, OverflowError):
                 return False
         return True
+
+    def _minimum_independent_groups(value: Mapping[str, Any], minimum: int) -> bool:
+        try:
+            return int(value.get("independent_field_count", 0)) >= minimum
+        except (TypeError, ValueError, OverflowError):
+            return False
 
     summary = source_timeseries.get("time_series_summary", {}) if isinstance(source_timeseries, Mapping) else {}
     digest = str(source_timeseries.get("verified_source_timeseries_manifest_sha256", "")).lower() if isinstance(source_timeseries, Mapping) else ""
@@ -454,9 +472,9 @@ def evaluate_scientific_release_readiness(
             isinstance(event_detection, Mapping)
             and event_detection.get("supported") is True
             and event_detection.get("real_source_timeseries_injections") is True
-            and int(event_detection.get("independent_field_count", 0)) >= 5
             and event_detection.get("negative_controls_passed") is True
             and event_detection.get("outside_support_abstention_verified") is True
+            and _minimum_independent_groups(event_detection, 5)
         ),
         "source_level_contamination_review": (
             isinstance(contamination_review, Mapping)
