@@ -350,14 +350,21 @@ def evaluate_scientific_release_readiness(
         required_methods = {
             "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
         }
-        if set(value.get("methods") or []) != required_methods:
+        methods = value.get("methods")
+        if not isinstance(methods, (list, tuple)) or any(not isinstance(x, str) for x in methods):
+            return False
+        if set(methods) != required_methods:
             return False
         if value.get("scientific_claim_eligible") is not True:
             return False
         reproducibility = value.get("reproducibility") or {}
+        if not isinstance(reproducibility, Mapping):
+            return False
         if reproducibility.get("same_input_enforced_for_all_methods") is not True:
             return False
         blind = value.get("blind_evaluation") or {}
+        if not isinstance(blind, Mapping):
+            return False
         if (
             blind.get("custodian_attestation_verified") is not True
             or blind.get("configuration_freeze_verified") is not True
@@ -369,6 +376,8 @@ def evaluate_scientific_release_readiness(
         if not SHA_RE.fullmatch(preregistration):
             return False
         unblind = blind.get("unblinding_record") or {}
+        if not isinstance(unblind, Mapping):
+            return False
         encrypted_truth_sha = str(unblind.get("encrypted_truth_store_sha256", "")).lower()
         processed_tokens = unblind.get("heldout_field_tokens_processed")
         if not SHA_RE.fullmatch(encrypted_truth_sha):
