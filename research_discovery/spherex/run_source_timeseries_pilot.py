@@ -49,6 +49,37 @@ def validate_pilot_manifest(value:Mapping[str,Any])->dict[str,Any]:
 def file_record(uri:str,path:Path)->dict[str,str]:
  if not path.is_file(): raise FileNotFoundError(path)
  return {"uri":uri,"local_path":str(path),"sha256":sha256_file(path)}
+
+def validate_native_observation_time(science:Mapping[str,Any],product:Mapping[str,Any],*,tolerance_seconds:float=5.0)->dict[str,float]:
+ start=float(science.get("mjd_obs"))
+ exposure=float(science.get("exposure_time_s"))
+ if not math.isfinite(start) or not math.isfinite(exposure) or exposure<=0:
+  raise ValueError("native science MEF must provide finite MJD-OBS and positive exposure time")
+ lower=float(product["t_min_mjd"]); upper=float(product["t_max_mjd"])
+ midpoint=float(product["mjd_midpoint"])
+ native_end=start+exposure/86400.0
+ native_midpoint=start+exposure/(2.0*86400.0)
+ offsets={
+  "start_offset_seconds":abs(start-lower)*86400.0,
+  "end_offset_seconds":abs(native_end-upper)*86400.0,
+  "midpoint_offset_seconds":abs(native_midpoint-midpoint)*86400.0,
+ }
+ worst=max(offsets.values())
+ if worst>float(tolerance_seconds):
+  raise ValueError(
+   "native FITS MJD-OBS/EXPTIME disagrees with frozen SIAv2 time bounds "
+   f"(max offset {worst:.3f} s > {tolerance_seconds:.3f} s)"
+  )
+ return {
+  "native_mjd_obs":start,
+  "native_exposure_time_s":exposure,
+  "native_midpoint_mjd":native_midpoint,
+  "manifest_midpoint_mjd":midpoint,
+  **offsets,
+  "maximum_allowed_offset_seconds":float(tolerance_seconds),
+ }
+
+
 def write_json(path:Path,value:Any)->None:
  path.parent.mkdir(parents=True,exist_ok=True)
  path.write_text(json.dumps(value,indent=2,sort_keys=True,ensure_ascii=False,default=str),encoding="utf-8")
@@ -81,6 +112,7 @@ def run_pilot(manifest_path:Path,output_dir:Path,*,code_revision:str,skip_source
    if science.get("uri")!=product["native_uri"]: raise ValueError("retrieved science URI differs from frozen URI")
    if science.get("observation_id")!=obsid: raise ValueError("native science OBSID differs from frozen observation ID")
    if science.get("detector")!="D2" or str(science.get("release","")).upper()!="DR1": raise ValueError("retrieved science file is not DR1 D2")
+   timing=validate_native_observation_time(science,product,tolerance_seconds=5.0)
    decision=audit.get("calibration_compatibility") or {}
    if audit.get("status")!="STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS" or decision.get("status")!="compatible": raise ValueError("native MEF or calibration compatibility gate did not pass")
    selected=summary.get("selected_products") or {}; spectral=selected.get("spectral_wcs") or {}; area=selected.get("solid_angle") or {}
@@ -94,7 +126,7 @@ def run_pilot(manifest_path:Path,output_dir:Path,*,code_revision:str,skip_source
     source_record=source_record,source_catalogue_file=catalogue_file,native_mef_audit_file=audit_file,compatibility_decision=decision,
     code_commit=revision,output_dir=epoch_dir/"photometry",stamp_size=11)
    extraction_results.append(result); m=result["measurements"][0]
-   record.update({"status":"photometry_extracted" if m.get("valid") else "fit_review_required","native_mef_audit_status":audit.get("status"),"calibration_compatibility_status":decision.get("status"),"calibration_group":decision.get("compatibility_group"),"science_sha256":science.get("sha256"),"spectral_wcs_sha256":spectral.get("sha256"),"solid_angle_sha256":area.get("sha256"),"native_mef_audit_sha256":audit_file["sha256"],"measurement_id":m.get("measurement_id"),"flux_jy":m.get("flux_jy"),"sigma_jy":m.get("sigma_jy"),"snr":m.get("fit_diagnostics",{}).get("snr"),"wavelength_um":m.get("wavelength_um"),"bandwidth_um":m.get("bandwidth_um"),"fit_status":m.get("fit_status"),"photometry_output":result.get("output_path")})
+   record.update({"status":"photometry_extracted" if m.get("valid") else "fit_review_required","native_time_validation":timing,"native_mef_audit_status":audit.get("status"),"calibration_compatibility_status":decision.get("status"),"calibration_group":decision.get("compatibility_group"),"science_sha256":science.get("sha256"),"spectral_wcs_sha256":spectral.get("sha256"),"solid_angle_sha256":area.get("sha256"),"native_mef_audit_sha256":audit_file["sha256"],"measurement_id":m.get("measurement_id"),"flux_jy":m.get("flux_jy"),"sigma_jy":m.get("sigma_jy"),"snr":m.get("fit_diagnostics",{}).get("snr"),"wavelength_um":m.get("wavelength_um"),"bandwidth_um":m.get("bandwidth_um"),"fit_status":m.get("fit_status"),"photometry_output":result.get("output_path")})
   except Exception as exc: record.update({"status":"epoch_failed","error":f"{type(exc).__name__}: {exc}"})
   epoch_records.append(record); write_json(output_dir/"epoch_records.json",epoch_records)
   print(json.dumps({"epoch":index,"observation_id":obsid,"status":record["status"],"error":record.get("error")}),flush=True)
