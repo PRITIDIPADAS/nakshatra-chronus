@@ -240,6 +240,9 @@ def assess_population_coverage(
 
             valid_rows: list[tuple[float, float, float, str]] = []
             measurement_keys: set[tuple[str, float, str]] = set()
+            valid_measurement_ids: set[str] = set()
+            valid_observation_ids: set[str] = set()
+            valid_mjds: list[float] = []
             epoch_samples: dict[float, dict[str, set[float]]] = {}
             flux_units: set[str] = set()
             for index, row in enumerate(source.get("observations") or []):
@@ -252,6 +255,7 @@ def assess_population_coverage(
                     flux = float(row["flux"])
                     sigma = float(row["sigma"])
                     observation_id = str(row.get("observation_id", "")).strip()
+                    measurement_id = str(row.get("measurement_id", "")).strip()
                     calibration_group = str(row["calibration_group"]).strip()
                     flux_unit = str(row.get("flux_unit", "")).strip()
                     if not observation_id:
@@ -265,6 +269,10 @@ def assess_population_coverage(
                         source_reasons.append("duplicate_measurement_rows")
                         continue
                     measurement_keys.add(measurement_key)
+                    if measurement_id:
+                        valid_measurement_ids.add(measurement_id)
+                    valid_observation_ids.add(observation_id)
+                    valid_mjds.append(mjd)
                     flux_units.add(flux_unit)
                     epoch = round(mjd, 7)
                     bands = epoch_samples.setdefault(epoch, {
@@ -333,6 +341,11 @@ def assess_population_coverage(
                 "continuum_epochs": continuum_epochs,
                 "complete_feature_epochs": complete_feature_epochs,
                 "median_snr": median_snr,
+                "measurement_ids": sorted(valid_measurement_ids),
+                "observation_ids": sorted(valid_observation_ids),
+                "mjd_min": min(valid_mjds) if valid_mjds else None,
+                "mjd_max": max(valid_mjds) if valid_mjds else None,
+                "baseline_days": max(valid_mjds) - min(valid_mjds) if len(valid_mjds) > 1 else 0.0,
                 "selection": selection_prediction,
                 "flux_units": sorted(flux_units),
                 "calibration_groups": sorted({row[3] for row in valid_rows}),
@@ -346,6 +359,11 @@ def assess_population_coverage(
                     "source_id": source_id,
                     "epoch_count": epoch_count,
                     "complete_feature_epochs": complete_feature_epochs,
+                    "measurement_ids": sorted(valid_measurement_ids),
+                    "observation_ids": sorted(valid_observation_ids),
+                    "mjd_min": min(valid_mjds) if valid_mjds else None,
+                    "mjd_max": max(valid_mjds) if valid_mjds else None,
+                    "baseline_days": max(valid_mjds) - min(valid_mjds) if len(valid_mjds) > 1 else 0.0,
                     "selection_probability": selection_prediction.get("selection_probability"),
                     "selection_weight": selection_prediction.get("selection_weight"),
                     "selection_cell_id": selection_prediction.get("cell_id"),
