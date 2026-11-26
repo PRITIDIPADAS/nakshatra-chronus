@@ -8,6 +8,8 @@ def test_orion_candidate_pilot_manifest_has_four_distinct_native_dr1_d2_epochs()
  assert m["schema"]==SCHEMA
  assert a["product_count"]==4
  assert a["baseline_days"]==pytest.approx(187.041154)
+ assert a["minimum_band_overlap_fraction"]==pytest.approx(0.5)
+ assert m["selection_policy"]["minimum_band_overlap_fraction"]==pytest.approx(0.5)
  assert a["observation_ids"]==["2025W36_2B_0638_1","2025W37_2A_0601_1","2026W10_1A_0337_2","2026W11_2A_0253_1"]
  assert all(x["release"]=="DR1" and x["detector"]=="D2" for x in m["products"])
 def test_orion_candidate_manifest_does_not_promote_catalogue_labels_to_truth():
