@@ -161,3 +161,38 @@ def test_tampered_signed_review_payload_is_rejected(tmp_path):
         reproduction_artifact_path=artifact,
     )
     assert result["valid"] is False
+
+
+def test_calibration_review_verification_cli_accepts_complete_signed_bundle(tmp_path, capsys):
+    import hashlib
+    import json
+    from scripts.verify_spherex_calibration_review import main
+
+    private_pem, public_pem = _keys()
+    payload = _payload()
+    report = tmp_path / "reviewer-report.pdf"
+    artifact = tmp_path / "reproduction.zip"
+    record_path = tmp_path / "review-record.json"
+    key_path = tmp_path / "reviewer-public.pem"
+    digest_path = tmp_path / "expected-digests.json"
+    report.write_bytes(b"signed reviewer report bytes")
+    artifact.write_bytes(b"independent reproduction bytes")
+    payload["input_digests"]["signed_report_sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
+    payload["input_digests"]["reproduction_artifact_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    signed = sign_review_payload(payload, private_pem)
+    record_path.write_text(json.dumps(signed), encoding="utf-8")
+    key_path.write_bytes(public_pem)
+    digest_path.write_text(json.dumps(payload["input_digests"]), encoding="utf-8")
+
+    exit_code = main([
+        "--review-record", str(record_path),
+        "--reviewer-public-key", str(key_path),
+        "--expected-reviewer-id", "independent-reviewer-01",
+        "--expected-public-key-sha256", public_key_fingerprint(public_pem),
+        "--expected-commit", "a" * 40,
+        "--expected-input-digests", str(digest_path),
+        "--signed-report", str(report),
+        "--reproduction-artifact", str(artifact),
+    ])
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["valid"] is True
