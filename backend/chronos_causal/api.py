@@ -196,6 +196,13 @@ class YSOPopulationRateRequest(PopulationCoverageRequest):
     draws: int = 10000
     seed: int = 1
 
+class YSOSourceLinkedRateRequest(PopulationCoverageRequest):
+    preregistration_sha256: str
+    event_definition_sha256: str
+    source_event_records: list[dict[str, Any]]
+    draws: int = 10000
+    seed: int = 1
+
 def guarded(fn):
     try:
         return fn()
@@ -443,11 +450,77 @@ def population_yso_rate(request: YSOPopulationRateRequest):
             draws=request.draws, seed=request.seed,
         )
         return {
-            "scientific_status": "coverage_and_selection_preregistration_bound",
+            "scientific_status": "exploratory_aggregate_event_rate_not_source_selection_corrected",
             "preregistration_sha256": digest,
             "coverage_audit": coverage,
-            "population_rate": rate,
-            "interpretation": "Conditional on the supplied real-field multidimensional source-selection model and null-control assumptions. Event-detection completeness remains a separate field-level approximation. This is not a discovery claim.",
+            "exploratory_field_level_event_rate": rate,
+            "interpretation": "This legacy field-level estimator consumes aggregate event counts and a separate field-level completeness approximation; it is not a source-selection-corrected YSO population estimate or discovery claim.",
+        }
+    return guarded(run)
+
+
+@router.post("/population/yso/source-linked-event-yield")
+def population_yso_source_linked_event_yield(request: YSOSourceLinkedRateRequest):
+    """Source-linked inverse-probability event yield; not a final population claim."""
+    import re
+    from chronos_population.coverage import assess_population_coverage
+    from chronos_population.source_linked import estimate_source_linked_event_yield
+
+    preregistration = str(request.preregistration_sha256).lower()
+    event_definition = str(request.event_definition_sha256).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", preregistration):
+        raise HTTPException(status_code=422, detail="preregistration_sha256 must be a 64-character SHA-256 digest")
+    if not re.fullmatch(r"[0-9a-f]{64}", event_definition):
+        raise HTTPException(status_code=422, detail="event_definition_sha256 must be a 64-character SHA-256 digest")
+
+    def run():
+        coverage = assess_population_coverage(
+            request.fields, target_class=request.target_class,
+            feature_interval_um=request.feature_interval_um,
+            blue_continuum_um=request.blue_continuum_um,
+            red_continuum_um=request.red_continuum_um,
+            minimum_independent_fields=request.minimum_independent_fields,
+            minimum_epochs_per_source=request.minimum_epochs_per_source,
+            minimum_feature_samples=request.minimum_feature_samples,
+            minimum_continuum_samples=request.minimum_continuum_samples,
+            minimum_median_snr=request.minimum_median_snr,
+            minimum_completeness=request.minimum_completeness,
+            selection_trials=request.selection_trials,
+            selection_bin_spec=request.selection_bin_spec,
+            minimum_trials_per_selection_cell=request.minimum_trials_per_selection_cell,
+            minimum_fields_per_cell=request.minimum_fields_per_cell,
+            minimum_selection_probability=request.minimum_selection_probability,
+        )
+        if not coverage["eligible_for_predeclared_population_protocol"]:
+            raise HTTPException(status_code=422, detail={
+                "message": "Source-linked event yield blocked: real source-series and selection coverage gates were not met.",
+                "coverage_audit": coverage,
+            })
+        frozen = (coverage.get("selection_function") or {}).get("frozen_provenance") or {}
+        if frozen.get("preregistration_sha256") != preregistration:
+            raise HTTPException(status_code=422, detail={
+                "message": "Preregistration digest does not match the one frozen into the selection trials.",
+                "request_preregistration_sha256": preregistration,
+                "selection_preregistration_sha256": frozen.get("preregistration_sha256"),
+            })
+        result = estimate_source_linked_event_yield(
+            request.fields,
+            coverage_audit=coverage,
+            selection_trials=request.selection_trials,
+            selection_bin_spec=request.selection_bin_spec,
+            source_event_records=request.source_event_records,
+            preregistration_sha256=preregistration,
+            event_definition_sha256=event_definition,
+            draws=request.draws,
+            seed=request.seed,
+        )
+        return {
+            "scientific_status": result["scientific_status"],
+            "preregistration_sha256": preregistration,
+            "event_definition_sha256": event_definition,
+            "coverage_audit": coverage,
+            "source_linked_event_yield": result,
+            "interpretation": "Source-catalogue inclusion is inverse-probability weighted. Event-detection completeness and source-level contamination are not yet corrected; this output is not a validated YSO population result or discovery.",
         }
     return guarded(run)
 
