@@ -287,6 +287,11 @@ def test_source_linked_yso_event_yield_revalidates_source_rows_and_selection_tri
             }],
         })
 
+    # The synthetic end-to-end coverage fixture must exercise the same signed
+    # field-independence contract as the production real-field selection fit.
+    for field_index, field in enumerate(fields):
+        _sign_test_field(field, field_index)
+
     trials = _trials()
     for trial in trials:
         trial["event_definition_sha256"] = event_definition
