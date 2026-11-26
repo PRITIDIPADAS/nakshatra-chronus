@@ -123,7 +123,7 @@ def validate_review_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     required_digests = (
         "science_sha256", "absolute_gain_sha256", "spectral_wcs_sha256",
         "solid_angle_sha256", "native_audit_sha256", "review_packet_sha256",
-        "input_manifest_sha256", "reproduction_artifact_sha256",
+        "input_manifest_sha256", "signed_report_sha256", "reproduction_artifact_sha256",
     )
     normalized_digests = {
         name: _sha(digests.get(name), f"input_digests.{name}")
@@ -196,6 +196,7 @@ def verify_review_record(
     expected_public_key_sha256: str,
     expected_repository_commit: str,
     expected_input_digests: Mapping[str, str],
+    signed_report_path: str | Path | None = None,
     reproduction_artifact_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Verify the signed review against out-of-band identity, commit and file-hash pins."""
@@ -213,11 +214,25 @@ def verify_review_record(
             raise ValueError("reviewer_id does not match the independently confirmed reviewer identity")
         if payload["repository_commit"] != str(expected_repository_commit).lower():
             raise ValueError("review record targets a different repository commit")
+        required_expected_digests = {
+            "science_sha256", "absolute_gain_sha256", "spectral_wcs_sha256",
+            "solid_angle_sha256", "native_audit_sha256", "review_packet_sha256",
+            "input_manifest_sha256", "signed_report_sha256", "reproduction_artifact_sha256",
+        }
+        if set(expected_input_digests) != required_expected_digests:
+            raise ValueError("expected_input_digests must pin every required science, calibration, report, and reproduction artifact digest")
         for name, expected in expected_input_digests.items():
             actual = payload["input_digests"].get(name)
             if actual != _sha(expected, f"expected_input_digests.{name}"):
                 raise ValueError(f"review input digest mismatch for {name}")
 
+        if signed_report_path is None or reproduction_artifact_path is None:
+            raise ValueError("both signed_report_path and reproduction_artifact_path are required to verify the review bytes")
+        signed_report = Path(signed_report_path)
+        if not signed_report.is_file():
+            raise FileNotFoundError(f"signed reviewer report is unavailable: {signed_report}")
+        if sha256_bytes(signed_report.read_bytes()) != payload["input_digests"]["signed_report_sha256"]:
+            raise ValueError("signed reviewer report SHA-256 does not match the signed review")
         from cryptography.exceptions import InvalidSignature
         key = _public_key(reviewer_public_key_pem)
         signature = base64.b64decode(str(record.get("signature_base64", "")), validate=True)
@@ -228,15 +243,14 @@ def verify_review_record(
         except InvalidSignature as exc:
             raise ValueError("Ed25519 reviewer signature is invalid") from exc
 
-        reproduction_path = None
-        if reproduction_artifact_path is not None:
-            path = Path(reproduction_artifact_path)
-            if not path.is_file():
-                raise FileNotFoundError(f"reproduction artifact is unavailable: {path}")
-            actual = sha256_bytes(path.read_bytes())
-            if actual != payload["input_digests"]["reproduction_artifact_sha256"]:
-                raise ValueError("local reproduction artifact SHA-256 does not match the signed review")
-            reproduction_path = str(path.resolve())
+        path = Path(reproduction_artifact_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"reproduction artifact is unavailable: {path}")
+        actual = sha256_bytes(path.read_bytes())
+        if actual != payload["input_digests"]["reproduction_artifact_sha256"]:
+            raise ValueError("local reproduction artifact SHA-256 does not match the signed review")
+        reproduction_path = str(path.resolve())
+        signed_report_verified_path = str(signed_report.resolve())
 
         return {
             "valid": True,
@@ -250,6 +264,7 @@ def verify_review_record(
             "not_assessed_check_count": sum(x == "not_assessed" for x in payload["checks"].values()),
             "review_payload_sha256": sha256_json(payload),
             "signature_sha256": sha256_bytes(signature),
+            "signed_report_path": signed_report_verified_path,
             "reproduction_artifact_path": reproduction_path,
             "verification_boundary": (
                 "The signature and pinned key bind the review to its declared reviewer, commit and inputs. "
