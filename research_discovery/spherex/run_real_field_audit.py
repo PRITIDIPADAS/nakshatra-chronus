@@ -598,6 +598,14 @@ def candidate_sort_key(uri: str, wanted_date: str | None):
     return (exact, date, tokens["archive_product_version"] or "")
 
 
+def validate_calibrated_injection_exit(status: str, *, skipped_by_request: bool) -> None:
+    """Allow a deliberate no-injection audit run without masking real injection failures."""
+    if skipped_by_request and status == "skipped_by_request":
+        return
+    if status != "completed":
+        raise SystemExit("Calibrated Jy injection/recovery did not complete; see field summary.")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--field", default="M101,210.80227,54.34895")
@@ -953,8 +961,10 @@ def main():
         raise SystemExit("One or more required detector calibration families were not retrieved; see artifact manifest.")
     if (audit_report.get("calibration_compatibility") or {}).get("status") != "compatible":
         raise SystemExit("Native MEF calibration compatibility did not pass; see audit report.")
-    if calibrated_injection.get("status") != "completed":
-        raise SystemExit("Calibrated Jy injection/recovery did not complete; see field summary.")
+    validate_calibrated_injection_exit(
+        str(calibrated_injection.get("status", "not_run")),
+        skipped_by_request=bool(args.skip_calibrated_injection),
+    )
 
 
 if __name__ == "__main__":
