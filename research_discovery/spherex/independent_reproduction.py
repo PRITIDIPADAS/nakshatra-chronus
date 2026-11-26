@@ -335,12 +335,92 @@ def evaluate_scientific_release_readiness(
             not_assessed = int(value.get("not_assessed_check_count", 1))
         except (TypeError, ValueError, OverflowError):
             return False
-        return value.get("valid") is True and value.get("disposition") == "accepted" and required > 0 and accepted == required and rejected == 0 and not_assessed == 0
+        return (
+            value.get("valid") is True
+            and value.get("disposition") == "accepted"
+            and required > 0 and accepted == required
+            and rejected == 0 and not_assessed == 0
+            and value.get("external_identity_and_independence_confirmed") is True
+        )
+
+    def accepted_blind_benchmark(value: Mapping[str, Any] | None) -> bool:
+        """A completed run is not a superiority result; require the actual blind gate."""
+        if not isinstance(value, Mapping):
+            return False
+        required_methods = {
+            "snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"
+        }
+        if set(value.get("methods") or []) != required_methods:
+            return False
+        if value.get("scientific_claim_eligible") is not True:
+            return False
+        reproducibility = value.get("reproducibility") or {}
+        if reproducibility.get("same_input_enforced_for_all_methods") is not True:
+            return False
+        blind = value.get("blind_evaluation") or {}
+        if (
+            blind.get("custodian_attestation_verified") is not True
+            or blind.get("configuration_freeze_verified") is not True
+            or blind.get("truth_released_after_run_freeze") is not True
+            or blind.get("multiple_comparison_correction") != "bonferroni_95_familywise"
+        ):
+            return False
+        preregistration = str(blind.get("preregistration_sha256", "")).lower()
+        if not SHA_RE.fullmatch(preregistration):
+            return False
+        unblind = blind.get("unblinding_record") or {}
+        encrypted_truth_sha = str(unblind.get("encrypted_truth_store_sha256", "")).lower()
+        processed_tokens = unblind.get("heldout_field_tokens_processed")
+        if not SHA_RE.fullmatch(encrypted_truth_sha):
+            return False
+        if not isinstance(processed_tokens, (list, tuple)) or not processed_tokens:
+            return False
+        paired = value.get("paired_superiority") or {}
+        margin = paired.get("predeclared_false_candidate_noninferiority_margin")
+        if (
+            paired.get("status") != "paired_field_group_bootstrap_completed"
+            or paired.get("verdict_status") != "superiority_gate_passed"
+            or paired.get("superiority_supported") is not True
+            or int(paired.get("independent_group_count", 0)) < 5
+            or not isinstance(margin, (int, float))
+            or not math.isfinite(float(margin))
+            or float(margin) < 0
+            or (paired.get("multiple_comparator_correction") or {}).get("method") != "bonferroni_95_familywise"
+            or (paired.get("multiple_comparator_correction") or {}).get("verified_predeclared") is not True
+        ):
+            return False
+        comparisons = paired.get("comparisons") or {}
+        if set(comparisons) != {"snr_only", "chronos_pda", "instrument_forensics"}:
+            return False
+        for comparison in comparisons.values():
+            completeness_ci = (
+                comparison.get("delta_completeness_twin_minus_comparator") or {}
+            ).get("familywise_95_interval_bonferroni")
+            false_candidate_ci = (
+                comparison.get("delta_false_candidates_per_field_twin_minus_comparator") or {}
+            ).get("familywise_95_interval_bonferroni")
+            if (
+                not isinstance(completeness_ci, (list, tuple)) or len(completeness_ci) != 2
+                or not isinstance(false_candidate_ci, (list, tuple)) or len(false_candidate_ci) != 2
+            ):
+                return False
+            try:
+                if not (float(completeness_ci[0]) > 0 and float(false_candidate_ci[1]) <= float(margin)):
+                    return False
+            except (TypeError, ValueError, OverflowError):
+                return False
+        return True
 
     summary = source_timeseries.get("time_series_summary", {}) if isinstance(source_timeseries, Mapping) else {}
     digest = str(source_timeseries.get("verified_source_timeseries_manifest_sha256", "")).lower() if isinstance(source_timeseries, Mapping) else ""
     try:
-        epochs_ok = isinstance(source_timeseries, Mapping) and int(source_timeseries.get("successful_photometry_epoch_count", 0)) >= int(source_timeseries.get("requested_epoch_count", 1))
+        epochs_ok = (
+            isinstance(source_timeseries, Mapping)
+            and int(source_timeseries.get("requested_epoch_count", 0)) >= 3
+            and int(source_timeseries.get("successful_photometry_epoch_count", 0))
+                >= int(source_timeseries.get("requested_epoch_count", 1))
+            and int(source_timeseries.get("successful_photometry_epoch_count", 0)) >= 3
+        )
     except (TypeError, ValueError, OverflowError):
         epochs_ok = False
     try:
@@ -361,14 +441,39 @@ def evaluate_scientific_release_readiness(
     gates = {
         "independent_calibration_review": accepted_review(calibration_review),
         "independent_astronomical_reproduction": accepted_review(astronomical_reproduction),
-        "independent_blind_custodian": isinstance(custodian_attestation, Mapping) and custodian_attestation.get("valid") is True,
-        "blind_four_baseline_benchmark": isinstance(blind_benchmark, Mapping) and blind_benchmark.get("status") == "completed" and blind_benchmark.get("all_methods_same_inputs") is True and blind_benchmark.get("custodian_unblinded") is True,
+        "independent_blind_custodian": (
+            isinstance(custodian_attestation, Mapping)
+            and custodian_attestation.get("valid") is True
+            and custodian_attestation.get("custodian_identity_verified_out_of_band") is True
+            and custodian_attestation.get("custodian_independence_verified_out_of_band") is True
+        ),
+        "blind_four_baseline_benchmark": accepted_blind_benchmark(blind_benchmark),
         "verified_multi_epoch_source_timeseries": isinstance(source_timeseries, Mapping) and source_timeseries.get("status") == "verified_multi_epoch_source_series" and epochs_ok and bool(SHA_RE.fullmatch(digest)) and isinstance(summary, Mapping) and summary.get("usable_multi_epoch_series") is True,
         "real_supported_source_selection_function": selection_ok,
-        "event_detection_efficiency": isinstance(event_detection, Mapping) and event_detection.get("supported") is True and event_detection.get("real_source_timeseries_injections") is True,
-        "source_level_contamination_review": isinstance(contamination_review, Mapping) and contamination_review.get("status") == "independently_reviewed" and contamination_review.get("source_level_controls") is True,
+        "event_detection_efficiency": (
+            isinstance(event_detection, Mapping)
+            and event_detection.get("supported") is True
+            and event_detection.get("real_source_timeseries_injections") is True
+            and int(event_detection.get("independent_field_count", 0)) >= 5
+            and event_detection.get("negative_controls_passed") is True
+            and event_detection.get("outside_support_abstention_verified") is True
+        ),
+        "source_level_contamination_review": (
+            isinstance(contamination_review, Mapping)
+            and contamination_review.get("status") == "independently_reviewed"
+            and contamination_review.get("source_level_controls") is True
+            and contamination_review.get("independent_reviewer_identity_verified_out_of_band") is True
+        ),
         "independent_source_classifications": classes_ok,
-        "external_preregistration": isinstance(external_preregistration, Mapping) and external_preregistration.get("verified") is True and bool(SHA_RE.fullmatch(str(external_preregistration.get("receipt_sha256", "")).lower())) and external_preregistration.get("registered_before_data_access") is True,
+        "external_preregistration": (
+            isinstance(external_preregistration, Mapping)
+            and external_preregistration.get("verified") is True
+            and bool(SHA_RE.fullmatch(str(external_preregistration.get("receipt_sha256", "")).lower()))
+            and external_preregistration.get("registered_before_data_access") is True
+            and external_preregistration.get("independent_timestamp_verified") is True
+            and external_preregistration.get("receipt_bytes_verified") is True
+            and external_preregistration.get("custodian_no_prior_holdout_access_attested") is True
+        ),
     }
     blockers = sorted(name for name, passed in gates.items() if not passed)
     return {
