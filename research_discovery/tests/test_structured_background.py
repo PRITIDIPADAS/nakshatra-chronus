@@ -39,3 +39,19 @@ def test_structured_background_reduces_false_baseline_peaks():
     honest = run_injection_recovery(img, var, flags, _psf(), structured_background=True, **kw)
     assert honest["n_baseline_detections"] < plain["n_baseline_detections"]
     assert honest["structured_background"]["noise_scale_median"] > 2.0
+
+
+def test_reported_rule_follows_the_preregistered_threshold():
+    from research_discovery.validation.injection_recovery import reported_rule
+    assert reported_rule(1.18) == "primary"
+    assert reported_rule(2.0) == "sky_aware"
+    assert reported_rule(7.9) == "sky_aware"
+    assert reported_rule(float("nan")) == "primary"
+
+
+def test_region_noise_excess_sees_structured_sky():
+    from research_discovery.validation.injection_recovery import region_noise_excess
+    flat = region_noise_excess(*_scene(0.0)[:2], (128, 128), 100)
+    lumpy = region_noise_excess(*_scene(4.0)[:2], (128, 128), 100)
+    assert 0.9 < flat < 1.1
+    assert lumpy > 2.0

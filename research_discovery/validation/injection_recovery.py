@@ -536,6 +536,36 @@ def structured_background_model(image: np.ndarray, variance: np.ndarray, valid: 
     return up(bg), np.maximum(up(sc), 1.0)
 
 
+SKY_AWARE_NOISE_EXCESS = 2.0
+
+
+def region_noise_excess(image: np.ndarray, variance: np.ndarray, xy, radius: float = 100.0) -> float:
+    """Robust pixel scatter over the pipeline noise inside the injection region.
+
+    Same definition as summarize_injection_diagnostics: MAD sigma of IMAGE over the square root of the
+    median VARIANCE, in a circle of `radius` pixels around `xy`.
+    """
+    image = np.asarray(image, float)
+    variance = np.asarray(variance, float)
+    ny, nx = image.shape
+    yy, xx = np.ogrid[:ny, :nx]
+    m = (xx - xy[0]) ** 2 + (yy - xy[1]) ** 2 <= radius ** 2
+    v = image[m & np.isfinite(image)]
+    if v.size == 0:
+        return float("nan")
+    mad = 1.4826 * np.median(np.abs(v - np.median(v)))
+    return float(mad / np.sqrt(np.nanmedian(variance[m])))
+
+
+def reported_rule(noise_excess: float, threshold: float = SKY_AWARE_NOISE_EXCESS) -> str:
+    """Which recovery rule a field reports, as fixed by the preregistered holdout test of 26 November 2026.
+
+    Fields whose sky scatters at least `threshold` times the pipeline noise report the sky-aware rule; all others
+    report the primary rule. Both are always written to the report.
+    """
+    return "sky_aware" if np.isfinite(noise_excess) and noise_excess >= threshold else "primary"
+
+
 def run_injection_recovery(image: np.ndarray, variance: np.ndarray, flags: np.ndarray,
                            psf: np.ndarray, *, flux_levels: list[float], n_per_level: int=100,
                            snr_threshold: float=5.0, match_radius: float=2.5,

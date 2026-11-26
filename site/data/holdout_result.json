@@ -1,0 +1,80 @@
+{
+  "rows": [
+    {
+      "field": "HighLatitude_Control_South",
+      "name": "High-latitude control (south)",
+      "excess": 1.183,
+      "primary": 15,
+      "variant": 18,
+      "ratio": 1.0992,
+      "p2": true,
+      "p3": null
+    },
+    {
+      "field": "IC_348",
+      "name": "IC 348",
+      "excess": 1.355,
+      "primary": 14,
+      "variant": 14,
+      "ratio": 1.1546,
+      "p2": true,
+      "p3": null
+    },
+    {
+      "field": "NGC_2264",
+      "name": "NGC 2264",
+      "excess": 2.298,
+      "primary": 0,
+      "variant": 3,
+      "ratio": 1.5311,
+      "p2": true,
+      "p3": true
+    },
+    {
+      "field": "Chamaeleon_I",
+      "name": "Chamaeleon I",
+      "excess": 3.317,
+      "primary": 12,
+      "variant": 17,
+      "ratio": 1.5517,
+      "p2": true,
+      "p3": true
+    },
+    {
+      "field": "Serpens_Main",
+      "name": "Serpens Main",
+      "excess": 7.947,
+      "primary": 1,
+      "variant": 15,
+      "ratio": 5.2697,
+      "p2": true,
+      "p3": true
+    }
+  ],
+  "incomplete": [
+    {
+      "field": "Corona_Australis",
+      "name": "Corona Australis",
+      "status": "incomplete_or_review_required",
+      "checks": "10/25"
+    }
+  ],
+  "P1": {
+    "rho": -0.7,
+    "holds": true
+  },
+  "P2": {
+    "holds": true
+  },
+  "P3": {
+    "holds": true
+  },
+  "P4": {
+    "rho": 1.0,
+    "holds": true
+  },
+  "adopted": true,
+  "run": "45835103107",
+  "preregistration": "docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md",
+  "html": "<table><thead><tr><th>Field</th><th>Noise excess</th><th>Primary rule, 2 × its limit</th><th>Sky-aware rule, 2 × its limit</th><th>Limit ratio</th></tr></thead><tbody><tr><td>High-latitude control (south)</td><td>1.18</td><td>15 of 20</td><td>18 of 20</td><td>1.10</td></tr><tr><td>IC 348</td><td>1.36</td><td>14 of 20</td><td>14 of 20</td><td>1.15</td></tr><tr><td>NGC 2264</td><td>2.30</td><td>0 of 20</td><td>3 of 20</td><td>1.53</td></tr><tr><td>Chamaeleon I</td><td>3.32</td><td>12 of 20</td><td>17 of 20</td><td>1.55</td></tr><tr><td>Serpens Main</td><td>7.95</td><td>1 of 20</td><td>15 of 20</td><td>5.27</td></tr></tbody></table><p>P1, recovery falls as the sky gets noisier: Spearman ρ = −0.70, holds. P2, the sky-aware rule never loses more than 2: holds. P3, it finds strictly more wherever the excess is 2 or more: holds. P4, its limit ratio tracks the excess: ρ = 1.00, holds.</p><p>The decision rule fired: the sky-aware rule is now the reported rule for fields whose sky scatters at least twice the pipeline noise, and the primary rule is reported beside it. Corona Australis did not complete (10 of 25 field checks passed). Each rule is counted at twice its own stated limit, so in a noisy field the sky-aware sources are brighter: the gain is an honest limit, not extra sensitivity. GitHub Actions run 45835103107.</p>"
+}

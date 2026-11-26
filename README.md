@@ -85,7 +85,19 @@ Quiet fields behave as the noise predicts. Crowded star-forming clouds are harde
 
 **Why Lupus III gave zero.** A new diagnostic (`research_discovery/spherex/summarize_injection_diagnostics.py`, run 45787598732) records why each planted source was missed. In Lupus III all 60 misses are the same kind: the source made a peak, but a brighter neighbour won. On their own the planted sources were bright enough (20 of 20 at twice the limit). The cause is the sky: in the injection region the pixel scatter is 5.5 times what the pipeline variance predicts, against 1.2 in the quiet control, because nebular emission in the cloud is structured on the scale of the PSF. Across the six fields, recovery falls as this excess rises (control 1.2, Taurus 1.3, Perseus 2.0, Orion 2.3, Rho Ophiuchi 3.4, Lupus III 5.5).
 
-A secondary variant models that structured sky (a 32-pixel mesh background and an empirical noise scale) and plants sources at the 5σ limit this honest noise implies. For Lupus III that limit is 3.1 times brighter, and 7 and 5 of 20 are then found at one and two times it, instead of 0. In the quiet control the variant is stricter than the primary rule (0, 4, 17 of 20), so it is reported beside the primary rule and does not replace it. Data: [data/injection_diagnostics.json](data/injection_diagnostics.json). Earlier investigation: [docs/SPHEREX_LUPUS_III_ZERO_RECOVERY_INVESTIGATION_2026-11-25.md](docs/SPHEREX_LUPUS_III_ZERO_RECOVERY_INVESTIGATION_2026-11-25.md).
+A secondary variant models that structured sky (a 32-pixel mesh background and an empirical noise scale) and plants sources at the 5σ limit this honest noise implies. For Lupus III that limit is 3.1 times brighter, and 7 and 5 of 20 are then found at one and two times it, instead of 0. In the quiet control the variant is stricter than the primary rule (0, 4, 17 of 20), so at first it was reported only beside the primary rule. Data: [data/injection_diagnostics.json](data/injection_diagnostics.json). Earlier investigation: [docs/SPHEREX_LUPUS_III_ZERO_RECOVERY_INVESTIGATION_2026-11-25.md](docs/SPHEREX_LUPUS_III_ZERO_RECOVERY_INVESTIGATION_2026-11-25.md).
+
+**A preregistered test on six new fields.** Before any of them was downloaded, four predictions and a decision rule were committed in [docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md](docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md). Five fields completed (run 45835103107); Corona Australis stopped after 10 of 25 field checks and does not count.
+
+| Field | Noise excess | Primary rule | Sky-aware rule |
+|---|---|---|---|
+| High-latitude control (south) | 1.18 | 15 of 20 | 18 of 20 |
+| IC 348 | 1.36 | 14 of 20 | 14 of 20 |
+| NGC 2264 | 2.30 | 0 of 20 | 3 of 20 |
+| Chamaeleon I | 3.32 | 12 of 20 | 17 of 20 |
+| Serpens Main | 7.95 | 1 of 20 | 15 of 20 |
+
+All four predictions held (ρ = −0.70 for recovery against noise excess, ρ = 1.00 for the limit ratio). By the rule written in advance, the sky-aware rule is now the reported rule where the noise excess is 2 or more, with the primary rule beside it. Each rule is counted at twice its own limit, so this shows an honest limit, not extra sensitivity. Scored by `scripts/evaluate_holdout.py`; result in [data/holdout_result.json](data/holdout_result.json).
 
 **QR3 planting.** 120 movers, variables and transients planted in five real QR3 fields: 29 found (24 percent; by magnitude AB 14 to 18: 13 of 28, 6 of 22, 6 of 31, 4 of 26, 0 of 13). The engine trained on the practice sky answered unknown for all 29 rather than guess. Retrained with the real rows, each field held out, it decides 17 and is right in 12.
 
@@ -102,6 +114,8 @@ A secondary variant models that structured sky (a 32-pixel mesh background and a
 * Known asteroids are looked up from SPHEREx's orbit instead of the ground.
 * The investigation cache has a size limit.
 * Per-injection miss reasons are printed for every real pilot field, and the Lupus III zero is traced to structured nebular sky 5.5 times noisier than the pipeline variance.
+* A preregistered test of the sky-aware noise rule on six held-out fields: all four predictions held in the five that completed, and the rule is now reported for noisy fields.
+* A reproduction kit for an outside astronomer ([docs/REPRODUCE.md](docs/REPRODUCE.md)) and a classroom kit (a 45-minute lesson, worksheet and answer key on the site).
 
 ## Run it
 

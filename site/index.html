@@ -45,7 +45,7 @@
       <div><dt>98.4%</dt><dd>right when it decides, on unseen practice fields</dd></div>
       <div><dt>0 of 118</dt><dd>camera effects ever called a sky change</dd></div>
       <div><dt>7 fields</dt><dd>of real NASA SPHEREx data, 420 calibrated injections</dd></div>
-      <div><dt>464 tests</dt><dd>Python, JavaScript and a MATLAB cross-check</dd></div>
+      <div><dt>468 tests</dt><dd>Python, JavaScript and a MATLAB cross-check</dd></div>
     </dl>
   </div>
 
@@ -312,8 +312,8 @@
 
   <div class="holdout" id="holdout">
     <h3>A prediction made before looking</h3>
-    <p>The sky-aware rule was built on the seven pilot fields, so those fields cannot test it. Before downloading six new fields (Chamaeleon I, Serpens, Corona Australis, NGC 2264, IC 348 and a southern control), the predictions and the rule for adopting it were committed to the repository: <a href="https://github.com/PRITIDIPADAS/nakshatra-chronus/blob/main/docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md">the preregistration</a>.</p>
-    <div id="holdoutResult" class="holdout-result"><p>The held-out run is on GitHub Actions; its result appears here once published.</p></div>
+    <p>The sky-aware rule was built on the pilot fields, so those fields cannot test it. Before downloading six new fields (Chamaeleon I, Serpens, Corona Australis, NGC 2264, IC 348 and a southern control), the predictions and the rule for adopting it were committed to the repository: <a href="https://github.com/PRITIDIPADAS/nakshatra-chronus/blob/main/docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md">the preregistration</a>.</p>
+    <div id="holdoutResult" class="holdout-result"><p>Loading the result of run 45835103107.</p></div>
   </div>
   <div class="two">
     <figure>
@@ -438,14 +438,17 @@ python scripts/calibrate_engine.py              <span class="cm"># retrain and r
         <li>Known asteroids looked up from SPHEREx's own orbit; investigation cache with a size limit</li>
         <li>Whole sky tiles with null and injection twins; Planet X lab; bilingual story</li>
         <li>Python and MATLAB agree on the core physics to machine precision</li>
+        <li>A preregistered test on six new fields: all four predictions held in the five that completed, so noisy fields now report the sky-aware rule</li>
+        <li>A reproduction kit for an outside astronomer and a classroom kit with a worksheet and answer key</li>
       </ul>
     </div>
     <div>
       <h3>Not yet</h3>
       <ul>
         <li>Real data is much harder: 24 percent of planted sources found in QR3, against 97 percent on the practice sky</li>
-        <li>Lupus III recovered 0 of 60 under the primary rule. The cause is structured nebular sky; a sky-aware rule finds 12 of 40 at its honest limit but is not yet the main rule</li>
-        <li>No blind test held by an independent custodian, and no outside astronomer has reproduced the real-data runs</li>
+        <li>Lupus III recovered 0 of 60 under the primary rule. The cause is structured nebular sky. The sky-aware rule now reported there gives an honest limit, not extra sensitivity, and NGC 2264 stays hard for both rules</li>
+        <li>No blind test held by an independent custodian. The reproduction kit is ready, but no outside astronomer has run it yet</li>
+        <li>Corona Australis stopped after 10 of 25 field checks in the held-out run; light curves for the 2,421 young stars are not built yet</li>
         <li>The gain-to-electron conversion awaits review by an instrument scientist</li>
         <li>QR3 covers about two months of most places, so slow movers barely move yet</li>
         <li>Nothing here is a discovery. Every result is a candidate with its evidence attached</li>
@@ -459,7 +462,7 @@ python scripts/calibrate_engine.py              <span class="cm"># retrain and r
     <div class="prose">
       <h2>Who it helps</h2>
       <p>SPHEREx maps the whole sky in 102 colours every six months, and its archive is open to anyone. Students, amateur variable-star observers and researchers who want to check a claim about a changing source need a way to separate a real change from the instrument. CHRONOS gives them that test, the evidence behind it, and a plain-language report in English and Bangla.</p>
-      <p>Next: test the sky-aware noise rule in advance on new fields, hand the real-data runs to an outside astronomer, extend to the full DR1 release as SPHEREx completes its four sky surveys, and open the citizen lab to classrooms.</p>
+      <p>Done since the last release: the sky-aware noise rule passed a test declared in advance on new fields, the reproduction kit is written, and the classroom kit is on this page. Next: an outside astronomer runs the kit, the full DR1 release as SPHEREx completes its four sky surveys, and light curves for 2,421 young stars.</p>
     </div>
     <div class="links">
       <h3>Every link</h3>

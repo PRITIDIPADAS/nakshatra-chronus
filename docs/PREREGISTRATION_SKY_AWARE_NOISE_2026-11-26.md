@@ -20,3 +20,26 @@ Chamaeleon I (167.0, −77.3), Serpens Main (277.45, +1.25), Corona Australis (2
 ## Decision rule
 
 If P2 holds in every completed field and P3 holds in every field it applies to, the sky-aware rule becomes the reported rule for fields with noise excess ≥ 2, and the primary rule stays reported beside it. If either fails, the variant stays secondary and the failure is reported here. Fields that fail to download are reported as incomplete and do not count either way. P1 and P4 are reported whatever they show.
+
+## Result
+
+Run on GitHub Actions on 26 November 2026, run 45835103107, from the commit that adds this file. The two log steps are kept in [data/holdout_run_45835103107.log](../data/holdout_run_45835103107.log); `python scripts/evaluate_holdout.py data/holdout_run_45835103107.log --run 45835103107` scores them and writes [data/holdout_result.json](../data/holdout_result.json).
+
+Five of six fields completed with 25 of 25 field checks. Corona Australis stopped after 10 of 25 checks: its field runner exited before the per-injection report was written, so the strict multi-field gate reports it as incomplete. Under the rule above it does not count either way.
+
+| Field | Noise excess | Primary rule at 2 × its limit | Sky-aware rule at 2 × its limit | Limit ratio |
+|---|---|---|---|---|
+| High-latitude control (south) | 1.18 | 15 of 20 | 18 of 20 | 1.10 |
+| IC 348 | 1.36 | 14 of 20 | 14 of 20 | 1.15 |
+| NGC 2264 | 2.30 | 0 of 20 | 3 of 20 | 1.53 |
+| Chamaeleon I | 3.32 | 12 of 20 | 17 of 20 | 1.55 |
+| Serpens Main | 7.95 | 1 of 20 | 15 of 20 | 5.27 |
+
+* **P1 holds.** Spearman ρ between noise excess and primary recovery is −0.70.
+* **P2 holds** in all five fields. The smallest margin is IC 348, where both rules find 14.
+* **P3 holds** in the three fields with excess of 2 or more: 3 against 0, 17 against 12, 15 against 1.
+* **P4 holds.** Spearman ρ between noise excess and the limit ratio is 1.00.
+
+**Decision.** P2 and P3 hold, so the decision rule fires. From this commit the sky-aware rule is the reported rule for fields whose region noise excess is 2 or more (`reported_rule` in `research_discovery/validation/injection_recovery.py`, written into every real-field audit as `reported_rule` and `region_noise_excess`). The primary rule is still computed and reported beside it in every field.
+
+**What this does and does not show.** Each rule is counted at twice its own stated limit. In a noisy field the sky-aware limit is brighter (5.3 times in Serpens Main), so its planted sources are brighter too. The test shows that the sky-aware limit is an honest one, which the primary limit is not in structured sky. It does not show that the sky-aware rule sees fainter sources. NGC 2264 remains hard for both rules: almost every miss there is a brighter neighbour winning the peak.

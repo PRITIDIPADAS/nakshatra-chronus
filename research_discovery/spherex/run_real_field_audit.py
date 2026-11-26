@@ -519,9 +519,10 @@ def run_calibrated_jy_injection(
         electron_calibration_record=electron_record,
         allow_unreviewed_electron_calibration=True,
     )
-    # Secondary, reported beside the primary rule and never replacing it: model the structured sky
-    # (mesh background plus empirical noise) and inject at the 5 sigma that this honest noise implies.
-    from research_discovery.validation.injection_recovery import structured_background_model
+    # Sky-aware rule: model the structured sky (mesh background plus empirical noise) and inject at the 5 sigma
+    # that this honest noise implies. It is the reported rule where the sky scatter is at least twice the pipeline
+    # noise (docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md); the primary rule is always reported beside it.
+    from research_discovery.validation.injection_recovery import region_noise_excess, reported_rule, structured_background_model
     sb_valid = np.isfinite(image) & np.isfinite(variance) & (variance > 0) & ((flags.astype(np.uint64) & np.uint64(flag_bits)) == 0)
     _, sb_scale = structured_background_model(image - (background if background is not None else 0.0), variance, sb_valid)
     local_scale = sb_scale[sl]
@@ -541,8 +542,13 @@ def run_calibrated_jy_injection(
         allow_unreviewed_electron_calibration=True,
         structured_background=True,
     )
+    excess = region_noise_excess(image, variance, (x_ref, y_ref), 100.0)
+    rule = reported_rule(excess)
+    result["region_noise_excess"] = excess
+    result["reported_rule"] = rule
     result["structured_background_variant"] = {
-        "role": "secondary diagnostic; the primary recovery rule above is unchanged",
+        "role": ("reported rule for this field (noise excess >= 2); the primary rule is reported beside it"
+                 if rule == "sky_aware" else "secondary; the primary rule is the reported rule for this field"),
         "empirical_five_sigma_jy": empirical_five_sigma_jy,
         "pipeline_five_sigma_jy": five_sigma_jy,
         "sensitivity_ratio": empirical_five_sigma_jy / five_sigma_jy,

@@ -7,7 +7,7 @@ Written for an astronomer outside the project. Each step names the command and t
 ```bash
 git clone https://github.com/PRITIDIPADAS/nakshatra-chronus && cd nakshatra-chronus
 pip install -r requirements.txt -r research_discovery/requirements-research.txt
-python -m pytest tests research_discovery/tests -q        # 464 tests pass
+python -m pytest tests research_discovery/tests -q        # 468 tests pass
 ```
 
 ## 2. The MATLAB cross-check (2 minutes, needs GNU Octave)
@@ -37,7 +37,15 @@ The archive files are checked against IRSA's own MD5 sums and kept with SHA-256 
 
 ## 5. The held-out test
 
-`docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md` states the predictions before the run. Rerun with `--field-set holdout`.
+`docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md` states the predictions and the decision rule; its Result section reports run 45835103107. To rerun and score it yourself:
+
+```bash
+python -m research_discovery.spherex.run_multifield_jy_pilot --field-set holdout --out /tmp/holdout | tee /tmp/holdout.log
+python -m research_discovery.spherex.summarize_injection_diagnostics /tmp/holdout >> /tmp/holdout.log
+python scripts/evaluate_holdout.py /tmp/holdout.log
+```
+
+The scorer reads the per-field lines and the sky-aware lines, works out P1 to P4 and the decision, and overwrites `data/holdout_result.json`. Compare it with the committed file.
 
 ## What to send back
 

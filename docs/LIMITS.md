@@ -19,6 +19,7 @@ Read this before you trust a result.
 * WISE 0855 is near the single picture limit even in the longest band. A nondetection is the expected result in most colors.
 * The brightness models that feed the forecast are approximate.
 * The reference stars are Gaia stars brighter than magnitude 17. A crowded field can pull the star fit toward a neighbor.
+* Recovery in noisy star-forming clouds is reported with the sky-aware rule where the region noise excess is 2 or more, as fixed by the preregistered holdout test. That rule gives an honest limit, not extra sensitivity: its planted sources are brighter. In NGC 2264 both rules find almost nothing, and Corona Australis did not complete its field checks.
 
 ## Methods
 

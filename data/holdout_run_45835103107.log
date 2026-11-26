@@ -1,0 +1,205 @@
+holdout	Run the six held-out fields declared in the preregistration	﻿2026-11-26T14:03:52.2926321Z ##[group]Run python -m research_discovery.spherex.run_multifield_jy_pilot --field-set holdout \
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2926973Z [36;1mpython -m research_discovery.spherex.run_multifield_jy_pilot --field-set holdout \[0m
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2927614Z [36;1m  --out data/spherex_holdout --release dr1 --bandpass SPHEREx-D2 --code-revision 49f73d67a92a2b2ec70e7af9d5b850c2887e1874[0m
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2949144Z shell: /usr/bin/bash -e {0}
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2949535Z env:
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2949837Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2950220Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2950620Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2950941Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2951316Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2951648Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.2952046Z ##[endgroup]
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:03:52.3339487Z [1/6] Chamaeleon_I: retrieving a native D2 Level-2 exposure
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:08:49.4592180Z {"field": "Chamaeleon_I", "status": "completed_calibrated_jy_pilot", "checks_passed": 25, "checks_total": 25, "error": null}
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:08:49.4593058Z [2/6] Serpens_Main: retrieving a native D2 Level-2 exposure
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:12:34.3020417Z {"field": "Serpens_Main", "status": "completed_calibrated_jy_pilot", "checks_passed": 25, "checks_total": 25, "error": null}
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:12:34.3021203Z [3/6] Corona_Australis: retrieving a native D2 Level-2 exposure
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:16:07.8589581Z {"field": "Corona_Australis", "status": "incomplete_or_review_required", "checks_passed": 10, "checks_total": 25, "error": "field runner exited with status 1"}
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:16:07.8590224Z [4/6] NGC_2264: retrieving a native D2 Level-2 exposure
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:19:48.8480619Z {"field": "NGC_2264", "status": "completed_calibrated_jy_pilot", "checks_passed": 25, "checks_total": 25, "error": null}
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:19:48.8481212Z [5/6] IC_348: retrieving a native D2 Level-2 exposure
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:23:53.4562941Z {"field": "IC_348", "status": "completed_calibrated_jy_pilot", "checks_passed": 25, "checks_total": 25, "error": null}
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:23:53.4563942Z [6/6] HighLatitude_Control_South: retrieving a native D2 Level-2 exposure
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4199342Z {"field": "HighLatitude_Control_South", "status": "completed_calibrated_jy_pilot", "checks_passed": 25, "checks_total": 25, "error": null}
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4235763Z {
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4236959Z   "report": "data/spherex_holdout/multi_field_jy_pilot_summary.json",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4238017Z   "report_sha256": "d4733240367eedd101e52cc7209a12aa7d5dbe8e1a9f2024ced4b811a18834b5",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4239137Z   "field_count_requested": 6,
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4239641Z   "field_count_returned": 6,
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4240119Z   "field_count_completed": 5,
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4240961Z   "field_count_incomplete": 1,
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4241330Z   "gate_status": "not_satisfied",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4241715Z   "strict_aggregate_validation": {
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4242037Z     "valid": false,
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4242308Z     "errors": [
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4242689Z       "Corona_Australis: field-level eligibility gate did not pass",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4243281Z       "Corona_Australis: one or more strict field checks are false or absent",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4243808Z       "Corona_Australis: per-injection report SHA-256 is missing or invalid",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4244403Z       "Corona_Australis: local per-injection SNR diagnostics are incomplete or unbound",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4245012Z       "Corona_Australis: isolated source-only response diagnostics are incomplete or unbound",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4245731Z       "Corona_Australis: source-only peak-list counts do not match the detailed injection rows",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4246351Z       "Corona_Australis: exact detector peak-selection diagnostics are incomplete or unbound",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4247246Z       "Corona_Australis: per-injection report is not bound to the science/gain pair",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4247760Z       "not all predeclared fields completed",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4248132Z       "aggregate contains incomplete fields",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4248533Z       "multi-field exploratory scientific gate is not satisfied"
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4249246Z     ],
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4249547Z     "verified_field_count": 6,
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4249917Z     "verified_field_names": [
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4250225Z       "Chamaeleon_I",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4250539Z       "Corona_Australis",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4250876Z       "HighLatitude_Control_South",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4251215Z       "IC_348",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4251504Z       "NGC_2264",
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4251772Z       "Serpens_Main"
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4252029Z     ],
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4252666Z     "aggregate_report_sha256": "d4733240367eedd101e52cc7209a12aa7d5dbe8e1a9f2024ced4b811a18834b5"
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4253218Z   }
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4253518Z }
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4257597Z Strict multi-field acceptance validation failed: Corona_Australis: field-level eligibility gate did not pass; Corona_Australis: one or more strict field checks are false or absent; Corona_Australis: per-injection report SHA-256 is missing or invalid; Corona_Australis: local per-injection SNR diagnostics are incomplete or unbound; Corona_Australis: isolated source-only response diagnostics are incomplete or unbound; Corona_Australis: source-only peak-list counts do not match the detailed injection rows; Corona_Australis: exact detector peak-selection diagnostics are incomplete or unbound; Corona_Australis: per-injection report is not bound to the science/gain pair; not all predeclared fields completed; aggregate contains incomplete fields; multi-field exploratory scientific gate is not satisfied. Inspect data/spherex_holdout/multi_field_jy_pilot_summary.json and the per-field runner logs.
+holdout	Run the six held-out fields declared in the preregistration	2026-11-26T14:27:19.4321364Z ##[error]Process completed with exit code 1.
+holdout	Print per-injection diagnostics	﻿2026-11-26T14:27:19.4364074Z ##[group]Run python -m research_discovery.spherex.summarize_injection_diagnostics \
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4364776Z [36;1mpython -m research_discovery.spherex.summarize_injection_diagnostics \[0m
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4365372Z [36;1m  data/spherex_holdout --json data/spherex_holdout/injection_diagnostics.json[0m
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4365867Z [36;1mfor f in data/spherex_holdout/fields/*/runner.log; do echo "== $f"; tail -n 15 "$f"; done[0m
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4384806Z shell: /usr/bin/bash -e {0}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4385119Z env:
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4385419Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4385823Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4386178Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4386494Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4386846Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4387205Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+holdout	Print per-injection diagnostics	2026-11-26T14:27:19.4387588Z ##[endgroup]
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8453712Z == data/spherex_holdout/fields/Chamaeleon_I/data/calibrated_injection/calibrated_jy_injection_recovery.json
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8455196Z   flux 0.000: 4/20 recovered, source-only 0, SNR base 23.108 post 23.311 src 2.377 src(pre-var) 2.478 delta 0.512 reasons {'recovered': 4, 'suppressed_by_brighter_neighbour': 16}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8456990Z   flux 0.000: 6/20 recovered, source-only 7, SNR base 22.896 post 24.475 src 4.848 src(pre-var) 5.317 delta 1.571 reasons {'suppressed_by_brighter_neighbour': 14, 'recovered': 6}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8457957Z   flux 0.000: 12/20 recovered, source-only 20, SNR base 22.639 post 27.354 src 9.125 src(pre-var) 10.85 delta 5.447 reasons {'suppressed_by_brighter_neighbour': 8, 'recovered': 12}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8459054Z   meta {"psf_reference_xy": [1027.25, 1020.75], "excluded_flag_bits": 167620}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8462420Z   structured {"role": "secondary diagnostic; the primary recovery rule above is unchanged", "empirical_five_sigma_jy": 0.0002733533899481576, "pipeline_five_sigma_jy": 0.00017616254227263532, "sensitivity_ratio": 1.551711200472495, "local_noise_scale_median": 1.5478194953385973, "flux_levels_jy": [0.0001366766949740788, 0.0002733533899481576, 0.0005467067798963152], "recovered": [0, 3, 17], "n_per_level": 20, "n_baseline_detections": 78, "structured_background": {"cell_px": 32, "noise_scale_median": 1.6486532207132045, "noise_scale_p90": 2.246920486176099}}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8467775Z   image {"file": "level2_2025W30_2B_0428_1D2_spx_l2b-v27-2026-221.fits", "region_image": {"median": 0.37639, "mad_sigma": 0.07187}, "global_image": {"median": 0.25404, "mad_sigma": 0.06453}, "region_sqrt_variance_median": 0.02167, "global_sqrt_variance_median": 0.01823, "region_noise_excess": 3.317, "region_flagged_fraction": 0.7021, "region_zodi_median": 0.12662}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8470726Z == data/spherex_holdout/fields/HighLatitude_Control_South/data/calibrated_injection/calibrated_jy_injection_recovery.json
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8472630Z   flux 0.000: 3/20 recovered, source-only 0, SNR base 5.198 post 6.252 src 2.34 src(pre-var) 2.469 delta 0.553 reasons {'suppressed_by_brighter_neighbour': 15, 'recovered': 3, 'below_threshold': 2}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8474829Z   flux 0.000: 12/20 recovered, source-only 7, SNR base 4.83 post 7.637 src 4.691 src(pre-var) 5.271 delta 2.368 reasons {'recovered': 12, 'suppressed_by_brighter_neighbour': 8}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8476912Z   flux 0.000: 15/20 recovered, source-only 20, SNR base 4.859 post 10.862 src 7.736 src(pre-var) 9.571 delta 5.62 reasons {'recovered': 15, 'suppressed_by_brighter_neighbour': 5}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8478388Z   meta {"psf_reference_xy": [1019.25, 1020.75], "excluded_flag_bits": 167620}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8482535Z   structured {"role": "secondary diagnostic; the primary recovery rule above is unchanged", "empirical_five_sigma_jy": 0.00012750470364915483, "pipeline_five_sigma_jy": 0.00011599887142240076, "sensitivity_ratio": 1.0991891738744293, "local_noise_scale_median": 1.099856152586499, "flux_levels_jy": [6.375235182457741e-05, 0.00012750470364915483, 0.00025500940729830966], "recovered": [0, 4, 18], "n_per_level": 20, "n_baseline_detections": 149, "structured_background": {"cell_px": 32, "noise_scale_median": 1.120595601341506, "noise_scale_p90": 1.2250063341749273}}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8488493Z   image {"file": "level2_2025W21_2C_0249_1D2_spx_l2b-v27-2026-199.fits", "region_image": {"median": 0.15813, "mad_sigma": 0.01726}, "global_image": {"median": 0.16065, "mad_sigma": 0.02012}, "region_sqrt_variance_median": 0.01459, "global_sqrt_variance_median": 0.01469, "region_noise_excess": 1.183, "region_flagged_fraction": 0.3471, "region_zodi_median": 0.13024}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8491396Z == data/spherex_holdout/fields/IC_348/data/calibrated_injection/calibrated_jy_injection_recovery.json
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8493056Z   flux 0.000: 6/20 recovered, source-only 0, SNR base 9.598 post 10.288 src 2.386 src(pre-var) 2.48 delta 0.918 reasons {'suppressed_by_brighter_neighbour': 14, 'recovered': 6}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8494565Z   flux 0.000: 9/20 recovered, source-only 5, SNR base 9.852 post 12.331 src 4.532 src(pre-var) 4.865 delta 2.364 reasons {'recovered': 9, 'suppressed_by_brighter_neighbour': 11}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8495666Z   flux 0.000: 14/20 recovered, source-only 20, SNR base 10.427 post 16.721 src 8.806 src(pre-var) 10.163 delta 6.297 reasons {'suppressed_by_brighter_neighbour': 6, 'recovered': 14}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8496483Z   meta {"psf_reference_xy": [1019.25, 1020.75], "excluded_flag_bits": 167620}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8498259Z   structured {"role": "secondary diagnostic; the primary recovery rule above is unchanged", "empirical_five_sigma_jy": 0.0002084701937542551, "pipeline_five_sigma_jy": 0.00018056120176441446, "sensitivity_ratio": 1.1545680451676137, "local_noise_scale_median": 1.1534932718636597, "flux_levels_jy": [0.00010423509687712754, 0.0002084701937542551, 0.0004169403875085102], "recovered": [0, 8, 14], "n_per_level": 20, "n_baseline_detections": 155, "structured_background": {"cell_px": 32, "noise_scale_median": 1.1695957116174251, "noise_scale_p90": 1.3250174715440095}}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8501011Z   image {"file": "level2_2025W34_1B_0636_1D2_spx_l2b-v27-2026-228.fits", "region_image": {"median": 0.40941, "mad_sigma": 0.03042}, "global_image": {"median": 0.38231, "mad_sigma": 0.0421}, "region_sqrt_variance_median": 0.02245, "global_sqrt_variance_median": 0.02183, "region_noise_excess": 1.355, "region_flagged_fraction": 0.5597, "region_zodi_median": 0.30354}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8502411Z == data/spherex_holdout/fields/NGC_2264/data/calibrated_injection/calibrated_jy_injection_recovery.json
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8503228Z   flux 0.000: 0/20 recovered, source-only 0, SNR base 15.931 post 16.272 src 2.129 src(pre-var) 2.193 delta 0.109 reasons {'suppressed_by_brighter_neighbour': 20}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8504272Z   flux 0.000: 1/20 recovered, source-only 1, SNR base 22.102 post 22.413 src 4.271 src(pre-var) 4.589 delta 0.459 reasons {'suppressed_by_brighter_neighbour': 19, 'recovered': 1}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8505245Z   flux 0.000: 0/20 recovered, source-only 20, SNR base 18.478 post 20.291 src 8.615 src(pre-var) 9.867 delta 1.416 reasons {'suppressed_by_brighter_neighbour': 20}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8505946Z   meta {"psf_reference_xy": [1021.25, 1020.75], "excluded_flag_bits": 167620}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8507711Z   structured {"role": "secondary diagnostic; the primary recovery rule above is unchanged", "empirical_five_sigma_jy": 0.0002759000625226941, "pipeline_five_sigma_jy": 0.00018019522318344754, "sensitivity_ratio": 1.5311175160387818, "local_noise_scale_median": 1.5318196496446281, "flux_levels_jy": [0.00013795003126134705, 0.0002759000625226941, 0.0005518001250453882], "recovered": [0, 0, 3], "n_per_level": 20, "n_baseline_detections": 241, "structured_background": {"cell_px": 32, "noise_scale_median": 1.6914961803311241, "noise_scale_p90": 2.210843319863262}}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8510590Z   image {"file": "level2_2025W40_1A_0131_1D2_spx_l2b-v27-2026-239.fits", "region_image": {"median": 0.45809, "mad_sigma": 0.05464}, "global_image": {"median": 0.47011, "mad_sigma": 0.07423}, "region_sqrt_variance_median": 0.02378, "global_sqrt_variance_median": 0.02422, "region_noise_excess": 2.298, "region_flagged_fraction": 0.9394, "region_zodi_median": 0.33131}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8512237Z == data/spherex_holdout/fields/Serpens_Main/data/calibrated_injection/calibrated_jy_injection_recovery.json
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8513030Z   flux 0.000: 0/20 recovered, source-only 1, SNR base 49.594 post 49.911 src 3.675 src(pre-var) 3.835 delta 0.121 reasons {'suppressed_by_brighter_neighbour': 20}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8514734Z   flux 0.000: 0/20 recovered, source-only 18, SNR base 57.138 post 58.179 src 7.091 src(pre-var) 7.722 delta 0.423 reasons {'suppressed_by_brighter_neighbour': 20}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8515857Z   flux 0.001: 1/20 recovered, source-only 20, SNR base 53.855 post 56.44 src 13.594 src(pre-var) 16.051 delta 1.414 reasons {'suppressed_by_brighter_neighbour': 19, 'recovered': 1}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8516690Z   meta {"psf_reference_xy": [1019.25, 1020.75], "excluded_flag_bits": 167620}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8518516Z   structured {"role": "secondary diagnostic; the primary recovery rule above is unchanged", "empirical_five_sigma_jy": 0.002018735216419039, "pipeline_five_sigma_jy": 0.0003830871522091121, "sensitivity_ratio": 5.26965001247834, "local_noise_scale_median": 5.278906362126465, "flux_levels_jy": [0.0010093676082095196, 0.002018735216419039, 0.004037470432838078], "recovered": [1, 5, 15], "n_per_level": 20, "n_baseline_detections": 246, "structured_background": {"cell_px": 32, "noise_scale_median": 5.064827417994036, "noise_scale_p90": 6.899897830729452}}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8521301Z   image {"file": "level2_2025W35_2A_0668_1D2_spx_l2b-v27-2026-231.fits", "region_image": {"median": 0.77601, "mad_sigma": 0.24311}, "global_image": {"median": 0.75691, "mad_sigma": 0.282}, "region_sqrt_variance_median": 0.03059, "global_sqrt_variance_median": 0.03028, "region_noise_excess": 7.947, "region_flagged_fraction": 1.0, "region_zodi_median": 0.17199}
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8942688Z == data/spherex_holdout/fields/Chamaeleon_I/runner.log
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8979656Z     "absolute_gain": 1
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8980154Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8980373Z   "selected_uris": {
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8980909Z     "spectral_wcs": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2_spx_cal-swcs-v5-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8981803Z     "solid_angle": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/solid_angle_pixel_map/cal-sapm-v3-2026-191/2/solid_angle_pixel_map_D2_spx_cal-sapm-v3-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8982643Z     "absolute_gain": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/abs_gain_matrix/cal-agm-v8-2026-191/2/abs_gain_matrix_D2_spx_cal-agm-v8-2026-191.fits"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8983165Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8983442Z   "native_mef_audit_status": "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8983875Z   "absolute_gain_status": "structure_units_pass_with_invalid_pixels_explicitly_masked",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8984289Z   "archive_input_relation_count": 14,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8984591Z   "wavelength_calibration_provenance_linked": true,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8984965Z   "calibration_compatibility_status": "compatible",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8985277Z   "calibrated_injection_evaluation": "completed",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8985664Z   "summary": "data/spherex_holdout/fields/Chamaeleon_I/data/real_field_audit_summary.json"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8986056Z }
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.8987031Z == data/spherex_holdout/fields/Corona_Australis/runner.log
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9006475Z     "absolute_gain": 1
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9006764Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9007011Z   "selected_uris": {
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9007565Z     "spectral_wcs": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2_spx_cal-swcs-v5-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9008792Z     "solid_angle": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/solid_angle_pixel_map/cal-sapm-v3-2026-191/2/solid_angle_pixel_map_D2_spx_cal-sapm-v3-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9009898Z     "absolute_gain": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/abs_gain_matrix/cal-agm-v8-2026-191/2/abs_gain_matrix_D2_spx_cal-agm-v8-2026-191.fits"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9010419Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9010693Z   "native_mef_audit_status": "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9011134Z   "absolute_gain_status": "structure_units_pass_with_invalid_pixels_explicitly_masked",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9011553Z   "archive_input_relation_count": 14,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9011845Z   "wavelength_calibration_provenance_linked": true,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9012167Z   "calibration_compatibility_status": "compatible",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9012476Z   "calibrated_injection_evaluation": "failed",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9012886Z   "summary": "data/spherex_holdout/fields/Corona_Australis/data/real_field_audit_summary.json"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9013284Z }
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9013554Z == data/spherex_holdout/fields/HighLatitude_Control_South/runner.log
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9024902Z     "absolute_gain": 1
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9025214Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9025498Z   "selected_uris": {
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9025983Z     "spectral_wcs": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2_spx_cal-swcs-v5-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9026825Z     "solid_angle": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/solid_angle_pixel_map/cal-sapm-v3-2026-191/2/solid_angle_pixel_map_D2_spx_cal-sapm-v3-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9027692Z     "absolute_gain": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/abs_gain_matrix/cal-agm-v8-2026-191/2/abs_gain_matrix_D2_spx_cal-agm-v8-2026-191.fits"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9028183Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9028514Z   "native_mef_audit_status": "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9029082Z   "absolute_gain_status": "structure_units_pass_with_invalid_pixels_explicitly_masked",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9029476Z   "archive_input_relation_count": 14,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9029774Z   "wavelength_calibration_provenance_linked": true,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9030081Z   "calibration_compatibility_status": "compatible",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9030406Z   "calibrated_injection_evaluation": "completed",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9030829Z   "summary": "data/spherex_holdout/fields/HighLatitude_Control_South/data/real_field_audit_summary.json"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9031194Z }
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9031470Z == data/spherex_holdout/fields/IC_348/runner.log
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9042653Z     "absolute_gain": 1
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9042975Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9043216Z   "selected_uris": {
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9043713Z     "spectral_wcs": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2_spx_cal-swcs-v5-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9044560Z     "solid_angle": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/solid_angle_pixel_map/cal-sapm-v3-2026-191/2/solid_angle_pixel_map_D2_spx_cal-sapm-v3-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9045478Z     "absolute_gain": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/abs_gain_matrix/cal-agm-v8-2026-191/2/abs_gain_matrix_D2_spx_cal-agm-v8-2026-191.fits"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9046003Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9046272Z   "native_mef_audit_status": "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9046674Z   "absolute_gain_status": "structure_units_pass_with_invalid_pixels_explicitly_masked",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9047060Z   "archive_input_relation_count": 14,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9047340Z   "wavelength_calibration_provenance_linked": true,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9047668Z   "calibration_compatibility_status": "compatible",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9047976Z   "calibrated_injection_evaluation": "completed",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9048350Z   "summary": "data/spherex_holdout/fields/IC_348/data/real_field_audit_summary.json"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9048902Z }
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9049147Z == data/spherex_holdout/fields/NGC_2264/runner.log
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9059908Z     "absolute_gain": 1
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9060278Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9060529Z   "selected_uris": {
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9061027Z     "spectral_wcs": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2_spx_cal-swcs-v5-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9061952Z     "solid_angle": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/solid_angle_pixel_map/cal-sapm-v3-2026-191/2/solid_angle_pixel_map_D2_spx_cal-sapm-v3-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9062809Z     "absolute_gain": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/abs_gain_matrix/cal-agm-v8-2026-191/2/abs_gain_matrix_D2_spx_cal-agm-v8-2026-191.fits"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9063304Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9063596Z   "native_mef_audit_status": "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9064042Z   "absolute_gain_status": "structure_units_pass_with_invalid_pixels_explicitly_masked",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9064453Z   "archive_input_relation_count": 14,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9064741Z   "wavelength_calibration_provenance_linked": true,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9065049Z   "calibration_compatibility_status": "compatible",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9065335Z   "calibrated_injection_evaluation": "completed",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9065763Z   "summary": "data/spherex_holdout/fields/NGC_2264/data/real_field_audit_summary.json"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9066116Z }
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9066355Z == data/spherex_holdout/fields/Serpens_Main/runner.log
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9076848Z     "absolute_gain": 1
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9077112Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9077382Z   "selected_uris": {
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9077906Z     "spectral_wcs": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/spectral_wcs/cal-swcs-v5-2026-191/2/spectral_wcs_D2_spx_cal-swcs-v5-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9078696Z     "solid_angle": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/solid_angle_pixel_map/cal-sapm-v3-2026-191/2/solid_angle_pixel_map_D2_spx_cal-sapm-v3-2026-191.fits",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9079608Z     "absolute_gain": "https://irsa.ipac.caltech.edu/ibe/data/spherex/dr1/abs_gain_matrix/cal-agm-v8-2026-191/2/abs_gain_matrix_D2_spx_cal-agm-v8-2026-191.fits"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9080114Z   },
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9080549Z   "native_mef_audit_status": "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9081104Z   "absolute_gain_status": "structure_units_pass_with_invalid_pixels_explicitly_masked",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9081552Z   "archive_input_relation_count": 14,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9081865Z   "wavelength_calibration_provenance_linked": true,
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9082265Z   "calibration_compatibility_status": "compatible",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9082598Z   "calibrated_injection_evaluation": "completed",
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9083007Z   "summary": "data/spherex_holdout/fields/Serpens_Main/data/real_field_audit_summary.json"
+holdout	Print per-injection diagnostics	2026-11-26T14:27:20.9083360Z }
