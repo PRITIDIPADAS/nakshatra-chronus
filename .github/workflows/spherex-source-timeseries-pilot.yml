@@ -17,7 +17,7 @@ permissions:
   contents: read
 concurrency:
   group: spherex-source-timeseries-pilot
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   four-epoch-source-photometry:
     runs-on: ubuntu-latest
