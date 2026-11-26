@@ -210,3 +210,59 @@ def test_source_timeseries_never_silently_accepts_unverified_wavelength_provenan
     manifest["products"][0]["compatibility_decision"]["status"] = "unknown"
     with pytest.raises(ValueError, match="compatible calibration decision"):
         assemble_source_timeseries(manifest)
+
+
+
+def test_source_timeseries_requires_common_native_passband_across_epochs(tmp_path):
+    from research_discovery.spherex.source_timeseries import assemble_source_timeseries
+
+    manifest = _manifest(tmp_path)
+    second_product = manifest["products"][1]
+    spectral_path = Path(second_product["spectral_wcs"]["local_path"])
+    with fits.open(spectral_path, memmap=False) as hdul:
+        hdus = [hdu.copy() for hdu in hdul]
+        hdus["CWAVE"].data = np.asarray(hdus["CWAVE"].data, dtype=np.float32) + 0.2
+    fits.HDUList(hdus).writeto(spectral_path, overwrite=True)
+    new_sha = hashlib.sha256(spectral_path.read_bytes()).hexdigest()
+    second_product["spectral_wcs"]["sha256"] = new_sha
+    second_product["compatibility_decision"]["spectral_wcs_sha256"] = new_sha
+    for row in manifest["measurements"]:
+        if row["archive_product_id"] == second_product["archive_product_id"]:
+            row["wavelength_um"] += 0.2
+
+    result = assemble_source_timeseries(manifest, minimum_epochs=2)
+    summary = result["sources"][0]["time_series_summary"]
+
+    assert summary["epoch_count"] == 2
+    assert summary["usable_multi_epoch_series"] is False
+    assert summary["temporal_band_comparability"]["usable_temporal_band_cluster_count"] == 0
+
+
+def test_temporal_band_clusters_accept_overlapping_cwave_cband_samples():
+    from research_discovery.spherex.source_timeseries import _summarize_temporal_band_clusters
+
+    rows = [
+        {"observation_id": "OBS-A", "mjd": 60000.0, "wavelength_um": 3.10, "bandwidth_um": 0.02, "measurement_id": "M-A"},
+        {"observation_id": "OBS-B", "mjd": 60001.0, "wavelength_um": 3.105, "bandwidth_um": 0.02, "measurement_id": "M-B"},
+        {"observation_id": "OBS-C", "mjd": 60002.0, "wavelength_um": 3.102, "bandwidth_um": 0.018, "measurement_id": "M-C"},
+    ]
+    result = _summarize_temporal_band_clusters(rows, minimum_epochs=3)
+
+    assert result["usable_multi_epoch_series"] is True
+    assert result["usable_temporal_band_cluster_count"] == 1
+    assert result["usable_temporal_band_clusters"][0]["distinct_epoch_count"] == 3
+
+
+def test_temporal_band_clusters_reject_non_overlapping_wavelength_visits():
+    from research_discovery.spherex.source_timeseries import _summarize_temporal_band_clusters
+
+    rows = [
+        {"observation_id": "OBS-A", "mjd": 60000.0, "wavelength_um": 3.00, "bandwidth_um": 0.02, "measurement_id": "M-A"},
+        {"observation_id": "OBS-B", "mjd": 60001.0, "wavelength_um": 3.10, "bandwidth_um": 0.02, "measurement_id": "M-B"},
+        {"observation_id": "OBS-C", "mjd": 60002.0, "wavelength_um": 3.20, "bandwidth_um": 0.02, "measurement_id": "M-C"},
+    ]
+    result = _summarize_temporal_band_clusters(rows, minimum_epochs=3)
+
+    assert result["usable_multi_epoch_series"] is False
+    assert result["usable_temporal_band_cluster_count"] == 0
+    assert all(row["distinct_epoch_count"] == 1 for row in result["all_clusters"])
