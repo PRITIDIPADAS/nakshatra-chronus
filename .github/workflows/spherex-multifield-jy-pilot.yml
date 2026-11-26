@@ -58,5 +58,6 @@ jobs:
             data/spherex_multifield_jy_pilot/fields/*/data/native_mef_audit.json
             data/spherex_multifield_jy_pilot/fields/*/data/calibrated_injection/calibrated_jy_injection_recovery.json
             data/spherex_multifield_jy_pilot/fields/*/runner.log
+            data/spherex_multifield_jy_pilot/fields/*/runner_attempt_*.log
           if-no-files-found: warn
           retention-days: 30
