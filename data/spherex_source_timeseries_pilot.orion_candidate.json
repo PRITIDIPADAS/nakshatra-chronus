@@ -30,6 +30,7 @@
     "detector": "D2",
     "bandpass": "SPHEREx-D2",
     "minimum_epochs": 4,
+    "minimum_band_overlap_fraction": 0.5,
     "no_epoch_substitution": true,
     "no_flux_imputation": true,
     "no_calibrated_gain_to_electron_conversion_used_for_flux_fit": true,
