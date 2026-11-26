@@ -11,6 +11,7 @@ on:
       - "research_discovery/spherex/source_timeseries.py"
       - "research_discovery/spherex/extract_epsf_stamp.py"
       - "research_discovery/tests/test_source_timeseries_pilot.py"
+      - "research_discovery/tests/test_source_timeseries.py"
       - ".github/workflows/spherex-source-timeseries-pilot.yml"
   workflow_dispatch:
 permissions:
