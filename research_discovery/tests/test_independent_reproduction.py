@@ -150,11 +150,55 @@ def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass():
         "valid": True, "disposition": "accepted",
         "accepted_check_count": 10, "required_check_count": 10,
         "rejected_check_count": 0, "not_assessed_check_count": 0,
+        "external_identity_and_independence_confirmed": True,
     }
-    ready = evaluate_scientific_release_readiness(
-        calibration_review=accepted, astronomical_reproduction=accepted,
-        custodian_attestation={"valid": True},
-        blind_benchmark={"status": "completed", "all_methods_same_inputs": True, "custodian_unblinded": True},
+    comparisons = {}
+    for comparator in ("snr_only", "chronos_pda", "instrument_forensics"):
+        comparisons[comparator] = {
+            "delta_completeness_twin_minus_comparator": {
+                "familywise_95_interval_bonferroni": [0.02, 0.20],
+            },
+            "delta_false_candidates_per_field_twin_minus_comparator": {
+                "familywise_95_interval_bonferroni": [-0.01, 0.03],
+            },
+        }
+    blind_report = {
+        "methods": ["snr_only", "chronos_pda", "instrument_forensics", "sky_detector_twin"],
+        "scientific_claim_eligible": True,
+        "reproducibility": {"same_input_enforced_for_all_methods": True},
+        "blind_evaluation": {
+            "preregistration_sha256": "3" * 64,
+            "custodian_attestation_verified": True,
+            "configuration_freeze_verified": True,
+            "truth_released_after_run_freeze": True,
+            "multiple_comparison_correction": "bonferroni_95_familywise",
+            "unblinding_record": {
+                "encrypted_truth_store_sha256": "4" * 64,
+                "heldout_field_tokens_processed": ["blind-token-001", "blind-token-002"],
+            },
+        },
+        "paired_superiority": {
+            "status": "paired_field_group_bootstrap_completed",
+            "verdict_status": "superiority_gate_passed",
+            "superiority_supported": True,
+            "independent_group_count": 5,
+            "predeclared_false_candidate_noninferiority_margin": 0.05,
+            "multiple_comparator_correction": {
+                "method": "bonferroni_95_familywise",
+                "verified_predeclared": True,
+            },
+            "comparisons": comparisons,
+        },
+    }
+    ready_inputs = dict(
+        calibration_review=accepted,
+        astronomical_reproduction=accepted,
+        custodian_attestation={
+            "valid": True,
+            "custodian_identity_verified_out_of_band": True,
+            "custodian_independence_verified_out_of_band": True,
+        },
+        blind_benchmark=blind_report,
         source_timeseries={
             "status": "verified_multi_epoch_source_series",
             "successful_photometry_epoch_count": 4, "requested_epoch_count": 4,
@@ -162,10 +206,38 @@ def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass():
             "time_series_summary": {"usable_multi_epoch_series": True},
         },
         source_selection={"supported": True, "independent_field_count": 5, "cells": [{"supported": True}]},
-        event_detection={"supported": True, "real_source_timeseries_injections": True},
-        contamination_review={"status": "independently_reviewed", "source_level_controls": True},
+        event_detection={
+            "supported": True, "real_source_timeseries_injections": True,
+            "independent_field_count": 5, "negative_controls_passed": True,
+            "outside_support_abstention_verified": True,
+        },
+        contamination_review={
+            "status": "independently_reviewed", "source_level_controls": True,
+            "independent_reviewer_identity_verified_out_of_band": True,
+        },
         independent_classifications={"status": "independently_verified", "source_count": 10},
-        external_preregistration={"verified": True, "receipt_sha256": "2" * 64, "registered_before_data_access": True},
+        external_preregistration={
+            "verified": True, "receipt_sha256": "2" * 64,
+            "registered_before_data_access": True,
+            "independent_timestamp_verified": True,
+            "receipt_bytes_verified": True,
+            "custodian_no_prior_holdout_access_attested": True,
+        },
     )
+    ready = evaluate_scientific_release_readiness(**ready_inputs)
     assert ready["release_allowed"]
     assert ready["decision"] == "all_evidence_gates_passed_pending_human_release_authorization"
+
+    # A completed benchmark with the same inputs is still not enough if the
+    # preregistered paired superiority/non-inferiority gate does not pass.
+    not_superior = dict(blind_report)
+    not_superior["paired_superiority"] = {
+        **blind_report["paired_superiority"],
+        "verdict_status": "superiority_not_established",
+        "superiority_supported": False,
+    }
+    blocked = evaluate_scientific_release_readiness(
+        **{**ready_inputs, "blind_benchmark": not_superior}
+    )
+    assert blocked["release_allowed"] is False
+    assert "blind_four_baseline_benchmark" in blocked["blockers"]
