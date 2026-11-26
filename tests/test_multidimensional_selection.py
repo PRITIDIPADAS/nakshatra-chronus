@@ -178,3 +178,109 @@ def test_yso_coverage_now_fails_closed_without_a_multidimensional_selection_mode
     assert result["selection_function"] is None
     assert result["selection_function_error"]
     assert result["failure_counts"]["multidimensional_selection_function_missing_or_unsupported"] == 1
+
+
+
+def test_source_linked_yso_event_yield_revalidates_source_rows_and_selection_trials():
+    from chronos_population.coverage import assess_population_coverage
+    from chronos_population.source_linked import estimate_source_linked_event_yield
+
+    preregistration = "d" * 64
+    event_definition = "9" * 64
+    fields = []
+    for field_index in range(5):
+        observations = []
+        for epoch_index, mjd in enumerate((60000.0, 60002.0, 60004.0)):
+            for band_index, wavelength in enumerate((2.9, 3.1, 3.3)):
+                observations.append({
+                    "measurement_id": f"M-{field_index}-{epoch_index}-{band_index}",
+                    "observation_id": f"OBS-{field_index}-{epoch_index}",
+                    "mjd": mjd,
+                    "wavelength_um": wavelength,
+                    "flux": 10.0,
+                    "sigma": 0.5,
+                    "flux_unit": "Jy",
+                    "calibration_group": f"SYNTHETIC-CAL-{field_index}",
+                    "wavelength_source": "synthetic_fixture",
+                    "wavelength_unit": "um",
+                    "wavelength_validated": True,
+                    "synthetic_fixture": True,
+                    "valid": True,
+                })
+        fields.append({
+            "field_id": f"F{field_index}",
+            "dataset_class": "real",
+            "independent_field": True,
+            "independence_group_id": f"REGION-{field_index}",
+            "n_injected": 4,
+            "n_recovered": 3,
+            "null_control_id": f"NULL-{field_index}",
+            "area_deg2": 1.0,
+            "baseline_days": 4.0,
+            "null_control_area_deg2": 1.0,
+            "null_control_baseline_days": 4.0,
+            "null_control_to_science_exposure_ratio": 1.0,
+            "null_events": 0,
+            "observed_events": 1 if field_index == 0 else 0,
+            "sources": [{
+                "source_id": f"YSO-{field_index}",
+                "sample_class": "young_stellar_object",
+                "classification_reference": f"https://catalogue.example/YSO-{field_index}",
+                "selection_covariates": {
+                    "flux_jy": 0.5, "wavelength_um": 2.5,
+                    "crowding_index": 0.4, "background_rms": 0.2,
+                    "epoch_count": 4, "detector_zone": "center",
+                },
+                "observations": observations,
+            }],
+        })
+
+    trials = _trials()
+    for trial in trials:
+        trial["event_definition_sha256"] = event_definition
+
+    coverage = assess_population_coverage(
+        fields,
+        feature_interval_um=[3.05, 3.15],
+        blue_continuum_um=[2.8, 2.95],
+        red_continuum_um=[3.25, 3.4],
+        selection_trials=trials,
+        selection_bin_spec=_bin_spec(),
+        minimum_independent_fields=5,
+        minimum_trials_per_selection_cell=20,
+        minimum_fields_per_cell=5,
+        minimum_completeness=0.5,
+    )
+    assert coverage["eligible_for_predeclared_population_protocol"] is True
+    eligible = next(row for row in coverage["eligible_sources"] if row["source_id"] == "YSO-0")
+    assert len(eligible["measurement_lineage"]) == 9
+
+    feature_measurements = [
+        f"M-0-{epoch_index}-1" for epoch_index in range(3)
+    ]
+    event = {
+        "event_id": "EVENT-YSO-0-1",
+        "field_id": "F0",
+        "source_id": "YSO-0",
+        "status": "accepted",
+        "preregistration_sha256": preregistration,
+        "event_definition_sha256": event_definition,
+        "start_mjd": 60000.0,
+        "end_mjd": 60004.0,
+        "measurement_ids": feature_measurements,
+    }
+    result = estimate_source_linked_event_yield(
+        fields,
+        coverage_audit=coverage,
+        selection_trials=trials,
+        selection_bin_spec=_bin_spec(),
+        source_event_records=[event],
+        preregistration_sha256=preregistration,
+        event_definition_sha256=event_definition,
+        draws=2000,
+        seed=13,
+    )
+    assert result["scientific_status"] == "source_selection_weighted_candidate_event_yield_not_population_result"
+    assert result["accepted_event_count"] == 1
+    assert result["total_source_selection_weighted_event_count"] > 1.0
+    assert result["coverage_revalidated"] is True
