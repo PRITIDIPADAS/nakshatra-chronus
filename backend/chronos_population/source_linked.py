@@ -408,6 +408,7 @@ def estimate_source_linked_event_yield(
             "bin_spec_sha256": selection.get("bin_spec_sha256"),
             "injection_trials_sha256": selection.get("injection_trials_sha256"),
             "frozen_provenance": frozen,
+            "field_independence_audit": selection.get("field_independence_audit"),
             "correction": "Horvitz-Thompson inverse probability weight 1/p(source detected)",
         },
         "preregistration_sha256": preregistration,

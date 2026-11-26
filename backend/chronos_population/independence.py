@@ -176,11 +176,20 @@ def audit_independent_field_records(field_records: Sequence[Mapping[str, Any]], 
         "custodian_ids": sorted({v for g in groups.values() for v in g["custodians"]}),
         "spatial_caps_pairwise_disjoint": True,
         "field_attestations": [
-            {"field_id": fid, "independence_group_id": p["independence_group_id"],
-             "release": p["release"], "science_manifest_sha256": p["science_manifest_sha256"],
-             "preregistration_sha256": p["preregistration_sha256"],
-             "footprint_sha256": p["footprint_sha256"], "custodian_id": p["custodian_id"],
-             "attested_utc": p["attested_utc"]}
+            {
+                "field_id": fid,
+                "dataset_class": "real",
+                "independent_field": True,
+                "release": p["release"],
+                "independence_group_id": p["independence_group_id"],
+                "science_manifest_sha256": p["science_manifest_sha256"],
+                "preregistration_sha256": p["preregistration_sha256"],
+                "footprint": p["footprint"],
+                "footprint_sha256": p["footprint_sha256"],
+                "custodian_id": p["custodian_id"],
+                "attested_utc": p["attested_utc"],
+                "signed_attestation": dict(by_id[fid]["field_independence_attestation"]),
+            }
             for fid, p in sorted(verified.items())
         ],
     }

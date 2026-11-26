@@ -434,11 +434,74 @@ def evaluate_scientific_release_readiness(
                 return False
         return True
 
-    def _minimum_independent_groups(value: Mapping[str, Any], minimum: int) -> bool:
+    def _verified_field_independence_audit(value: Mapping[str, Any] | None, minimum: int) -> bool:
+        """Re-verify signed field records against out-of-band trust anchors and disjoint footprints."""
+        if not isinstance(value, Mapping):
+            return False
+        audit = value.get("field_independence_audit")
+        if audit is None and isinstance(value.get("selection_function"), Mapping):
+            audit = value["selection_function"].get("field_independence_audit")
+        if not isinstance(audit, Mapping):
+            return False
         try:
-            return int(value.get("independent_field_count", 0)) >= minimum
+            if (
+                audit.get("status") != "verified_signed_independent_fields"
+                or audit.get("custodian_identity_verified_out_of_band") is not True
+                or audit.get("custodian_independence_verified_out_of_band") is not True
+                or audit.get("spatial_caps_pairwise_disjoint") is not True
+                or not str(audit.get("pinned_key_id", "")).strip()
+            ):
+                return False
+            records = audit.get("field_attestations")
+            if not isinstance(records, list) or not records:
+                return False
+            from chronos_population.independence import audit_independent_field_records
+            reconstructed = []
+            for row in records:
+                if not isinstance(row, Mapping):
+                    return False
+                envelope = row.get("signed_attestation")
+                footprint = row.get("footprint")
+                if not isinstance(envelope, Mapping) or not isinstance(footprint, Mapping):
+                    return False
+                reconstructed.append({
+                    "field_id": row.get("field_id"),
+                    "dataset_class": row.get("dataset_class"),
+                    "independent_field": row.get("independent_field"),
+                    "release": row.get("release"),
+                    "independence_group_id": row.get("independence_group_id"),
+                    "science_manifest_sha256": row.get("science_manifest_sha256"),
+                    "preregistration_sha256": row.get("preregistration_sha256"),
+                    "footprint": dict(footprint),
+                    "footprint_sha256": row.get("footprint_sha256"),
+                    "field_independence_attestation": dict(envelope),
+                })
+            verified, recomputed = audit_independent_field_records(
+                reconstructed, minimum_independent_fields=int(minimum)
+            )
+            expected_groups = audit.get("independence_group_ids")
+            expected_fields = audit.get("verified_field_ids")
+            return (
+                len(verified) >= int(minimum)
+                and recomputed.get("pinned_key_id") == audit.get("pinned_key_id")
+                and recomputed.get("independent_group_count") >= int(minimum)
+                and sorted(recomputed.get("independence_group_ids", [])) == sorted(expected_groups or [])
+                and sorted(recomputed.get("verified_field_ids", [])) == sorted(expected_fields or [])
+                and audit.get("independent_group_count") == recomputed.get("independent_group_count")
+                and audit.get("verified_real_field_count") == recomputed.get("verified_real_field_count")
+            )
+        except Exception:
+            return False
+
+    def _minimum_independent_groups(value: Mapping[str, Any] | None, minimum: int) -> bool:
+        if not isinstance(value, Mapping):
+            return False
+        try:
+            if int(value.get("independent_field_count", 0)) < int(minimum):
+                return False
         except (TypeError, ValueError, OverflowError):
             return False
+        return _verified_field_independence_audit(value, minimum)
 
     summary = source_timeseries.get("time_series_summary", {}) if isinstance(source_timeseries, Mapping) else {}
     digest = str(source_timeseries.get("verified_source_timeseries_manifest_sha256", "")).lower() if isinstance(source_timeseries, Mapping) else ""
@@ -472,6 +535,7 @@ def evaluate_scientific_release_readiness(
             isinstance(source_selection, Mapping)
             and source_selection.get("supported") is True
             and int(source_selection.get("independent_field_count", 0)) >= 5
+            and _verified_field_independence_audit(source_selection, 5)
             and bool(source_selection.get("cells"))
             and all(cell.get("supported") is True for cell in source_selection.get("cells", []))
         )

@@ -1,6 +1,78 @@
 import hashlib
 import pytest
 
+_TEST_READINESS_CUSTODIAN_SEED = bytes.fromhex("6b".repeat(32))
+_TEST_READINESS_CUSTODIAN_KEY_ID = "unit-test-readiness-custodian-v1"
+
+
+def _signed_test_readiness_audit(monkeypatch):
+    import base64
+    import hashlib
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from chronos_population.independence import (
+        FIELD_INDEPENDENCE_SCHEMA,
+        audit_independent_field_records,
+        canonical_field_independence_payload,
+    )
+
+    key = Ed25519PrivateKey.from_private_bytes(_TEST_READINESS_CUSTODIAN_SEED)
+    public = key.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+    )
+    monkeypatch.setenv("CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_KEY_ID", _TEST_READINESS_CUSTODIAN_KEY_ID)
+    monkeypatch.setenv("CHRONOS_FIELD_INDEPENDENCE_ATTESTATION_PUBLIC_KEY_B64", base64.b64encode(public).decode("ascii"))
+    monkeypatch.setenv("CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_ID", "unit-test-readiness-custodian")
+    monkeypatch.setenv("CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_OUT_OF_BAND_INDEPENDENCE_VERIFIED", "true")
+
+    fields = []
+    for i in range(5):
+        field_id = f"READINESS-FIELD-{i}"
+        footprint = {
+            "center_ra_deg": float(i * 15),
+            "center_dec_deg": -20.0,
+            "maximum_radius_deg": 0.5,
+        }
+        footprint_sha = hashlib.sha256(canonical_field_independence_payload(footprint)).hexdigest()
+        payload = {
+            "schema": FIELD_INDEPENDENCE_SCHEMA,
+            "field_id": field_id,
+            "dataset_class": "real",
+            "release": "DR1",
+            "independence_group_id": f"READINESS-GROUP-{i}",
+            "footprint": footprint,
+            "footprint_sha256": footprint_sha,
+            "science_manifest_sha256": hashlib.sha256(f"manifest-{i}".encode()).hexdigest(),
+            "preregistration_sha256": "d" * 64,
+            "custodian_id": "unit-test-readiness-custodian",
+            "custodian_role": "independent_custodian",
+            "custodian_independent_of_analysis_team": True,
+            "attested_utc": "2026-11-26T00:00:00Z",
+        }
+        fields.append({
+            "field_id": field_id,
+            "dataset_class": "real",
+            "independent_field": True,
+            "release": "DR1",
+            "independence_group_id": payload["independence_group_id"],
+            "science_manifest_sha256": payload["science_manifest_sha256"],
+            "preregistration_sha256": payload["preregistration_sha256"],
+            "footprint": footprint,
+            "footprint_sha256": footprint_sha,
+            "field_independence_attestation": {
+                "schema": FIELD_INDEPENDENCE_SCHEMA,
+                "algorithm": "Ed25519",
+                "key_id": _TEST_READINESS_CUSTODIAN_KEY_ID,
+                "payload": payload,
+                "signature_base64": base64.b64encode(
+                    key.sign(canonical_field_independence_payload(payload))
+                ).decode("ascii"),
+            },
+        })
+    _, audit = audit_independent_field_records(fields, minimum_independent_fields=5)
+    return audit
+
+
 from research_discovery.spherex.independent_reproduction import (
     CLAIMS, REQUIRED_CHECKS, SCHEMA, SCOPE_CHECKS,
     evaluate_scientific_release_readiness, sign_reproduction_payload,
@@ -134,7 +206,8 @@ def test_reproduction_record_rejects_unassessed_or_hidden_scoped_checks():
         sign_reproduction_payload(payload, private)
 
 
-def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass():
+def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass(monkeypatch):
+    field_audit = _signed_test_readiness_audit(monkeypatch)
     missing = evaluate_scientific_release_readiness(
         calibration_review=None, astronomical_reproduction=None,
         custodian_attestation=None, blind_benchmark=None,
@@ -213,10 +286,15 @@ def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass():
                 "distinct_mjd_count": 4,
             },
         },
-        source_selection={"supported": True, "independent_field_count": 5, "cells": [{"supported": True}]},
+        source_selection={
+            "supported": True, "independent_field_count": 5,
+            "field_independence_audit": field_audit,
+            "cells": [{"supported": True}],
+        },
         event_detection={
             "supported": True, "real_source_timeseries_injections": True,
-            "independent_field_count": 5, "negative_controls_passed": True,
+            "independent_field_count": 5, "field_independence_audit": field_audit,
+            "negative_controls_passed": True,
             "outside_support_abstention_verified": True,
         },
         contamination_review={
@@ -280,3 +358,68 @@ def test_release_readiness_is_fail_closed_until_all_evidence_gates_pass():
     )
     assert blocked["release_allowed"] is False
     assert "blind_four_baseline_benchmark" in blocked["blockers"]
+
+
+
+def test_release_readiness_rejects_count_only_or_forged_independent_field_summaries(monkeypatch):
+    field_audit = _signed_test_readiness_audit(monkeypatch)
+    baseline = {
+        "supported": True,
+        "independent_field_count": 5,
+        "cells": [{"supported": True}],
+        "field_independence_audit": field_audit,
+    }
+    assert evaluate_scientific_release_readiness(
+        calibration_review=None, astronomical_reproduction=None,
+        custodian_attestation=None, blind_benchmark=None, source_timeseries=None,
+        source_selection=baseline, event_detection=None, contamination_review=None,
+        independent_classifications=None, external_preregistration=None,
+    )["gates"]["real_supported_source_selection_function"] is True
+
+    count_only = {key: value for key, value in baseline.items() if key != "field_independence_audit"}
+    result = evaluate_scientific_release_readiness(
+        calibration_review=None, astronomical_reproduction=None,
+        custodian_attestation=None, blind_benchmark=None, source_timeseries=None,
+        source_selection=count_only, event_detection=None, contamination_review=None,
+        independent_classifications=None, external_preregistration=None,
+    )
+    assert result["gates"]["real_supported_source_selection_function"] is False
+    assert result["release_allowed"] is False
+
+    forged = {
+        **baseline,
+        "field_independence_audit": {
+            **field_audit,
+            "custodian_identity_verified_out_of_band": False,
+        },
+    }
+    result = evaluate_scientific_release_readiness(
+        calibration_review=None, astronomical_reproduction=None,
+        custodian_attestation=None, blind_benchmark=None, source_timeseries=None,
+        source_selection=forged, event_detection=None, contamination_review=None,
+        independent_classifications=None, external_preregistration=None,
+    )
+    assert result["gates"]["real_supported_source_selection_function"] is False
+
+
+def test_release_readiness_rejects_count_only_event_efficiency_gate(monkeypatch):
+    field_audit = _signed_test_readiness_audit(monkeypatch)
+    event = {
+        "supported": True,
+        "real_source_timeseries_injections": True,
+        "independent_field_count": 5,
+        "negative_controls_passed": True,
+        "outside_support_abstention_verified": True,
+    }
+    kwargs = dict(
+        calibration_review=None, astronomical_reproduction=None,
+        custodian_attestation=None, blind_benchmark=None, source_timeseries=None,
+        source_selection=None, event_detection=event, contamination_review=None,
+        independent_classifications=None, external_preregistration=None,
+    )
+    assert evaluate_scientific_release_readiness(**kwargs)["gates"]["event_detection_efficiency"] is False
+    event["field_independence_audit"] = field_audit
+    assert evaluate_scientific_release_readiness(**kwargs)["gates"]["event_detection_efficiency"] is True
+
+    event["field_independence_audit"]["field_attestations"][0]["signed_attestation"]["signature_base64"] = "AAAA"
+    assert evaluate_scientific_release_readiness(**kwargs)["gates"]["event_detection_efficiency"] is False
