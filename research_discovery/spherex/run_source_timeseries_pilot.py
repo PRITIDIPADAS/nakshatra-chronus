@@ -1,6 +1,6 @@
 """Run a provenance-verified four-epoch native SPHEREx source-photometry pilot."""
 from __future__ import annotations
-import argparse,hashlib,json,os,subprocess,sys
+import argparse,hashlib,json,os,subprocess,sys,math
 from datetime import datetime,timezone
 from pathlib import Path
 from typing import Any,Mapping
@@ -26,6 +26,8 @@ def validate_pilot_manifest(value:Mapping[str,Any])->dict[str,Any]:
  if policy.get("release")!="DR1" or policy.get("detector")!="D2": raise ValueError("pilot is frozen to SPHEREx DR1 D2")
  minimum=policy.get("minimum_epochs")
  if isinstance(minimum,bool) or int(minimum)!=minimum or minimum<2: raise ValueError("minimum_epochs must be an integer of at least two")
+ band_overlap=float(policy.get("minimum_band_overlap_fraction",float("nan")))
+ if not math.isfinite(band_overlap) or not 0<band_overlap<=1: raise ValueError("minimum_band_overlap_fraction must be preregistered in (0, 1]")
  products=value.get("products")
  if not isinstance(products,list) or len(products)!=4: raise ValueError("pilot manifest must contain exactly four predeclared products")
  ids,obs,uris,times=set(),set(),set(),[]
@@ -43,7 +45,7 @@ def validate_pilot_manifest(value:Mapping[str,Any])->dict[str,Any]:
  if times!=sorted(times) or len(set(times))!=len(times): raise ValueError("pilot products must be sorted by distinct increasing MJD")
  if len(obs)<int(minimum): raise ValueError("frozen roster is smaller than minimum_epochs")
  canonical=json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=False,allow_nan=False)
- return {"source_id":str(source["source_id"]),"product_count":len(products),"observation_ids":sorted(obs),"minimum_epochs":int(minimum),"baseline_days":max(times)-min(times),"manifest_sha256":hashlib.sha256(canonical.encode()).hexdigest()}
+ return {"source_id":str(source["source_id"]),"product_count":len(products),"observation_ids":sorted(obs),"minimum_epochs":int(minimum),"minimum_band_overlap_fraction":band_overlap,"baseline_days":max(times)-min(times),"manifest_sha256":hashlib.sha256(canonical.encode()).hexdigest()}
 def file_record(uri:str,path:Path)->dict[str,str]:
  if not path.is_file(): raise FileNotFoundError(path)
  return {"uri":uri,"local_path":str(path),"sha256":sha256_file(path)}
@@ -98,7 +100,7 @@ def run_pilot(manifest_path:Path,output_dir:Path,*,code_revision:str,skip_source
   print(json.dumps({"epoch":index,"observation_id":obsid,"status":record["status"],"error":record.get("error")}),flush=True)
  series_result=None; series_error=None
  if extraction_results:
-  try: series_result=assemble_source_photometry_series(extraction_results,minimum_epochs=int(manifest["selection_policy"]["minimum_epochs"]),verify_files=True,output_path=output_dir/"source_timeseries.json")
+  try: series_result=assemble_source_photometry_series(extraction_results,minimum_epochs=int(manifest["selection_policy"]["minimum_epochs"]),verify_files=True,minimum_band_overlap_fraction=float(manifest["selection_policy"]["minimum_band_overlap_fraction"]),output_path=output_dir/"source_timeseries.json")
   except Exception as exc: series_error=f"{type(exc).__name__}: {exc}"
  nested=(series_result or {}).get("verified_source_timeseries") or {}; sources=nested.get("sources") or []
  time_summary=(sources[0].get("time_series_summary") or {}) if sources else {}
