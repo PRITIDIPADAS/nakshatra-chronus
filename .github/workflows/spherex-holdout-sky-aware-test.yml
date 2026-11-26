@@ -1,11 +1,8 @@
 name: SPHEREx held-out sky-aware noise test
 
+# The preregistered run is 45835103107 (see the Result section of the preregistration).
+# Rerun by hand to reproduce it; editing the document no longer starts a new run.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "docs/PREREGISTRATION_SKY_AWARE_NOISE_2026-11-26.md"
-      - ".github/workflows/spherex-holdout-sky-aware-test.yml"
   workflow_dispatch:
 
 permissions:
