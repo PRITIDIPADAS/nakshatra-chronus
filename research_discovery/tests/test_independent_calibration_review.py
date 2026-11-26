@@ -47,6 +47,7 @@ def _payload():
             "native_audit_sha256": "5" * 64,
             "review_packet_sha256": "6" * 64,
             "input_manifest_sha256": "7" * 64,
+            "signed_report_sha256": "9" * 64,
             "reproduction_artifact_sha256": "8" * 64,
         },
         "reproduction_artifact_uri": "https://example.org/reproduction.zip",
@@ -67,10 +68,15 @@ def test_independent_review_signature_is_bound_to_reviewer_commit_and_exact_inpu
     pinned = public_key_fingerprint(public_pem)
 
     artifact = tmp_path / "reproduction.zip"
+    report = tmp_path / "reviewer-report.pdf"
     artifact.write_bytes(b"independent reproduction output")
+    report.write_bytes(b"independent calibration review report")
     import hashlib
     payload["input_digests"]["reproduction_artifact_sha256"] = hashlib.sha256(
         artifact.read_bytes()
+    ).hexdigest()
+    payload["input_digests"]["signed_report_sha256"] = hashlib.sha256(
+        report.read_bytes()
     ).hexdigest()
     signed = sign_review_payload(payload, private_pem)
 
@@ -80,6 +86,7 @@ def test_independent_review_signature_is_bound_to_reviewer_commit_and_exact_inpu
         expected_public_key_sha256=pinned,
         expected_repository_commit="a" * 40,
         expected_input_digests=payload["input_digests"],
+        signed_report_path=report,
         reproduction_artifact_path=artifact,
     )
     assert result["valid"] is True
@@ -132,15 +139,25 @@ def test_independent_review_requires_explicit_independence_and_conflict_statemen
         sign_review_payload(payload, _keys()[0])
 
 
-def test_tampered_signed_review_payload_is_rejected():
+def test_tampered_signed_review_payload_is_rejected(tmp_path):
     private_pem, public_pem = _keys()
-    signed = sign_review_payload(_payload(), private_pem)
+    payload = _payload()
+    report = tmp_path / "review.pdf"
+    artifact = tmp_path / "reproduction.zip"
+    report.write_bytes(b"review report")
+    artifact.write_bytes(b"reproduction output")
+    import hashlib
+    payload["input_digests"]["signed_report_sha256"] = hashlib.sha256(report.read_bytes()).hexdigest()
+    payload["input_digests"]["reproduction_artifact_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    signed = sign_review_payload(payload, private_pem)
     signed["payload"]["disposition"] = "not_accepted"
     result = verify_review_record(
         signed, public_pem,
         expected_reviewer_id="independent-reviewer-01",
         expected_public_key_sha256=public_key_fingerprint(public_pem),
         expected_repository_commit="a" * 40,
-        expected_input_digests=_payload()["input_digests"],
+        expected_input_digests=payload["input_digests"],
+        signed_report_path=report,
+        reproduction_artifact_path=artifact,
     )
     assert result["valid"] is False
