@@ -15,8 +15,8 @@
     <span>Nakshatra <b>CHRONOS</b></span>
   </a>
   <nav aria-label="Sections">
+    <a href="#launch">Tools</a>
     <a href="#physics">Physics</a>
-    <a href="#workbench">Tools</a>
     <a href="#film">Film</a>
     <a href="#method">Method</a>
     <a href="#real">Real sky</a>
@@ -41,14 +41,10 @@
       <a class="textlink" href="deck.html">Read the slides</a>
     </div>
     <p class="byline">By Pritidipa Das. Open source under Apache 2.0.</p>
-    <dl class="hero-stats">
-      <div><dt>98.4%</dt><dd>right when it decides, on unseen practice fields</dd></div>
-      <div><dt>0 of 118</dt><dd>camera effects ever called a sky change</dd></div>
-      <div><dt>7 fields</dt><dd>of real NASA SPHEREx data, 420 calibrated injections</dd></div>
-      <div><dt>468 tests</dt><dd>Python, JavaScript and a MATLAB cross-check</dd></div>
-    </dl>
+
   </div>
 
+  <div class="hero-side">
   <figure class="blink" aria-labelledby="blinkcap">
     <div class="blink-head">
       <div class="seg" role="radiogroup" aria-label="Which pair to compare">
@@ -64,6 +60,37 @@
     <div class="lvfbar" aria-hidden="true"><span id="lvfL">1.10 µm</span><span id="lvfR">1.62 µm</span></div>
     <figcaption id="blinkcap"><strong id="blinkCount">0</strong> <span id="blinkWords">spots look changed.</span> <span id="blinkTruth">Only two things in this field really changed: one asteroid moved and one star brightened.</span></figcaption>
   </figure>
+    <dl class="hero-stats">
+      <div><dt>98.4%</dt><dd>right when it decides, on unseen practice fields</dd></div>
+      <div><dt>0 of 118</dt><dd>camera effects ever called a sky change</dd></div>
+      <div><dt>7 fields</dt><dd>of real NASA SPHEREx data, 420 calibrated injections</dd></div>
+      <div><dt>468 tests</dt><dd>Python, JavaScript and a MATLAB cross-check</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section id="launch" class="launch" aria-labelledby="launchH">
+  <div class="wrap">
+    <div class="launch-head">
+      <h2 id="launchH">Open any tool</h2>
+      <p>Everything runs in your browser on prepared practice fields. Nothing to install, nothing to sign in to.</p>
+    </div>
+    <div class="launch-top">
+      <a class="lx-main" href="observatory.html">
+        <span class="lx-shot"><img src="figures/tools/observatory.jpg" alt="The observatory: a sky image with seven circled candidates, the tool list on the left" width="960" height="600"></span>
+        <span class="lx-copy">
+          <b>The observatory</b>
+          <span>Thirteen tools on one practice field with a hidden truth. Blink the sky, watch false changes fall away, read a dossier for every candidate, then check how often the engine is wrong.</span>
+          <span class="btn">Open the observatory</span>
+        </span>
+      </a>
+      <div class="lx-tools">
+        <p>Or go straight to one of its tools</p>
+        <ul><li><a href="observatory.html?tool=sky"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg><span><b>Sky and time</b><small>blink every exposure</small></span></a></li><li><a href="observatory.html?tool=fair"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="16" r="2.4"/><circle cx="18" cy="8" r="2.4"/><path d="M8 14.7l8-5.4"/><path d="M3 21h18" stroke-dasharray="2 2"/></svg><span><b>Fair pairs</b><small>the colour rule</small></span></a></li><li><a href="observatory.html?tool=micro"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="M15 15l6 6"/><path d="M7.5 10h5M10 7.5v5"/></svg><span><b>Difference microscope</b><small>27 false spots to 1</small></span></a></li><li><a href="observatory.html?tool=cands"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg><span><b>Candidates</b><small>7 changes, 3 methods</small></span></a></li><li><a href="observatory.html?tool=dossier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8l4 4v15H6z"/><path d="M14 2.5v4h4M9 12h6M9 16h6"/></svg><span><b>Dossier</b><small>five hypotheses each</small></span></a></li><li><a href="observatory.html?tool=motion"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="18" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="14" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.8" fill="currentColor" stroke="none"/><path d="M17 8l4-4M21 4h-4M21 4v4"/></svg><span><b>Motion map</b><small>tracks and parallax</small></span></a></li><li><a href="observatory.html?tool=valid"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10v-6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><span><b>Validation</b><small>98.4% on unseen fields</small></span></a></li><li><a href="observatory.html?tool=questions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7v.5"/><circle cx="12" cy="17" r=".9" fill="currentColor" stroke="none"/></svg><span><b>Open questions</b><small>each one testable</small></span></a></li><li><a href="observatory.html?tool=box"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="14" rx="1.5"/><path d="M3.5 10h17M10 14h4"/><path d="M8 6V4h8v2"/></svg><span><b>Black box</b><small>SHA 256 sealed</small></span></a></li><li><a href="observatory.html?tool=tiles"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span><b>Whole sky</b><small>48 equal area tiles</small></span></a></li><li><a href="observatory.html?tool=planet"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5.5"/><ellipse cx="12" cy="12" rx="10.5" ry="3.4" transform="rotate(-20 12 12)"/></svg><span><b>Planet X lab</b><small>could SPHEREx see it?</small></span></a></li><li><a href="observatory.html?tool=citizen"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.5" r="3.5"/><path d="M4.5 21c.8-4.2 3.8-6.5 7.5-6.5s6.7 2.3 7.5 6.5"/></svg><span><b>Citizen lab</b><small>judge before the machine</small></span></a></li><li><a href="observatory.html?tool=method"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="3.5" width="7" height="5" rx="1"/><rect x="14.5" y="15.5" width="7" height="5" rx="1"/><path d="M6 8.5v5.5h12v1.5"/></svg><span><b>How it works</b><small>archive to report</small></span></a></li></ul>
+      </div>
+    </div>
+    <ul class="lx-more" aria-label="Other workspaces"><li><a class="lx" href="causal-lab.html"><img src="figures/tools/causal.jpg" alt="" loading="lazy" width="960" height="600"><b>Causal sky twin</b><span>Sky model against detector model, one measurement at a time.</span></a></li><li><a class="lx" href="lab.html"><img src="figures/tools/labs.jpg" alt="" loading="lazy" width="960" height="600"><b>Ten laboratories</b><span>Real-data run record, crosstalk court, spectra and more.</span></a></li><li><a class="lx" href="chronos-lab.html"><img src="figures/tools/research.jpg" alt="" loading="lazy" width="960" height="600"><b>Research tools</b><span>Spectra, triage, evidence packages, the observing planner.</span></a></li><li><a class="lx" href="story.html"><img src="figures/tools/story.jpg" alt="" loading="lazy" width="960" height="600"><b>Story of one star</b><span>Five minutes, in English and Bangla.</span></a></li><li><a class="lx" href="deck.html"><img src="figures/tools/slides.jpg" alt="" loading="lazy" width="960" height="600"><b>Slides</b><span>Ten slides, with PDF and PowerPoint downloads.</span></a></li><li><a class="lx" href="classroom.html"><img src="figures/tools/classroom.jpg" alt="" loading="lazy" width="960" height="600"><b>Classroom kit</b><span>A 45 minute lesson with a printable worksheet.</span></a></li></ul>
+  </div>
 </section>
 
 <section class="glance" aria-labelledby="glanceH">
@@ -85,7 +112,7 @@
     <a class="g" href="#method"><span class="g-num">29 → 75 → 90%</span><span class="g-txt">chance a candidate is real when one, two or three independent detectors agree</span></a>
     <a class="g" href="#planetx"><span class="g-num">47.46′</span><span class="g-txt">motion of the published IRAS and AKARI Planet Nine pair, re-measured over 23 years</span></a>
     <a class="g" href="#physics"><span class="g-num">102 colours</span><span class="g-txt">0.75 to 5 µm on six arrays, 6.15″ pixels, R from 35 to 130</span></a>
-    <a class="g" href="#code"><span class="g-num" data-stat="tests">461 tests</span><span class="g-txt">in Python, plus a MATLAB re-implementation that must agree to 10⁻¹²</span></a>
+    <a class="g" href="#code"><span class="g-num" data-stat="tests">468 tests</span><span class="g-txt">in Python, plus a MATLAB re-implementation that must agree to 10⁻¹²</span></a>
     <a class="g" href="story.html"><span class="g-num">2 languages</span><span class="g-txt">the five minute story of one star, in English and Bangla</span></a>
     <a class="g" href="#real"><span class="g-num">2,421</span><span class="g-txt">young star candidates in five star forming regions matched to 6,214 SPHEREx images</span></a>
     <a class="g" href="#limits"><span class="g-num">0 of 60</span><span class="g-txt">recovered in Lupus III, traced to a sky 5.5 times noisier than the camera, and kept on the record</span></a>

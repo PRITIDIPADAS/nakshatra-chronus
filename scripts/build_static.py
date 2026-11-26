@@ -22,8 +22,6 @@ import study  # noqa: E402
 SITE = os.path.join(ROOT, "site")
 FRONT = os.path.join(ROOT, "frontend")
 KEEP = ("story", "media", "figures", "deck.html", "deck")
-LINKS = ('<a href="media/chronos_demo.mp4">Watch the 30 second demo</a> · <a href="deck.html">Read the slides</a> · '
-         '<a href="https://github.com/PRITIDIPADAS/nakshatra-chronus">Source code</a>')
 
 
 def static_story():
@@ -81,12 +79,10 @@ def main():
             h = open(p).read().replace('href="index.html"', 'href="observatory.html"').replace('href="home.html"', 'href="index.html"')
             open(p, "w").write(h)
     s = open(os.path.join(SITE, "observatory.html")).read()
-    link = '<a class="storylink" href="story.html" id="storyLink">The five minute story of one star, in English and Bangla →</a>'
     if os.path.exists(os.path.join(SITE, "story", "manifest.json")):
-        s = s.replace(link, '<span class="storylink">' + link.replace(' class="storylink"', "") + "<br>" + LINKS + "</span>")
         static_story()
     else:
-        s = s.replace(link, '<span class="storylink">' + LINKS + "<br>Run python scripts/record_story.py to add the story to this page.</span>")
+        s = s.replace('<a href="story.html" title="Story" id="storyLink">', '<a hidden href="story.html" title="Story" id="storyLink">')
         for f in ("story.html", "extras.js", "story_static.js"):
             os.remove(os.path.join(SITE, f))
     open(os.path.join(SITE, "observatory.html"), "w").write(s)

@@ -102,7 +102,7 @@ function render() {
   const D = ST.D;
   $("#stamp").textContent = D.meta.label || "SIMULATION";
   $("#stamp").classList.toggle("real", D.meta.label !== "SIMULATION");
-  $("#railnote").innerHTML = `<b>${esc(D.meta.name)}</b><br>${D.candidates.length} candidates<br>centre ${num(D.center[0], 4)}, ${num(D.center[1], 4)}`;
+  $("#railnote").innerHTML = `<b>${esc(D.meta.name)}</b> · ${D.candidates.length} candidates<br>centre ${num(D.center[0], 4)}, ${num(D.center[1], 4)}`;
   setupSlider(); drawSky(); renderMeta(); renderPlane(); renderGuardian(); renderMicroSel(); renderCands(); drawPop(); drawMotionMap(); renderValidation(); renderQuestions(); renderCitizen(); renderArchive(); renderBox();
 }
 
