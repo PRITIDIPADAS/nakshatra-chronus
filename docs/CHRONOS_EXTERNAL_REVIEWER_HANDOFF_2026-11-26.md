@@ -91,7 +91,25 @@ Required `input_digests` keys are:
 - `signed_report_sha256`
 - `reproduction_artifact_sha256`
 
+The repository now includes `scripts/verify_spherex_calibration_review.py`. After the reviewer has supplied the files and the maintainer has independently confirmed the reviewer identity and pinned the public-key fingerprint, run:
+
+```bash
+python scripts/verify_spherex_calibration_review.py \
+  --review-record /review/review_record.json \
+  --reviewer-public-key /review/reviewer_public.pem \
+  --expected-reviewer-id "<independently confirmed reviewer ID>" \
+  --expected-public-key-sha256 "<out-of-band pinned fingerprint>" \
+  --expected-commit "<full 40-character commit SHA>" \
+  --expected-input-digests /review/expected_input_digests.json \
+  --signed-report /review/signed_report.pdf \
+  --reproduction-artifact /review/reproduction.zip
+```
+
+The expected digest JSON must contain exactly the nine required keys listed above. Exit code 0 means the signature, pin, commit, report bytes and reproduction bytes verify; exit code 2 means the record did not verify.
+
 Verification returning `valid=true` establishes that a pinned key signed a review bound to the supplied commit and bytes. It does **not** establish scientific correctness or independently prove the reviewer’s credentials; those remain human external checks.
+
+**Important event-review boundary:** the source-linked YSO event-yield endpoint now requires an event classifier version and HTTPS evidence URI/SHA-256 for every claimed event. It verifies the declaration and measurement linkage but does not retrieve the evidence bytes or rerun the classifier; `event_acceptance_recomputed=false`. An astronomer must independently reproduce each event decision before it can support a population claim.
 
 ## 6. Release-blocking gates
 
