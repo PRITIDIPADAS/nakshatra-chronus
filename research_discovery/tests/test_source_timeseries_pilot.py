@@ -43,3 +43,25 @@ def test_native_fits_observation_time_must_match_frozen_archive_bounds():
     science["mjd_obs"] += 0.0002
     with pytest.raises(ValueError, match="disagrees with frozen SIAv2 time bounds"):
         validate_native_observation_time(science, product)
+
+
+
+def test_native_field_audit_accepts_explicitly_skipped_calibrated_injection():
+    from research_discovery.spherex.run_real_field_audit import validate_calibrated_injection_exit
+
+    validate_calibrated_injection_exit("skipped_by_request", skipped_by_request=True)
+
+
+def test_native_field_audit_does_not_mask_an_unexpected_injection_failure():
+    from research_discovery.spherex.run_real_field_audit import validate_calibrated_injection_exit
+
+    with pytest.raises(SystemExit, match="Calibrated Jy injection/recovery did not complete"):
+        validate_calibrated_injection_exit("failed", skipped_by_request=True)
+    with pytest.raises(SystemExit, match="Calibrated Jy injection/recovery did not complete"):
+        validate_calibrated_injection_exit("not_run", skipped_by_request=False)
+
+
+def test_native_field_audit_still_requires_completed_injection_when_not_skipped():
+    from research_discovery.spherex.run_real_field_audit import validate_calibrated_injection_exit
+
+    validate_calibrated_injection_exit("completed", skipped_by_request=False)
