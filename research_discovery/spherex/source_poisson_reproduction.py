@@ -115,8 +115,13 @@ def _image_hdu(path: Path, label: str):
         return data, header
 
 
-def reproduce_m101_audit(audit_dir: str | Path, *, rtol: float = 1e-8) -> dict[str, Any]:
+def reproduce_m101_audit(
+    audit_dir: str | Path, *, repository_commit: str, rtol: float = 1e-8
+) -> dict[str, Any]:
     """Verify native inputs and compare formula-derived sums with the retained report."""
+    commit = str(repository_commit).strip().lower()
+    if len(commit) != 40 or any(ch not in "0123456789abcdef" for ch in commit):
+        raise ValueError("repository_commit must be the full 40-character commit SHA")
     root = Path(audit_dir)
     summary_path = root / "real_field_audit_summary.json"
     injection_path = root / "calibrated_injection" / "calibrated_jy_injection_recovery.json"
@@ -155,6 +160,12 @@ def reproduce_m101_audit(audit_dir: str | Path, *, rtol: float = 1e-8) -> dict[s
         raise ValueError("science MEF SHA-256 does not match the injection calibration record")
     if record.get("calibration_sha256") != gain_sha:
         raise ValueError("absolute-gain SHA-256 does not match the injection calibration record")
+    if (injection.get("psf_interpolation_correction") or {}).get("corrected_stamp_sha256") != psf_sha:
+        raise ValueError("corrected native ePSF SHA-256 does not match the injection report")
+    if record.get("science_source_uri") != (summary.get("science") or {}).get("uri"):
+        raise ValueError("science archive URI does not match the injection calibration record")
+    if record.get("calibration_uri") != (summary.get("selected_products") or {}).get("absolute_gain", {}).get("uri"):
+        raise ValueError("absolute-gain archive URI does not match the selected product manifest")
     provenance = summary.get("archive_provenance") or {}
     links = provenance.get("exact_product_links") or {}
     gain_link = links.get("absolute_gain") or {}
@@ -163,6 +174,18 @@ def reproduce_m101_audit(audit_dir: str | Path, *, rtol: float = 1e-8) -> dict[s
         raise ValueError("absolute-gain product has no verified live archive provenance link")
     if gain_link.get("calibration_sha256") != gain_sha:
         raise ValueError("absolute-gain SHA-256 disagrees with the live provenance record")
+    record_link = record.get("provenance_link") or {}
+    for key in (
+        "input_table", "science_planeid", "calibration_planeid",
+        "inputid", "outputid", "artifact_planeid",
+        "science_native_uri", "calibration_native_uri",
+        "calibration_sha256", "query_sha256", "status",
+        "artifact_md5_status",
+    ):
+        if record_link.get(key) != gain_link.get(key):
+            raise ValueError(f"electron calibration record provenance mismatch for {key}")
+    if record_link.get("artifact_md5_status") != "pass":
+        raise ValueError("absolute-gain archive MD5 is not verified")
     if wcs_link.get("status") != "verified_from_live_irsa_foreign_key_query":
         raise ValueError("spectral-WCS product has no verified live archive provenance link")
     if wcs_link.get("calibration_sha256") != wcs_sha:
@@ -247,7 +270,7 @@ def reproduce_m101_audit(audit_dir: str | Path, *, rtol: float = 1e-8) -> dict[s
         "schema": REPRODUCER_SCHEMA,
         "status": "FORMULA_RECOMPUTATION_PASS_NOT_INSTRUMENT_SIGNOFF",
         "scientific_acceptance": "NOT_GRANTED_REQUIRES_INDEPENDENT_REVIEWER",
-        "repository_commit_to_review": str(summary.get("repository_commit") or "not recorded in summary"),
+        "repository_commit_to_review": commit,
         "science_observation_id": record["science_observation_id"],
         "detector": record["detector"],
         "release": summary.get("release"),
@@ -278,9 +301,12 @@ def reproduce_m101_audit(audit_dir: str | Path, *, rtol: float = 1e-8) -> dict[s
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audit-dir", type=Path, required=True)
+    parser.add_argument("--repository-commit", required=True)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args(argv)
-    result = reproduce_m101_audit(args.audit_dir)
+    result = reproduce_m101_audit(
+        args.audit_dir, repository_commit=args.repository_commit
+    )
     output = args.output or (args.audit_dir / "source_poisson_independent_recomputation.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
