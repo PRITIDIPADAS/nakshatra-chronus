@@ -23,6 +23,7 @@ CHECKS = (
     "event_detection_and_contamination", "blind_benchmark",
     "statistical_reproduction", "negative_controls_and_exclusions", "claim_scope",
 )
+REQUIRED_CHECKS = CHECKS
 SCOPE_CHECKS = {
     "source_timeseries": {
         "native_source_data", "wcs_cwave_cband", "calibration_and_noise",
