@@ -554,6 +554,7 @@ def _population_real_field(field_id="FIELD-1", source_id="YSO-1", *,
             for wavelength_index, wavelength in enumerate(wavelengths):
                 rows.append({
                     "source_id": source_id,
+                    "measurement_id": f"{field_id}-{source_id}-E{epoch_index}-{band}-{wavelength_index}",
                     "observation_id": f"{field_id}-E{epoch_index}",
                     "mjd": mjd,
                     "wavelength_um": wavelength,
