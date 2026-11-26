@@ -38,6 +38,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--signed-report", required=True, type=Path)
     parser.add_argument("--reproduction-artifact", required=True, type=Path)
+    parser.add_argument(
+        "--confirm-reviewer-identity-independence-out-of-band",
+        action="store_true",
+        help="Use only after separately verifying reviewer identity, expertise and independence outside this signature bundle.",
+    )
     args = parser.parse_args(argv)
 
     record: Any = json.loads(args.review_record.read_text(encoding="utf-8"))
@@ -54,6 +59,9 @@ def main(argv: list[str] | None = None) -> int:
         expected_input_digests=expected,
         signed_report_path=args.signed_report,
         reproduction_artifact_path=args.reproduction_artifact,
+        external_identity_and_independence_confirmed=(
+            args.confirm_reviewer_identity_independence_out_of_band
+        ),
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result.get("valid") is True else 2
