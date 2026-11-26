@@ -191,6 +191,14 @@ Tests cover unsigned caller claims, a valid pinned test-key signature, and recor
 
 
 
+## 26 November 2026 — source-linked event-yield path
+
+A separate `POST /api/v5/population/yso/source-linked-event-yield` endpoint now requires event-to-source identity and exact measurement-level lineage. The coverage audit retains each eligible source's valid measurement IDs, observation IDs, per-row MJD and native wavelength. Each accepted event must cite at least two distinct measured epochs; event IDs, intervals, source membership, preregistration digest and event-definition digest are validated before an estimate is returned.
+
+The estimator applies the supported multidimensional source-selection weight (1/p_i) to event-bearing sources and resamples event-bearing sources as clusters. It does not treat multiple events or wavelength rows from one source as independent sources. Null-control counts remain separate and are scaled by the explicit control/science area-time ratio.
+
+**Boundary:** this path corrects source-catalogue inclusion only. Event-detection completeness and source-level contamination composition are not yet modelled. The endpoint returns a source-selection-weighted candidate-event yield, never a YSO discovery or final population result. The legacy aggregate-count route is now labelled `exploratory_field_level_event_rate_not_source_selection_corrected`.
+
 ## 26 November 2026 — source-series import and selection-gate hardening
 
 This update adds a concrete import route for the official IRSA SPHEREx Spectrophotometry Tool output and strengthens the Session 19 selection evidence contract.
