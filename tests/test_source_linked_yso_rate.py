@@ -56,6 +56,9 @@ def _fixture():
         "event_id": "EV-1", "field_id": "FIELD-1", "source_id": "YSO-1",
         "status": "accepted", "preregistration_sha256": prereg,
         "event_definition_sha256": event_definition,
+        "event_evidence_uri": "https://example.org/event-evidence/EV-1.json",
+        "event_evidence_sha256": "e" * 64,
+        "classifier_version": "frozen-ysovar-event-rule/1.0",
         "start_mjd": 60000.5, "end_mjd": 60003.5,
         "measurement_ids": ["M-1", "M-2", "M-3"],
     }]
@@ -198,6 +201,21 @@ def test_source_linked_event_yield_rejects_inconsistent_summaries_within_one_sel
     coverage["eligible_sources"][1]["selection_cell_id"] = "CELL-1"
     _mock_revalidation(monkeypatch, coverage)
     with pytest.raises(ValueError, match="inconsistent probability summaries"):
+        estimate_source_linked_event_yield(
+            fields, coverage_audit=coverage,
+            selection_trials=trials, selection_bin_spec={"frozen": True},
+            source_event_records=events, preregistration_sha256=prereg,
+            event_definition_sha256=event_definition,
+        )
+
+
+def test_source_linked_event_yield_requires_auditable_event_classifier_evidence(monkeypatch):
+    from chronos_population.source_linked import estimate_source_linked_event_yield
+
+    fields, coverage, trials, events, prereg, event_definition = _fixture()
+    _mock_revalidation(monkeypatch, coverage)
+    events[0].pop("event_evidence_uri")
+    with pytest.raises(ValueError, match="event_evidence_uri"):
         estimate_source_linked_event_yield(
             fields, coverage_audit=coverage,
             selection_trials=trials, selection_bin_spec={"frozen": True},
