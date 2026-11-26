@@ -261,6 +261,8 @@ def assess_population_coverage(
                     flux_unit = str(row.get("flux_unit", "")).strip()
                     if not observation_id:
                         raise ValueError("observation_id is required for an auditable sample")
+                    if not measurement_id:
+                        raise ValueError("measurement_id is required for source-linked event provenance")
                     if not flux_unit:
                         raise ValueError("flux_unit must be explicit")
                     if not all(math.isfinite(value) for value in (mjd, wavelength, flux, sigma)) or sigma <= 0:
