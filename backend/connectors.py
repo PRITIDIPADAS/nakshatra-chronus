@@ -62,9 +62,20 @@ def search(ra, dec, rad=SEARCH_RADIUS, coll="spherex_dr1", maxrec=2000):
     return [{c: (None if np.ma.is_masked(r[c]) else r[c]) for c in t.colnames} for r in t]
 
 
+def _row_value(row, key, default=None):
+    """Read a value from either an Astropy Row or the dict rows returned by search()."""
+    try:
+        columns = getattr(row, "colnames", None)
+        if columns is not None:
+            return row[key] if key in columns else default
+        return row.get(key, default)
+    except (KeyError, TypeError, AttributeError):
+        return default
+
+
 def row_detector(row):
     """Detector number from the file name (for example 1D2_spx means detector 2) or from the band name."""
-    for txt in (str(row.get("access_url") or ""), str(row.get("energy_bandpassname") or ""), str(row.get("obs_id") or "")):
+    for txt in (str(_row_value(row, "access_url") or ""), str(_row_value(row, "energy_bandpassname") or ""), str(_row_value(row, "obs_id") or "")):
         m = re.search(r"D([1-6])_spx", txt) or re.search(r"D([1-6])\b", txt)
         if m:
             return int(m.group(1))
@@ -94,7 +105,7 @@ def flag_bits(h):
 
 
 def wavelength(h, hd, x, y):
-    """Color and channel width at a pixel from the W lookup table of the file. Display grade. Microns."""
+    """Return WCS-WAVE for display only. It is not a science wavelength solution."""
     w = WCS(header=hd, fobj=h, key="W")
     w.sip = None
     lam, bw = w.pixel_to_world(x, y)
@@ -115,9 +126,22 @@ def wavelength(h, hd, x, y):
 def pick_psf(h, hd, x, y):
     """PSF zone nearest to cutout pixel x, y. Returns the prepared PSF and a note, or None and the reason.
     QR3 files hold an EPSF table (one 33 by 33 ePSF per detector zone, with XCENTER and YCENTER); QR2 files hold a PSF cube."""
-    # Detector pixel (0 based) of the cutout pixel, from the alternate WCS A of the cutout.
-    xd = float(hd.get("CRVAL1A", 0.0)) + (x + 1 - float(hd.get("CRPIX1A", 1.0)))
-    yd = float(hd.get("CRVAL2A", 0.0)) + (y + 1 - float(hd.get("CRPIX2A", 1.0)))
+    # Prefer complete alternate WCS A. Some older ePSF-only fixtures do not
+    # carry detector identity or a typed WCS-A definition; for those, retain
+    # the original CRPIX/CRVAL linear mapping solely for zone selection.
+    detector_id = str(hd.get("DETECTOR", hd.get("DETID", "")))
+    if not detector_id and not (hd.get("CTYPE1A") and hd.get("CTYPE2A")):
+        required = ("CRPIX1A", "CRPIX2A", "CRVAL1A", "CRVAL2A")
+        if any(hd.get(key) is None for key in required):
+            return None, "Detector identity and complete alternate WCS A are missing; ePSF zone is unresolved."
+        xd = float(hd["CRVAL1A"]) + float(x) + 1.0 - float(hd["CRPIX1A"])
+        yd = float(hd["CRVAL2A"]) + float(y) + 1.0 - float(hd["CRPIX2A"])
+    else:
+        from research_discovery.spherex.coordinate_transform import image_to_detector
+        xd, yd = image_to_detector(
+            float(x), float(y), dict(hd),
+            science_detector=detector_id, requested_detector=detector_id)
+        xd, yd = float(xd), float(yd)
     if "EPSF" in h and hasattr(h["EPSF"], "columns"):
         try:
             t, ph = h["EPSF"].data, h["EPSF"].header
@@ -162,7 +186,9 @@ def version_tuple(v):
 
 def load(row, ra, dec, size, coll):
     """Read one cutout into an exposure. The target must be inside the cutout."""
-    h = fits.open(io.BytesIO(cutout(row["access_url"], ra, dec, size)))
+    cutout_bytes = cutout(row["access_url"], ra, dec, size)
+    cutout_sha256 = hashlib.sha256(cutout_bytes).hexdigest()
+    h = fits.open(io.BytesIO(cutout_bytes))
     hd = h["IMAGE"].header
     img = np.asarray(h["IMAGE"].data, float)
     var = np.asarray(h["VARIANCE"].data, float)
@@ -181,13 +207,32 @@ def load(row, ra, dec, size, coll):
     if not (2 <= x < img.shape[1] - 2 and 2 <= y < img.shape[0] - 2):
         raise ValueError("Target outside the cutout")
     det = int(hd.get("DETECTOR", 0) or row_detector(row))
-    notes, lam_ok, src = [], True, "W lookup table of the file (display grade)"
+    notes = ["No compatible CWAVE/CBAND calibration was paired with this exposure. WCS-WAVE and nominal band centres are display-only; scientific wavelength comparisons are disabled."]
+    lam_ok, src = False, "WCS-WAVE display only; CWAVE/CBAND not paired"
+    raw_exptime = _row_value(row, "t_exptime", hd.get("EXPTIME", 0.0))
+    try:
+        source_exptime = 0.0 if np.ma.is_masked(raw_exptime) else float(raw_exptime)
+    except (TypeError, ValueError):
+        source_exptime = 0.0
+    try:
+        from research_discovery.spherex.coordinate_transform import detector_origin_offset
+        detector_origin = detector_origin_offset(dict(hd))
+    except Exception as err:
+        detector_origin = None
+        notes.append(f"Native detector origin not verified: {type(err).__name__}.")
+
     try:
         lam, bw = wavelength(h, hd, x, y)
+        # Keep the existing observatory's approximate WCS-WAVE display
+        # comparisons available. The source remains labelled display-grade;
+        # CHRONOS 5 science APIs require independent CWAVE/CBAND provenance.
+        lam_ok, src = True, "W lookup table of the file (display grade)"
+        notes.append("WCS-WAVE is display-grade only; it is not admitted by CHRONOS 5 scientific wavelength gates.")
     except Exception as err:
         lo, hi, R = core.BANDS.get(det, (0.75, 5.0, 40))
-        lam, bw, lam_ok, src = math.sqrt(lo * hi), math.sqrt(lo * hi) / R, False, "band center only"
-        notes.append(f"Color at the target not read ({type(err).__name__}).")
+        lam, bw = math.sqrt(lo * hi), math.sqrt(lo * hi) / R
+        lam_ok, src = False, "band center only"
+        notes.append(f"WCS-WAVE unavailable for display ({type(err).__name__}); no science wavelength assigned.")
     psf, pnote = pick_psf(h, hd, x, y)
     if psf is None or "not found" in pnote:
         notes.append(pnote)
@@ -204,9 +249,14 @@ def load(row, ra, dec, size, coll):
         dxy = (float(p[0]), float(p[1]))
     except Exception:
         notes.append("Detector position (WCS A) not read.")
-    return Exp(str(hd.get("OBSID") or row.get("obs_id") or row["access_url"][-40:]) + (f"_D{det}" if det else ""), float(row["t_min"]), lam, bw, det,
+    archive_observation_id = _row_value(row, "obs_id") or _row_value(row, "obs_publisher_did") or ""
+    access_url = str(_row_value(row, "access_url", ""))
+    return Exp(str(hd.get("OBSID") or archive_observation_id or access_url[-40:]) + (f"_D{det}" if det else ""), float(_row_value(row, "t_min")), lam, bw, det,
                coll, "REAL SPHEREx", img, var, flags, zod, w, (x, y), psf=psf, bits=bits, lam_src=src, lam_ok=lam_ok, notes=notes,
-               dxy=dxy, frame=f"{float(row['t_min']):.5f}")
+               dxy=dxy, frame=f"{float(row['t_min']):.5f}", source_uri=str(row["access_url"]),
+               source_sha256=cutout_sha256, image_unit=str(hd.get("BUNIT", "")),
+               source_observation_id=str(hd.get("OBSID") or archive_observation_id),
+               source_exposure_time_s=source_exptime, detector_origin_xy=detector_origin)
 
 
 @plugin("gaia")
@@ -340,9 +390,9 @@ def doctor(t, coll="spherex_dr1+spherex_qr3"):
         steps.append(dict(step="Target in cutout", ok=0 <= x < hd["NAXIS1"] and 0 <= y < hd["NAXIS2"], detail=f"pixel {x:.1f}, {y:.1f}"))
         try:
             lam, bw = wavelength(h, hd, x, y)
-            steps.append(dict(step="Color at the target", ok=True, detail=f"{lam:.4f} micron, width {bw:.4f}"))
+            steps.append(dict(step="WCS-WAVE display value", ok=False, detail=f"{lam:.4f} micron, width {bw:.4f}; display only, no scientific wavelength assigned without compatible CWAVE/CBAND"))
         except Exception as err:
-            steps.append(dict(step="Color at the target", ok=False, detail=f"{type(err).__name__}: {err}"))
+            steps.append(dict(step="Science wavelength", ok=False, detail=f"No compatible CWAVE/CBAND assignment: {type(err).__name__}: {err}"))
         psf, note = pick_psf(h, hd, x, y)
         steps.append(dict(step="PSF", ok=psf is not None, detail=f"{note} Shape {getattr(h['PSF'].data, 'shape', None) if 'PSF' in h else None}"))
         b = flag_bits(h)
@@ -356,9 +406,25 @@ def doctor(t, coll="spherex_dr1+spherex_qr3"):
     return steps
 
 
+HORIZONS = "https://ssd.jpl.nasa.gov/api/horizons.api"
+SPHEREX_SPK = "-163182"  # JPL Horizons id of the SPHEREx spacecraft
+
+
+def spherex_state(mjd):
+    """Geocentric ICRF position (km) and velocity (km/s) of SPHEREx at one time, from JPL Horizons."""
+    jd = Time(mjd, format="mjd").tdb.jd
+    p = {"format": "json", "COMMAND": f"'{SPHEREX_SPK}'", "CENTER": "'500@399'", "EPHEM_TYPE": "'VECTORS'",
+         "REF_PLANE": "'FRAME'", "OUT_UNITS": "'KM-S'", "VEC_TABLE": "'2'", "CSV_FORMAT": "'YES'",
+         "TLIST": f"'{jd:.6f}'", "OBJ_DATA": "'NO'"}
+    text = requests.get(HORIZONS, params=p, timeout=60).json()["result"]
+    row = text.split("$$SOE")[1].split("$$EOE")[0].strip().splitlines()[0]
+    vals = [float(v) for v in row.split(",")[2:8]]
+    return vals[:3], vals[3:]
+
+
 @plugin("known_movers")
 def known_movers(ra, dec, mjd, hw=0.05):
-    """Known asteroids and comets near a position from the JPL SBIdent API."""
+    """Known asteroids and comets near a position, seen from SPHEREx itself (JPL Horizons + SBIdent)."""
     def hms(v):
         h = v / 15.0
         return f"{int(h):02d}-{int(h % 1 * 60):02d}-{h * 3600 % 60:05.2f}"
@@ -367,11 +433,18 @@ def known_movers(ra, dec, mjd, hw=0.05):
         a = abs(v)
         return ("M" if v < 0 else "") + f"{int(a):02d}-{int(a % 1 * 60):02d}-{a * 3600 % 60:05.2f}"
 
-    p = {"sb-kind": "a", "lat": 0, "lon": 0, "alt": 0, "obs-time": Time(mjd, format="mjd").iso[:19].replace(" ", "_"), "two-pass": "true",
+    p = {"sb-kind": "a", "obs-time": Time(mjd, format="mjd").iso[:19].replace(" ", "_"), "two-pass": "true",
          "fov-ra-center": hms(ra), "fov-dec-center": dms(dec), "fov-ra-hwidth": hw, "fov-dec-hwidth": hw, "vmag-lim": 22}
+    try:
+        r, v = spherex_state(mjd)
+        p["xobs"] = ",".join(f"{x:.6f}" for x in r + v)
+        note = "Observer is SPHEREx in orbit (JPL Horizons state vector -163182)."
+    except Exception as err:  # Horizons down: fall back to a ground observer and say so
+        p.update(lat=0, lon=0, alt=0)
+        note = f"SPHEREx state unavailable ({type(err).__name__}); observer on the ground, a main belt object can be off by about one pixel."
     j = requests.get("https://ssd-api.jpl.nasa.gov/sb_ident.api", params=p, timeout=60).json()
-    return dict(fields=j.get("fields"), data=j.get("n_second_pass") and j.get("data_second_pass") or j.get("data_first_pass") or j.get("data"), message=j.get("message"),
-                note="Observer on the ground. The telescope is in Earth orbit, so a main belt object can be off by about one pixel.")
+    return dict(fields=j.get("fields"), data=j.get("n_second_pass") and j.get("data_second_pass") or j.get("data_first_pass") or j.get("data"),
+                message=j.get("message"), observer=p.get("xobs", "ground"), note=note)
 
 
 VERD = {"Motion model preferred": ("it moves", "এটি সরছে"), "Fixed position preferred": ("it stays in place", "এটি এক জায়গায় আছে"),

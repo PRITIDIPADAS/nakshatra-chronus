@@ -58,8 +58,15 @@ def _list(url: str, timeout: int = 60) -> list[str]:
 def find_products(product: str, detector: int | None = None, *, release: str = "dr1",
                   processing_date: str | None = None, version: str | None = None,
                   crosstalk_type: int = 1) -> list[str]:
+    """Query the published calibration artifacts, then filter native archive URIs.
+
+    The IRSA TAP artifact table is the reliable discovery source. Directory
+    indexes are not assumed to be browseable; returned paths are still only
+    candidates until the downloaded FITS headers and science provenance pass
+    the native calibration audit.
+    """
     if release not in {"dr1", "qr3"}:
-        raise ValueError("release must be dr1 or qr3; QR2 is not part of the current SIA2 search")
+        raise ValueError("release must be dr1 or qr3; QR2 is not part of the current calibrated set")
     if product == "crosstalk":
         if crosstalk_type not in {1, 2, 3}:
             raise ValueError("crosstalk_type must be 1, 2 or 3")
@@ -72,28 +79,42 @@ def find_products(product: str, detector: int | None = None, *, release: str = "
         raise ValueError(f"{product} requires --detector 1..6")
     if detector is not None and detector not in range(1, 7):
         raise ValueError("detector must be from 1 through 6")
-    base = urljoin(ROOT, f"{release}/{relative}")
-    found: list[str] = []
-    for product_version_url in _list(base):
-        if not product_version_url.endswith("/"):
+
+    from astroquery.ipac.irsa import Irsa
+    directory = relative.strip("/").lower()
+    query = (
+        "SELECT uri FROM spherex.artifact "
+        "WHERE producttype = 'calibration' AND releasetype = 'data' "
+        f"AND LOWER(uri) LIKE '%/spherex/{release}/{directory}/%'"
+    )
+    result = Irsa.query_tap(query)
+    table = result.to_table() if hasattr(result, "to_table") else result
+    if not hasattr(table, "colnames"):
+        raise TypeError("IRSA calibration artifact query did not return a table with column names")
+
+    found = []
+    for row in table:
+        value = row["uri"]
+        if getattr(value, "mask", False):
             continue
-        path = urlparse(product_version_url).path
+        raw_uri = str(value).strip()
+        if not raw_uri:
+            continue
+        uri = raw_uri if raw_uri.startswith("https://") else urljoin(
+            "https://irsa.ipac.caltech.edu/", raw_uri.lstrip("/")
+        )
+        path = urlparse(uri).path.lower()
+        if f"/spherex/{release}/" not in path or f"/{directory}/" not in path:
+            continue
+        if needs_detector and f"/{detector}/" not in path:
+            continue
         if processing_date and processing_date not in path:
             continue
         if version and f"v{version}-" not in path and f"v{version}/" not in path:
             continue
-        if needs_detector:
-            detector_dirs = [urljoin(product_version_url, f"{detector}/")]
-        else:
-            detector_dirs = [product_version_url]
-        for directory in detector_dirs:
-            try:
-                files = _list(directory)
-            except Exception:
-                continue
-            found.extend(u for u in files if urlparse(u).path.lower().endswith((".fits", ".ecsv", ".yaml")))
+        if path.endswith((".fits", ".ecsv", ".yaml")):
+            found.append(uri)
     return sorted(set(found))
-
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)

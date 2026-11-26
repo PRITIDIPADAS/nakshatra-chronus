@@ -5,3 +5,10 @@ cache/
 .ipynb_checkpoints/
 *.part
 .DS_Store
+
+# CHRONOS blind benchmark private material
+*.key
+benchmark/custodian/
+benchmark/blind_private/
+benchmark/**/truth_store.enc
+benchmark/**/split_counts.json

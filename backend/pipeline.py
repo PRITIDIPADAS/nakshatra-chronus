@@ -140,6 +140,9 @@ def register(e, ref, n, shift=None, flags=True, order=3):
 
 
 def color_distance(a, b):
+    """Return infinity when either exposure lacks an approved science wavelength."""
+    if not (getattr(a, "lam_ok", True) and getattr(b, "lam_ok", True)):
+        return float("inf")
     return abs(a.lam - b.lam) / (0.5 * (a.bw + b.bw))
 
 

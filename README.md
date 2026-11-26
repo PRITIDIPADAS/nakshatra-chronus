@@ -1,184 +1,153 @@
 # Nakshatra CHRONOS
 
-**An observatory for change in the SPHEREx infrared sky.** CHRONOS finds what changed between SPHEREx visits, tests whether the change is real, ranks five explanations, tries to prove its own answer wrong, and writes a report in which every sentence points to a measurement.
+**Pluto was found by blinking two photographs. SPHEREx cannot be blinked.** Every pixel of NASA's SPHEREx telescope sees its own colour of infrared light, so a star that never changed still looks brighter or fainter when it lands on another pixel. CHRONOS is the physics and the software that decide whether a change is in the sky, or only in the colour, the camera or the calibration.
 
-NASA Space Apps Challenge · Planet X and SPHEREx
+By Pritidipa Das. Physics and astronomy.
 
-* **Live observatory:** https://pritidipadas.github.io/nakshatra-chronus/
-* **Demo video (30 seconds):** https://pritidipadas.github.io/nakshatra-chronus/media/chronos_demo.mp4 ([file](docs/media/chronos_demo.mp4))
-* **Pitch deck (7 slides):** https://pritidipadas.github.io/nakshatra-chronus/deck.html ([PDF](docs/deck/CHRONOS_deck.pdf))
+* **Project site:** https://pritidipadas.github.io/nakshatra-chronus/
+* **The observatory:** https://pritidipadas.github.io/nakshatra-chronus/observatory.html
+* **Demo video (30 seconds):** https://pritidipadas.github.io/nakshatra-chronus/media/chronos_demo.mp4
+* **Slides:** https://pritidipadas.github.io/nakshatra-chronus/deck.html
 * **The story of one star, in English and Bangla:** https://pritidipadas.github.io/nakshatra-chronus/story.html
-* **Submission text:** [docs/SUBMISSION.md](docs/SUBMISSION.md)
+* **Real-data runs:** [GitHub Actions](https://github.com/PRITIDIPADAS/nakshatra-chronus/actions)
 
 ![The difference microscope](docs/figures/microscope.png)
 
-## CHRONOS 4D: ten laboratories (new)
+## The problem
 
-**[Open the ten laboratories](https://pritidipadas.github.io/nakshatra-chronus/lab.html)** · [research laboratories](https://pritidipadas.github.io/nakshatra-chronus/chronos-lab.html) · details in [docs/CHRONOS_4D.md](docs/CHRONOS_4D.md)
+A linear variable filter sits on each of the six SPHEREx arrays. Its colour runs from one edge to the other, 0.75 to 5 µm over 102 channels, with resolving power R = λ/Δλ between 35 and 130. Because R is constant across a band, the wavelength a pixel sees grows geometrically with its column:
 
-CHRONOS does not merely search for changes. It investigates whether they are real, explains how they could have occurred, and names the evidence that would prove it wrong. Space × time × wavelength × evidence, for every candidate:
+λ(x) = λ_min (λ_max / λ_min)^(x/N),  Δλ = λ / R
 
-| Laboratory | What it does |
-|---|---|
-| 01 Sky and releases | Live searches default to DR1 + QR3 (`spherex_dr1+spherex_qr3`). QR2 is superseded and is never mixed with them without flux corrections. |
-| 02 Spectral universe | A 102-channel spectral history F(λ, t), σ(λ, t): heatmap, time slider, difference view, uncertainty surface, feature explorer, detector comparison, stability score, a test of whether the wavelength sampling or the calibration explains the change, CSV export. DR1 blank channels 51 and 52 are shown, never filled. |
-| 03 Instrument forensics | Ten tests (crosstalk, aurora, helium 1.083 µm, shuttle glow, dead pixels, nonlinearity, read noise, gain, zodiacal light, PSF), each naming the official calibration product that confirms it; a calibration impact experiment (319 raw spots → 4 sky candidates in the practice field). |
-| 04 Case studies | 3I/ATLAS, SPLICES ice targets, RW Aurigae, brown dwarfs, R Draconis: adapters and the tests each case needs. |
-| 05 Scientific court | Six separate confidences (detection, position, motion, brightness, spectral, interpretation), never one percentage. |
-| 06 Planet X lab | The published IRAS–AKARI pair re-measured (47.46 arcmin in 23 years), motion sensitivity, survey selection, a falsification rule, the discovery ladder. |
-| 07 Ice and molecules | Band depths of H₂O, CO₂, CO, CH₃OH, OCN⁻ ices with errors and named blends. |
-| 08 Observation optimizer | Ranks the next measurement by expected information gain, says why, and gives approximate SPHEREx visibility windows. |
-| 09 Validation observatory | Benjamini–Hochberg false-discovery control, chance expectation, negative controls, sensitivity, and real versus simulated: 29 of 120 real QR3 injections against 98.8 percent on the simulated sky. |
-| 10 Human observatory | English–Bangla glossary, Cohen and Fleiss kappa for blind repeats. |
-| 11 Evidence passport | Section-hashed, sealed record per candidate; verify with `sha256sum`, in the browser, or `scripts/verify_passport.py`. |
+Two pictures of one star taken on different visits usually put it on different columns, so they measure two different colours. For a Sun-like star at 1.6 µm, one channel of offset fakes a change of about 5 percent. On the edge of a 3.05 µm water-ice band it can fake more than 20 percent (computed in `matlab/export_lvf_curves.m`). A naive difference image of two SPHEREx exposures is full of changes that never happened. In the practice pair above, 27 spots survive a raw difference, 10 survive alignment on stars, and 1 survives a fair co-add with honest noise.
 
-**Real data, run on GitHub Actions** (workflow `real data`, `scripts/real_data_run.py`, results in `data/real_data_run.json`): image counts per release at three places (for example 226 DR1 and 110 QR3 images at RW Aurigae); a real DR1 All-Sky Cube spectrum (tile Npix277, 102 × 512 × 512, BLANKCH D3:17 and D4:01, the missing channels 51 and 52); 12 SPLICES ice targets near RW Aurigae; the official DR1 helium, aurora, shuttle glow, nonfunctional pixel, spectral WCS, ePSF and crosstalk files; and 3I/ATLAS, with SPHEREx DR1 images at its JPL Horizons positions in August and December 2025.
+SPHEREx will measure more than 100 million stars in the Milky Way, each in all 102 channels at least four times, and the data are public within weeks. Anyone who wants to say a star changed needs a way to rule out the instrument first.
 
-Also added: the research extension pack (`backend/chronos_addons/`, 14 offline API routes; `research_discovery/`: DR1 and calibration discovery, native MEF download with checksums, ePSF stamps at sub-pixel phase, flag policy, detector-template reprojection, injection and recovery, Planet Nine population tools, citizen-study manifest and protocols) and two Kaggle notebooks for the real-data runs (`notebooks/kaggle/`). Physics first: no generative AI produces any result. 121 automated tests.
+## What CHRONOS does
 
-## The problem: you cannot blink SPHEREx
+It compares only **fair pairs**: the same array, colours within half a channel, one data release. Then it asks five questions of every change:
 
-Pluto was found by blinking two photographic plates. SPHEREx cannot be blinked. A linear variable filter sits in front of each of its six arrays, so every pixel of every exposure sees its own color of infrared light, from 0.75 to 5 micron in 102 channels. Two pictures of one star differ when the color differs, even when nothing in the sky changed. A naive difference image of two SPHEREx exposures is full of false change.
+1. **What changed?** Three detectors read the same pixels: P, a catalogue of each visit; D, fair-pair differences; A, an anomaly ensemble.
+2. **Where?** One grid anchored to Gaia stars, with measured position errors and the SPHEREx spectral WCS for the colour of each pixel.
+3. **Is it real?** An artefact court: flags, crosstalk geometry, the twin array behind the dichroic, counterfactual reanalysis.
+4. **What is it?** Five hypotheses (moving, variable, transient, artefact, nothing) with calibrated probabilities and the right to say unknown.
+5. **What would prove it wrong?** The leading explanation is attacked with the tests most likely to break it.
 
-CHRONOS compares only **fair pairs**: the same array, nearly the same color, one data release. Then it asks five questions of every change:
+### The physics in the code
 
-1. **What changed?** Three independent methods look.
-2. **Where?** On one grid, anchored to Gaia stars, with measured position errors.
-3. **Is it real?** The artefact court, the simultaneous array behind the dichroic, the flags, crosstalk geometry, counterfactual reanalysis.
-4. **What is it?** Five hypotheses with calibrated probabilities, and the right to say unknown.
-5. **What would prove us wrong?** The self questioning machine runs the tests that could break the leading explanation.
-
-![Fair pairs](docs/figures/fair_plane.png)
-
-## Discovery by disagreement
-
-Three methods read the same pixels in different ways:
-
-| Method | What it does | Its typical failure |
+| Piece | Equation | Where |
 |---|---|---|
-| **P** catalog | Matched filter detection in each visit, PSF centroids, links across visits, motion court, brightness and presence tests with measured floors | Changes between visits that have no fair color match |
-| **D** difference | Fair co adds of two visits, Z = (I2 − k I1) / √(σ1² + k² σ2² + (f s)²), with the resampling error f measured on catalog stars, summed over arrays | Slow changes; it cannot see across a color gap |
-| **A** anomaly | Eight time features per pixel against fair partners, ranked by an isolation forest, a local outlier factor and a robust covariance model | Bright single exposure events that are not in the sky |
+| Fair pair | same array, \|λ₁ − λ₂\| ≤ ½ Δλ, same release | `backend/core.py` `pair_score`, `matlab/fair_pair.m` |
+| Honest difference | Z = (I₂ − k I₁) / √(σ₂² + k²σ₁² + (f s)²), f measured on unchanged stars | `backend/core.py` `zmap`, `matlab/diff_z.m` |
+| Motion court | fixed, linear motion, motion plus parallax; BIC = χ²/s² + k ln(2n); motion needs ΔBIC > 10 | `backend/core.py` `motion_fit`, `matlab/motion_court.m` |
+| Parallax | Δα* = ϖ (X sin α − Y cos α), Δδ = ϖ (X cos α sin δ + Y sin α sin δ − Z cos δ) | `backend/core.py` `plx_factors` |
+| Known asteroids | observer at SPHEREx's own position from JPL Horizons (id −163182) | `backend/connectors.py` `known_movers` |
+| Calibrated injection | F[Jy] → surface brightness through each pixel's solid angle; source Poisson noise from the absolute gain map | `research_discovery/validation/injection_recovery.py` |
+| Intervals | Wilson score interval | `backend/core.py` `wilson`, `matlab/wilson.m` |
 
-CHRONOS keeps the agreement pattern of every candidate and treats it as a measurement. On 109 simulated fields that the engine never saw, a candidate flagged by one method is a real sky change in 34 percent of cases, by two methods in 77 percent, and by all three in 91 percent. A candidate seen **only** by the anomaly ensemble is a real sky change in 5 percent of 79 cases: almost always the camera. And agreement is not proof: in the simulated field a crosstalk copy of a bright star fooled all three methods, and the instrument tests caught it.
+The MATLAB files are an independent re-implementation. `tests/test_matlab_crosscheck.py` runs them in GNU Octave and requires the same answers as Python, to 10⁻¹² for the difference statistic and the intervals.
 
-![Discovery by disagreement](docs/figures/disagreement.png)
+## Results on a practice sky with a hidden truth
 
-## What the observatory shows
-
-| Chapter | What you can do |
-|---|---|
-| I Sky and time | Every exposure on one grid. Time slider, blink, six arrays or white light, deep co add, anomaly, coverage, depth and position error maps, Gaia and AllWISE overlays, zoom, pixel reading with RA and Dec, a space and time slice, and the temporal cube I(α, δ, t) |
-| II Fair pairs | The coverage plane of color against time, fair pairs drawn, and the calibration guardian of releases and star gains |
-| III Difference microscope | One pair, six layers of correction, and the count of spots that survive each layer |
-| IV Candidates | Methods P, D, A, the five hypothesis bars, verdict, robustness, a population map with coverage |
-| V Dossier | Visit cutouts and a stack that follows the motion, the memory of the place, hypotheses with adjustable priors, the disagreement, the oracle, the self questioning tests, the artefact court, the counterfactual profile, the debate of three analysts, track, light curve, spectral fingerprint F(λ, t), temporal fingerprint, identity network, a cross match with Rubin alerts and known small bodies (live mode), and the report with evidence references |
-| VI Motion map | Every track, larger than life, with error ellipses |
-| VII Validation | Calibration, confusion, completeness, adversarial artefacts, empty fields, static stars, time shuffle, alignment stress |
-| VIII Open questions | Testable suggestions with a falsification rule, never findings |
-| IX Planet X lab | A sandbox for a hypothetical planet and the ladder from prediction to discovery |
-| X Citizen lab | The citizen study (instructions, practice cases with feedback, a fixed case order, blind repeats, confidence, export) and quick blind judgements with a human and machine disagreement archive |
-| XI Black box | SHA 256 seal of inputs, thresholds, versions and outputs, a reproduce button, a package download, and publishing of the package to a Hugging Face dataset |
-| XII Whole sky | 48 equal area tiles: a change map corrected for coverage, with a null twin and an injection twin per tile |
-
-Ask the sky in plain words: "show moving candidates", "brightness changed more than 20 percent", "explain C03", "evidence against C01", "compare visit 1 and 2", "poor quality exposures", "269.45 4.74". The parser maps each question to a measurement and shows the structured query. It never invents an answer. Positions and fields go into the address bar, so a link reopens the same view.
-
-## Results on the simulated sky
-
-The simulated sky follows the SPHEREx rules (six arrays, colors that step through each band, surveys 3 and 4 half a channel away, two arrays behind the dichroic at the same moment, noise that the VARIANCE plane understates in the long arrays) and hides a known truth: movers, variables, flares, appearing and vanishing sources, glitches, hot pixels, crosstalk ghosts, flagged blobs and a calibration step between releases.
+The simulated sky follows the SPHEREx rules (six arrays, colours that step through each band, two arrays behind the dichroic at the same moment, noise the variance plane understates) and hides movers, variables, flares, glitches, hot pixels, crosstalk copies and a calibration step between releases. The engine trains on some fields and is scored on fields it never saw.
 
 | Measure | Value |
 |---|---|
-| Training | 251 fields, 1145 candidates |
-| Test | 109 unseen fields, 512 candidates |
-| Engine accuracy when it decides | 98.8 percent (unknown for 1.8 percent) |
-| Calibration | Brier 0.021, expected calibration error 0.007 |
-| Camera effects rejected (called artefact or unknown) | glitch 36 of 36, hot pixel 34 of 34, crosstalk 47 of 47 |
-| Empty fields | 0.375 false candidates per field (40 fields) |
-| Catalog stars with no motion called moving | 0 of 840 (95 percent interval 0 to 0.5 percent) |
-| Moving sources found at AB 15, 17, 18 | 97, 89, 45 percent |
+| Test set | 109 unseen fields, 517 candidates; three in ten fields are deep six-visit fields |
+| Right when it decides | 98.4 percent (unknown for 1.2 percent) |
+| Calibration | Brier 0.028, expected calibration error 0.003 |
+| Camera effects called a sky change | 0 of 118 (37 glitches, 34 hot pixels, 47 crosstalk copies) |
+| Real sky change, by detectors agreeing | one 29 percent, two 75 percent, three 90 percent; anomaly ensemble alone 8 percent |
+| Empty fields | 0.45 false candidates per field (40 fields) |
+| Unmoving catalogue stars called moving | 4 of 5,599 (0.07 percent) |
+| Moving sources found at AB 15, 17, 18 | 95, 95, 45 percent |
+| Whole sky, 48 tiles, after the coverage correction | 105 percent of the true change rate; every tile within two errors; deep tiles 94 percent complete (46 percent before retraining) |
 
-These numbers hold for the simulated sky only. Real SPHEREx data will be harder. The live path now runs on real QR3 files: search, cutouts, the color of each pixel, the QR3 EPSF table and Gaia anchors all work (see On real SPHEREx data below and [docs/LIMITS.md](docs/LIMITS.md)).
+These hold for the practice sky only.
 
-### On real SPHEREx data
+## Results on the real SPHEREx sky
 
-The injection tool ran on real QR3 files from NASA IRSA, on GitHub Actions (workflow real_injection). It planted 120 known movers, variables and transients into five real fields: R Draconis and four deep fields near the ecliptic poles, where QR3 holds visits over about two months. Results (data/real_injection.json):
+Everything here ran on GitHub Actions against NASA IRSA. Native files are checked against archive checksums and the hashes are kept.
 
-| Measure | Real QR3 | Simulated sky |
-|---|---|---|
-| Planted sources found | 29 of 120, 24 percent (17 to 33) | 97 percent of movers at AB 15 |
-| Found by brightness, AB 14, 15, 16, 17, 18 | 13 of 28, 6 of 22, 6 of 31, 4 of 26, 0 of 13 | |
-| Engine trained on simulated fields | unknown for all 29: it saw that real data is unlike its training | 98.8 percent right when it decides |
-| Engine retrained with the real rows (each field held out) | decides 17 of 29, right in 12 (71 percent, 47 to 87) | |
-| New false candidates caused by planting | 0.5 per trial in one field, 0 in the others | |
+**Seven calibrated DR1 fields.** One native 2040 × 2040 D2 exposure per field, with its spectral WCS, absolute gain and pixel solid angle maps linked through the archive's own provenance records. Twenty sources planted at each of half, one and two times the field's local 5σ limit, each with its own photon noise:
 
-Real data is much harder than the simulated sky. QR3 covers about two months of each place, so slow movers and slow variables barely change; two deep fields have only arrays 2 and 5; R Draconis is a saturated Mira and no planted source was recovered near it. At low ecliptic latitude (Barnard's Star, RW Aurigae, Epsilon Indi B) QR3 holds one visit, so no change can be seen there yet, and the QR2 search returned no files at these places. The important result: the engine refused to classify real candidates instead of making false claims. The retrained engine is kept apart in data/engine_real.json; the app still uses the simulated engine.
+| Field | Local 5σ (µJy) | Recovered at ½, 1, 2 × 5σ |
+|---|---:|---|
+| M101 | 108.4 | 5, 14, 17 of 20 |
+| High latitude control | 114.1 | 6, 13, 17 |
+| Perseus / NGC 1333 | 161.6 | 3, 5, 12 |
+| Orion A | 159.3 | 3, 5, 11 |
+| Rho Ophiuchi | 205.0 | 2, 4, 9 |
+| Taurus / Auriga | 178.4 | 3, 3, 8 |
+| Lupus III | 211.2 | 0, 0, 0 |
 
-### Whole sky tiles
+Quiet fields behave as the noise predicts. Crowded star-forming clouds are harder, and Lupus III recovered nothing, even at twice its limit.
 
-48 equal area tiles, each with a science field, a null twin and an injection twin. The engine was trained on four visit fields, so in the deep six visit tiles near the ecliptic poles it says unknown more often: the raw count finds only 45 to 50 percent of the planted changes there, against 97 percent elsewhere. Without a correction, the map of changes would be a map of the survey. Dividing by the completeness of each kind of tile (from the injection twins, never from the truth of the science field) and removing the false alarms of the null twins brings the deep tiles to 91 and 117 percent and the whole sky to 106 percent of the truth. Every tile agrees with its truth within two errors.
+**Why Lupus III gave zero.** A new diagnostic (`research_discovery/spherex/summarize_injection_diagnostics.py`, run 45787598732) records why each planted source was missed. In Lupus III all 60 misses are the same kind: the source made a peak, but a brighter neighbour won. On their own the planted sources were bright enough (20 of 20 at twice the limit). The cause is the sky: in the injection region the pixel scatter is 5.5 times what the pipeline variance predicts, against 1.2 in the quiet control, because nebular emission in the cloud is structured on the scale of the PSF. Across the six fields, recovery falls as this excess rises (control 1.2, Taurus 1.3, Perseus 2.0, Orion 2.3, Rho Ophiuchi 3.4, Lupus III 5.5).
 
-![Whole sky tiles](docs/figures/sky_tiles.png)
+A secondary variant models that structured sky (a 32-pixel mesh background and an empirical noise scale) and plants sources at the 5σ limit this honest noise implies. For Lupus III that limit is 3.1 times brighter, and 7 and 5 of 20 are then found at one and two times it, instead of 0. In the quiet control the variant is stricter than the primary rule (0, 4, 17 of 20), so it is reported beside the primary rule and does not replace it. Data: [data/injection_diagnostics.json](data/injection_diagnostics.json). Earlier investigation: [docs/SPHEREX_LUPUS_III_ZERO_RECOVERY_INVESTIGATION_2026-11-25.md](docs/SPHEREX_LUPUS_III_ZERO_RECOVERY_INVESTIGATION_2026-11-25.md).
 
-![Calibration](docs/figures/calibration.png)
-![Invisible motion](docs/figures/invisible_motion.png)
+**QR3 planting.** 120 movers, variables and transients planted in five real QR3 fields: 29 found (24 percent; by magnitude AB 14 to 18: 13 of 28, 6 of 22, 6 of 31, 4 of 26, 0 of 13). The engine trained on the practice sky answered unknown for all 29 rather than guess. Retrained with the real rows, each field held out, it decides 17 and is right in 12.
+
+**Young stars.** 2,421 young star candidates in five star-forming regions are matched to 6,214 SPHEREx DR1 and QR3 images (924,443 source and image pairs). This is a positional match, not yet a light curve.
+
+**Planet X lab.** The published IRAS and AKARI pair sits 47.46 arcminutes apart after 23 years; on a circular orbit that rate means about 480 au. Two positions do not make an orbit, and nothing here is a discovery.
+
+## What changed in this release
+
+* The CHRONOS 5 work (causal sky twin, calibrated DR1 pilots, population tools, evidence packages) is merged into `main`. The one failing test on that branch is fixed.
+* A new project site with an interactive filter laboratory, the blink in the first screen, and every result drawn from the project's own data files.
+* MATLAB re-implementation of the core physics with an Octave cross-check test.
+* The engine is retrained with deep six-visit fields. Completeness in the deep tiles near the ecliptic poles rose from 46 to 94 percent.
+* Known asteroids are looked up from SPHEREx's orbit instead of the ground.
+* The investigation cache has a size limit.
+* Per-injection miss reasons are printed for every real pilot field, and the Lupus III zero is traced to structured nebular sky 5.5 times noisier than the pipeline variance.
 
 ## Run it
 
-The live observatory needs nothing. It shows the seven simulated fields and replays the bilingual story from answers recorded in the full app. For the full app (any coordinate, any field of view, live SPHEREx data, the reproduce button, the story with any star):
-
 ```bash
 pip install -r requirements.txt
-python run.py                      # then open http://127.0.0.1:8000
-python -m pytest tests research_discovery/tests -q   # 121 tests
-python scripts/build_lab.py        # CHRONOS 4D laboratories into site/data/lab
-python scripts/calibrate_engine.py # retrain and rescore the engine (about 15 minutes)
-python scripts/build_static.py     # rebuild site/ for GitHub Pages
-python scripts/record_story.py     # record the story answers for the hosted page
-python scripts/build_deck.py       # rebuild the 7 slides and the PDF
-python scripts/make_figures.py     # rebuild docs/figures
-python scripts/make_sky_tiles.py   # whole sky tiles (about six minutes)
-python scripts/inject_real.py --retrain   # plant sources in real QR3 exposures, score and retrain (needs IRSA access;
-                                   # or run the workflow real_injection from the Actions tab)
-python scripts/analyse_citizen_study.py answers/*.json   # pool citizen study answers
+python run.py                                    # observatory on http://127.0.0.1:8000
+python -m pytest tests research_discovery/tests -q
+octave --eval "addpath('matlab'); export_lvf_curves('data/lvf_curves.json')"
+python scripts/calibrate_engine.py               # retrain and rescore the engine
+python scripts/build_static.py                   # rebuild site/ for GitHub Pages
+python scripts/build_lab.py                      # the ten laboratories into site/data/lab
+python scripts/make_sky_tiles.py                 # whole sky tiles
+python scripts/inject_real.py --retrain          # plant sources in real QR3 files (needs IRSA access)
 docker build -t chronos . && docker run -p 8000:8000 chronos
 ```
 
 ## Repository map
 
 ```
-backend/     FastAPI app and the science: core.py, pipeline.py (three detectors), investigate.py (reasoning),
-             engine.py (five hypotheses), sky.py (simulated sky), connectors.py (IRSA, Gaia, AllWISE, JPL, Rubin
-             alerts, Hugging Face), inject.py (planting in real exposures), study.py (citizen study),
-             observatory.py and extras.py (endpoints)
-frontend/    the observatory page (index.html, app.js, next.js, charts.js, style.css), the story page, fonts, architecture.svg
-data/        engine.json (frozen model), validation.json (all scores), sky_tiles.json, study.json; see data/README.md
-notebooks/   four notebooks with outputs: fair pairs, disagreement, validation, live archive walkthrough
-scripts/     calibration, static build, figures, deck and video builders
-tests/       73 tests, including the live path and the real data injection offline with files in the IRSA layout
-docs/        architecture, methods, validation, data, limits, submission text, deck, video, figures
-site/        the static observatory, built by scripts/build_static.py and served by GitHub Pages
+backend/            FastAPI app and the science: core.py (fair pairs, difference, motion court), pipeline.py (three
+                    detectors), investigate.py, engine.py (five hypotheses), sky.py (practice sky), connectors.py
+                    (IRSA, Gaia, AllWISE, JPL, Rubin alerts), chronos_causal/, chronos_population/, chronos_benchmark/
+research_discovery/ real DR1 work: native MEF download and audit, calibration provenance, calibrated injection,
+                    source photometry, young star reconnaissance
+matlab/             MATLAB / Octave re-implementation of the core physics
+frontend/           the project site (home.html), the observatory (index.html), labs and story
+site/               the built static site served by GitHub Pages
+data/               frozen engine, validation scores, real-data results
+notebooks/          fair pairs, disagreement, validation, live archive, two Kaggle real-data notebooks
+docs/               methods, validation, limits, data, real-data run records
+tests/              Python tests and the MATLAB cross-check
 ```
 
-Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Methods: [docs/METHODS.md](docs/METHODS.md) · Validation: [docs/VALIDATION.md](docs/VALIDATION.md) · Data: [docs/DATA.md](docs/DATA.md) · Sources: [docs/CITATIONS.md](docs/CITATIONS.md)
+Methods: [docs/METHODS.md](docs/METHODS.md) · Validation: [docs/VALIDATION.md](docs/VALIDATION.md) · Limits: [docs/LIMITS.md](docs/LIMITS.md) · Data: [docs/DATA.md](docs/DATA.md) · Sources: [docs/CITATIONS.md](docs/CITATIONS.md)
 
 ## Data used
 
-* **SPHEREx Quick Release spectral images (QR2 and QR3), NASA IRSA.** Found with the IRSA SIA2 service, read as cutouts. CHRONOS uses every extension: IMAGE for the sky, FLAGS for masks and contamination counts, VARIANCE for the noise model (checked on empty sky), ZODI for the background level, PSF for photometry, WCS-WAVE for the color of each pixel, and the alternate WCS A for detector positions.
-* **Gaia DR3, ESA.** Star anchors, star ensemble gains, catalog motion for cross matching.
-* **AllWISE, NASA IRSA.** Overlay in live mode.
-* **JPL Small Body Identification service.** Known small bodies in live mode.
-* **Rubin LSST alerts through the ALeRCE broker.** Cross match in the dossier, live mode. NEO Surveyor joins when its data is public (launch planned no earlier than September 2027).
-* **Hugging Face Hub (optional).** Publishing of sealed packages to a dataset repository.
+* **SPHEREx QR2, QR3 and DR1 spectral images, NASA IRSA**, with every extension: IMAGE, FLAGS, VARIANCE, ZODI, PSF, WCS-WAVE, and the DR1 spectral WCS, absolute gain and solid angle calibration products.
+* **Gaia DR3** for star anchors and gains; **AllWISE** overlays; **JPL Horizons and SBIdent** for SPHEREx's orbit and known small bodies; **Rubin alerts through ALeRCE** as leads.
 
-## Honesty
+## What it does not claim
 
-CHRONOS uses candidate language only. Nothing here is a discovery. NASA states that Planet X (Planet Nine) has not been discovered and that its existence is debated; the Planet X lab teaches the difference between a prediction, a candidate, a statistically supported detection and a confirmed discovery. IRSA already offers a Moving Object Search Tool and a spectrophotometry tool; CHRONOS does not replace them. To my knowledge, the fair pair rule, the use of disagreement between three detectors as a calibrated signal, and the self questioning tests are new in this combination for SPHEREx.
+CHRONOS uses candidate language only. Nothing here is a discovery. There has been no blind test held by an independent custodian, no outside astronomer has reproduced the real-data runs yet, and the gain-to-electron conversion waits for review by an instrument scientist. NASA states that Planet Nine has not been discovered. IRSA already offers a moving object search and a spectrophotometry tool; CHRONOS does not replace them. The full list is in [docs/LIMITS.md](docs/LIMITS.md).
 
-## Use of Super Intelligence (SI) tools                                                                                                                  
-
-No  Assistance from AI in any ways.No image, video or audio in the project is SI-generated: every figure is drawn by the project code from simulated data or NASA archive data. No NASA logo or branding is generated or modified. No scientific result is produced by a language model.
+No scientific result, number or figure in this project comes from a language model. Every figure is drawn by the project's code from simulated data or NASA archive data, and no NASA logo is generated or modified.
 
 ## Cite and license
 
-Citation metadata: [CITATION.cff](CITATION.cff). Code: Apache License 2.0 ([LICENSE](LICENSE)). Font: EB Garamond, SIL Open Font License ([frontend/fonts/OFL.txt](frontend/fonts/OFL.txt)).
+[CITATION.cff](CITATION.cff). Code: Apache License 2.0. Fonts: Cormorant Garamond, EB Garamond and IBM Plex Sans Condensed, SIL Open Font License (`frontend/fonts/`).

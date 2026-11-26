@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/PRITIDIPADAS/nakshatra-chronus/blob/main/research_discovery/spherex/archive_manifest.schema.json",
+  "title": "CHRONOS SPHEREx archive manifest",
+  "type": "object",
+  "required": ["schema_version", "archive", "query", "retrieved_utc", "software", "processing_config", "products", "status"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "archive": { "type": "string", "minLength": 1 },
+    "query": { "type": "object" },
+    "retrieved_utc": { "type": ["string", "null"] },
+    "software": { "type": "object" },
+    "processing_config": { "type": "object" },
+    "status": { "enum": ["empty_unpopulated", "populated"] },
+    "status_note": { "type": "string" },
+    "manifest_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "products": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["archive_id", "identity_basis", "product_type", "release", "detector",
+          "observation_time", "pipeline_version", "processing_date", "native_uri", "local_path",
+          "byte_count", "sha256", "status", "compatibility_group", "compatibility_status"],
+        "properties": {
+          "archive_id": { "type": ["string", "null"] },
+          "identity_basis": { "enum": ["archive_id", "native_uri"] },
+          "product_type": { "type": "string", "minLength": 1 },
+          "release": { "type": ["string", "null"] },
+          "detector": { "type": ["string", "null"] },
+          "observation_time": { "type": ["object", "string", "null"] },
+          "pipeline_version": { "type": ["string", "null"] },
+          "processing_date": { "type": ["string", "null"] },
+          "native_uri": { "type": "string", "format": "uri" },
+          "local_path": { "type": ["string", "null"] },
+          "byte_count": { "type": ["integer", "null"], "minimum": 0 },
+          "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+          "status": { "enum": ["downloaded", "failed", "partial", "discovered_not_downloaded", "rejected"] },
+          "compatibility_group": { "type": ["string", "null"] },
+          "compatibility_status": { "enum": ["unassigned", "candidate_only", "compatible", "rejected", "review_required"] },
+          "notes": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -214,3 +214,54 @@ def test_qr3_epsf_table_is_read():
     hd["CRPIX1A"], hd["CRPIX2A"], hd["CRVAL1A"], hd["CRVAL2A"] = -975.0, -975.0, 0.0, 0.0
     psf, note = cn.pick_psf(h, hd, 23.0, 23.0)  # detector pixel near 999: the second zone
     assert psf is not None and "zone 1" in note and "oversampling 3" in note
+
+
+def test_known_movers_uses_spherex_state_vector(monkeypatch):
+    seen = []
+    horizons = ("header\n$$SOE\n2460900.5, A.D. 2025-Aug-13, 688.97, -711.87, 6943.38, -4.8188, -5.7988, -0.1176,\n$$EOE\n")
+
+    class R:
+        def __init__(self, url):
+            self.url = url
+
+        def json(self):
+            if "horizons" in self.url:
+                return dict(result=horizons)
+            return dict(fields=["a"], data_first_pass=[["x"]])
+
+    def fake(url, params=None, timeout=0):
+        seen.append((url, dict(params)))
+        return R(url)
+    monkeypatch.setattr(cn.requests, "get", fake)
+    r = cn.known_movers(133.764625, -7.2426306, core.SIM_T0)
+    assert "horizons" in seen[0][0] and seen[0][1]["COMMAND"] == "'-163182'"
+    sb = seen[1][1]
+    assert sb["xobs"].startswith("688.970000,-711.870000,6943.380000") and "lat" not in sb
+    assert "SPHEREx in orbit" in r["note"]
+
+
+def test_known_movers_falls_back_to_ground(monkeypatch):
+    class R:
+        def json(self):
+            return dict(fields=["a"], data_first_pass=[])
+
+    def fake(url, params=None, timeout=0):
+        if "horizons" in url:
+            raise OSError("down")
+        assert params["lat"] == 0 and "xobs" not in params
+        return R()
+    monkeypatch.setattr(cn.requests, "get", fake)
+    assert "on the ground" in cn.known_movers(10.0, 5.0, core.SIM_T0)["note"]
+
+
+def test_cache_prunes_oldest_files(tmp_path, monkeypatch):
+    import os
+    import time
+    import observatory as O
+    monkeypatch.setattr(O, "CACHE", str(tmp_path))
+    for i in range(5):
+        f = tmp_path / f"inv_{i}.json"
+        f.write_bytes(b"x" * 400_000)
+        os.utime(f, (time.time() - 100 + i, time.time() - 100 + i))
+    assert O.prune_cache(1.0) == 3
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["inv_3.json", "inv_4.json"]

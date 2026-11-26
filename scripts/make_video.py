@@ -77,7 +77,7 @@ def seq(name, frames, dur):
 def title():
     c = canvas(INK)
     d = ImageDraw.Draw(c)
-    d.text((140, 250), "NASA SPACE APPS · PLANET X AND SPHEREx", font=f(FONT, 34), fill=(201, 184, 216))
+    d.text((140, 250), "PLANET X AND SPHEREx", font=f(FONT, 34), fill=(201, 184, 216))
     d.text((140, 320), "Nakshatra CHRONOS", font=f(FONT, 150), fill=PAPER)
     d.text((140, 520), "You cannot blink SPHEREx.", font=f(FONT_I, 70), fill=PAPER)
     d.text((140, 630), "So we built an observatory that asks what changed,", font=f(FONT, 44), fill=(217, 208, 196))

@@ -52,9 +52,11 @@ def parse_field(value: str) -> Field:
     return f
 
 
-def tap_query(field: Field, bandpass: str):
+def tap_query(field: Field, bandpass: str, release: str = "dr1"):
     if not re.fullmatch(r"SPHEREx-D[1-6]", bandpass):
         raise ValueError("bandpass must be SPHEREx-D1 through SPHEREx-D6")
+    if release not in {"dr1", "qr3"}:
+        raise ValueError("release must be dr1 or qr3; do not mix QR2 into this retrieval" )
     try:
         from astroquery.ipac.irsa import Irsa
     except ImportError as exc:
@@ -72,9 +74,16 @@ def tap_query(field: Field, bandpass: str):
     JOIN spherex.plane p ON a.planeid = p.planeid
     WHERE 1 = CONTAINS(POINT('ICRS', {field.ra_deg:.10f}, {field.dec_deg:.10f}), p.poly)
       AND p.energy_bandpassname = '{bandpass}'
+      AND LOWER(a.uri) LIKE '%/{release}/%'
     ORDER BY p.time_bounds_lower
     """
-    table = Irsa.query_tap(sql)
+    result = Irsa.query_tap(sql)
+    # Astroquery IRSA TAP returns pyvo.dal.TAPResults, not an Astropy Table.
+    # Normalize at the API boundary so downstream code can use Table.write,
+    # slicing and column-name iteration consistently across astroquery versions.
+    table = result.to_table() if hasattr(result, "to_table") else result
+    if not hasattr(table, "write") or not hasattr(table, "colnames"):
+        raise TypeError("IRSA TAP result could not be converted to an Astropy Table")
     return sql, table
 
 
@@ -100,13 +109,18 @@ def download_native_mef(uri: str, destination: Path, timeout: int = 180,
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
     last_error = None
+    last_headers = {}
     for attempt in range(1, retries + 1):
+        digest = hashlib.sha256()
+        nbytes = 0
         try:
             with requests.get(url, stream=True, timeout=(30, timeout)) as response:
                 response.raise_for_status()
+                last_headers = {"etag": response.headers.get("ETag"),
+                    "last_modified": response.headers.get("Last-Modified"),
+                    "content_type": response.headers.get("Content-Type"),
+                    "http_status": response.status_code}
                 expected = response.headers.get("Content-Length")
-                digest = hashlib.sha256()
-                nbytes = 0
                 with temporary.open("wb") as out:
                     for block in response.iter_content(1024 * 1024):
                         if not block:
@@ -123,30 +137,31 @@ def download_native_mef(uri: str, destination: Path, timeout: int = 180,
                 if signature != b"SIMPLE  ":
                     raise IOError(f"Downloaded file does not start with FITS SIMPLE signature: {signature!r}")
                 temporary.replace(destination)
-                return {
-                    "status": "downloaded", "source_url": url,
+                return {"status": "downloaded", "source_url": url,
                     "local_path": str(destination), "bytes": nbytes,
-                    "sha256": digest.hexdigest(),
-                    "etag": response.headers.get("ETag"),
-                    "last_modified": response.headers.get("Last-Modified"),
-                    "content_type": response.headers.get("Content-Type"),
-                    "http_status": response.status_code,
-                }
-        except Exception as exc:  # preserve failure in the manifest and retry
+                    "sha256": digest.hexdigest(), **last_headers}
+        except Exception as exc:
             last_error = f"{type(exc).__name__}: {exc}"
-            temporary.unlink(missing_ok=True)
             if attempt < retries:
+                temporary.unlink(missing_ok=True)
                 time.sleep(min(2 ** attempt, 10))
-    return {"status": "failed", "source_url": url, "error": last_error}
+    if temporary.exists() and temporary.stat().st_size > 0:
+        return {"status": "partial", "source_url": url, "local_path": str(temporary),
+                "bytes": temporary.stat().st_size, "sha256": None,
+                "error": last_error, **last_headers}
+    temporary.unlink(missing_ok=True)
+    return {"status": "failed", "source_url": url, "bytes": None,
+            "local_path": None, "sha256": None, "error": last_error, **last_headers}
 
 
 def run(fields: list[Field], bandpass: str, outdir: Path,
-        limit_per_field: int, download: bool = True) -> dict[str, Any]:
+        limit_per_field: int, download: bool = True, release: str = "dr1") -> dict[str, Any]:
     outdir.mkdir(parents=True, exist_ok=True)
     inventory: dict[str, Any] = {
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "archive": "IRSA SPHEREx TAP: spherex.artifact JOIN spherex.plane",
         "bandpass": bandpass,
+        "release": release.upper(),
         "retrieval_type": "native uncut Level-2 MEF via a.uri; not image cutouts",
         "field_results": [],
         "warning": "A successful HTTP download and FITS signature do not establish calibration compatibility or scientific validity.",
@@ -154,7 +169,7 @@ def run(fields: list[Field], bandpass: str, outdir: Path,
     all_manifest_rows: list[dict[str, Any]] = []
     for field in fields:
         print(f"Querying {field.name}: RA={field.ra_deg}, Dec={field.dec_deg}, {bandpass}")
-        sql, table = tap_query(field, bandpass)
+        sql, table = tap_query(field, bandpass, release=release)
         query_dir = outdir / field.name
         query_dir.mkdir(parents=True, exist_ok=True)
         table.write(query_dir / "tap_results.csv", format="ascii.csv", overwrite=True)
@@ -172,7 +187,7 @@ def run(fields: list[Field], bandpass: str, outdir: Path,
             try:
                 fname = _safe_basename(uri)
             except ValueError as exc:
-                item = {"field": field.name, "status": "rejected", "artifact_uri": raw_uri, "error": str(exc)}
+                item = {"field": field.name, "status": "rejected", "artifact_uri": raw_uri, "source_url": uri, "error": str(exc)}
                 field_info["downloads"].append(item); all_manifest_rows.append(item); continue
             destination = query_dir / fname
             record = {
@@ -197,6 +212,14 @@ def run(fields: list[Field], bandpass: str, outdir: Path,
             keys = sorted({key for row in all_manifest_rows for key in row})
             writer = csv.DictWriter(handle, fieldnames=keys)
             writer.writeheader(); writer.writerows(all_manifest_rows)
+    from research_discovery.spherex.archive_manifest import manifest_from_native_inventory, validate_manifest
+    archive_manifest = manifest_from_native_inventory(inventory)
+    (outdir / "archive_manifest.json").write_text(json.dumps(archive_manifest, indent=2, default=str))
+    validation = validate_manifest(archive_manifest, verify_local=download, base_dir=Path.cwd())
+    (outdir / "archive_manifest_validation.json").write_text(json.dumps(validation, indent=2))
+    print(f"Versioned archive manifest valid={validation['valid']}; products={validation['product_count']}")
+    if not validation["valid"]:
+        raise SystemExit("Archive manifest validation failed; inspect archive_manifest_validation.json")
     return inventory
 
 
@@ -204,6 +227,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--field", action="append", type=parse_field,
         help="NAME,RA_DEG,DEC_DEG; repeat to include more independent sky fields")
+    parser.add_argument("--release", choices=("dr1", "qr3"), default="dr1",
+        help="Uniformly processed archive release to retrieve; QR2 is not mixed in")
     parser.add_argument("--bandpass", default="SPHEREx-D2",
         help="One IRSA energy_bandpassname, e.g. SPHEREx-D2")
     parser.add_argument("--limit-per-field", type=int, default=4,
@@ -214,7 +239,7 @@ def main() -> None:
     if args.limit_per_field < 0:
         parser.error("--limit-per-field must be >= 0")
     fields = args.field or [parse_field("M101,210.80227,54.34895")]
-    result = run(fields, args.bandpass, args.out, args.limit_per_field, not args.discover_only)
+    result = run(fields, args.bandpass, args.out, args.limit_per_field, not args.discover_only, release=args.release)
     n = sum(len(x["downloads"]) for x in result["field_results"])
     print(f"Processed {n} candidate MEFs. Manifest: {args.out / 'native_mef_manifest.json'}")
 

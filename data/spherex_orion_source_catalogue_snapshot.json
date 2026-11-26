@@ -1,0 +1,27 @@
+{
+  "schema": "chronos-spherex-source-catalogue-snapshot/1.0",
+  "archive": "NASA/IPAC IRSA SPHEREx SPLICES",
+  "source_id": "1914414087643594754",
+  "designation": "J053131.05-060841.7",
+  "ra_deg": 82.879379,
+  "dec_deg": -6.144907,
+  "region": "Orion_A",
+  "fields": {
+    "yso_pub": 7,
+    "class_1": "YSO_D",
+    "stype_ml": "Class II YSO",
+    "stype_ml_prob1": 0.8856
+  },
+  "retrieval_evidence": {
+    "workflow_run_id": 45694565745,
+    "workflow_run_url": "https://github.com/PRITIDIPADAS/nakshatra-chronus/actions/runs/45694565745",
+    "artifact_id": 15060892188,
+    "artifact_sha256": "2b1d7e7c4871d41f68f181a053f5df8a5d50b71f310b0e4dd748726bc8c65d5c",
+    "file": "candidate_sources_all_regions.csv"
+  },
+  "scientific_boundary": {
+    "independent_yso_confirmation": false,
+    "confirmed_photometry": false,
+    "validated_time_series": false
+  }
+}

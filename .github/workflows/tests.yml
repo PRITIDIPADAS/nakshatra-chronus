@@ -1,5 +1,9 @@
 name: tests
 on: [push, pull_request]
+
+concurrency:
+  group: tests-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -11,3 +15,151 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pip install pandas photutils reproject
       - run: python -m pytest tests research_discovery/tests -q
+      - run: node --check frontend/causal-lab.js
+      - run: node --check site/causal-lab.js
+      - run: node --check frontend/home.js
+
+  matlab-crosscheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends octave
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests/test_matlab_crosscheck.py -q
+      - run: octave --no-gui --eval "addpath('matlab'); export_lvf_curves('/tmp/lvf.json')"
+
+  spherex-real-field:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/chronos-5-causal-sky-twin'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out the feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: research_discovery/requirements-research.txt
+
+      - name: Install archive and FITS dependencies
+        run: python -m pip install -r research_discovery/requirements-research.txt
+
+      - name: Compile retrieval and audit package
+        run: python -m compileall -q research_discovery/spherex
+
+      - name: Retrieve and audit M101 SPHEREx DR1 D2
+        run: |
+          set -euo pipefail
+          python -m research_discovery.spherex.run_real_field_audit \
+            --field M101,210.80227,54.34895 \
+            --bandpass SPHEREx-D2 \
+            --release dr1 \
+            --limit-per-family 5 \
+            --out data/spherex_m101_audit 2>&1 | tee spherex-real-field.log
+
+      - name: Validate machine-readable audit and retained file hashes
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("data/spherex_m101_audit")
+          summary = json.loads((root / "real_field_audit_summary.json").read_text())
+
+          assert summary["release"].upper() == "DR1"
+          science = summary["science"]
+          assert science["detector"] == "D2"
+          assert science["image_shape"] == [2040, 2040]
+          assert science["pipeline_version"] == "7.0.5"
+
+          def verify_file(record, label):
+              path = Path(record["local_path"])
+              assert path.is_file(), f"{label}: missing file {path}"
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for block in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(block)
+              actual = digest.hexdigest()
+              assert actual == record["sha256"], (
+                  f"{label}: SHA-256 mismatch {actual} != {record['sha256']}"
+              )
+              assert path.stat().st_size == int(record["byte_count"]), (
+                  f"{label}: byte-count mismatch"
+              )
+
+          verify_file(science, "science MEF")
+          native = summary["native_mef_audit"]
+          assert native["status"] == "STRUCTURE_AND_COMPATIBILITY_CHECKS_PASS"
+          compatibility = native["calibration_compatibility"]
+          assert compatibility["status"] == "compatible"
+          compatibility_checks = compatibility["checks"]
+          assert all(
+              item.get("status") == "pass"
+              for name, item in compatibility_checks.items()
+              if name != "audit_details"
+          )
+          audit_details = compatibility_checks["audit_details"]
+          assert audit_details
+          assert all(
+              item.get("status") == "pass"
+              for item in audit_details.values()
+          )
+
+          products = summary["selected_products"]
+          for family in ("spectral_wcs", "solid_angle", "absolute_gain"):
+              assert family in products, f"missing selected calibration: {family}"
+              record = products[family]
+              verify_file(record, family)
+              assert record["detector"] == "D2"
+              assert record["release_from_uri"].lower() == "dr1"
+              assert record["archive_md5_status"] == "pass"
+
+          for family in ("spectral_wcs", "absolute_gain"):
+              link = products[family]["provenance_link"]
+              assert link["status"] == "verified_from_live_irsa_foreign_key_query"
+              assert link["artifact_md5_status"] == "pass"
+
+          provenance = summary["archive_provenance"]
+          assert provenance["input_relation_count"] >= 2
+          assert provenance["linked_calibration_artifact_count"] >= 2
+          assert summary["absolute_gain_validation"]["invalid_pixels_are_not_interpolated"] is True
+
+          injection = summary["calibrated_jy_injection_evaluation"]
+          assert injection["status"] == "completed"
+          assert len(injection["flux_summary"]) == 3
+          assert all(row["n_injected"] == 20 for row in injection["flux_summary"])
+          assert all(0 <= row["n_recovered"] <= row["n_injected"]
+                     for row in injection["flux_summary"])
+          poisson = injection["source_photon_noise"]
+          assert poisson["enabled"] is True
+          assert poisson["calibration_record"]["review_status"] == "pending"
+          assert poisson["independent_human_reviewed"] is False
+
+          print("M101 DR1 D2 science/calibration provenance, SHA-256, compatibility and 3x20 Jy pilot verified.")
+          print("Electron-conversion review remains pending; this check does not mark it human-reviewed.")
+          PY
+
+      - name: Independently recompute source-Poisson expectations from retained native bytes
+        run: |
+          python -m research_discovery.spherex.source_poisson_reproduction \
+            --audit-dir data/spherex_m101_audit \
+            --repository-commit "$GITHUB_SHA"
+
+      - name: Upload native science and calibration files with audit records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spherex-m101-dr1-d2-audit
+          path: |
+            data/spherex_m101_audit/
+            spherex-real-field.log
+          if-no-files-found: warn
+          retention-days: 30

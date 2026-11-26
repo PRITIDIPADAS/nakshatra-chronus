@@ -5,11 +5,15 @@ when it has one. The pipeline then runs as usual. Because the truth of the plant
 the accuracy of the engine can be measured on real noise, real backgrounds and real artefacts. Candidates that the
 real field already had before planting are kept apart: their truth is not known.
 
-Used by scripts/inject_real.py. Source photon noise is not added; for the faint planted sources it is small against
-the background noise.
+Used by scripts/inject_real.py. Without an exact exposure-bound calibration record, source photon noise remains
+deterministic and is explicitly labelled.
 """
 import copy
 import math
+import hashlib
+import re
+from pathlib import Path
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -46,27 +50,135 @@ def plan_sources(rng, center, size, avoid, n, n_epochs, mags=(14.0, 18.5)):
     return out
 
 
-def plant(exps, sources, pad=10):
-    """Copies of the exposures with the sources added, in the units of each file."""
+def _calibrated_gain(exposure, record):
+    """Derive this cutout conversion map from its verified SPHEREx abs_gain_matrix."""
+    required = ("verification_status", "science_file_sha256", "science_observation_id",
+                "science_source_uri", "detector", "image_unit", "exposure_time_s",
+                "calibration_product", "calibration_uri", "calibration_file_path",
+                "calibration_sha256", "calibration_bunit", "conversion_method",
+                "verified_by", "verified_utc")
+    if not isinstance(record, Mapping):
+        raise ValueError(f"{exposure.id}: calibration record must be an object")
+    missing = [key for key in required if record.get(key) in (None, "")]
+    if missing:
+        raise ValueError(f"{exposure.id}: calibration record missing " + ", ".join(missing))
+    if record["verification_status"] != "verified" or record["calibration_product"] != "abs_gain_matrix":
+        raise ValueError(f"{exposure.id}: a verified abs_gain_matrix record is required")
+    from datetime import datetime
+    try:
+        verified_at = datetime.fromisoformat(str(record["verified_utc"]).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{exposure.id}: verified_utc must be ISO-8601") from exc
+    if verified_at.tzinfo is None:
+        raise ValueError(f"{exposure.id}: verified_utc must include a timezone")
+    if str(record["science_observation_id"]) != str(getattr(exposure, "source_observation_id", "") or str(exposure.id).split("_D")[0]):
+        raise ValueError(f"{exposure.id}: original OBSID mismatch")
+    native_sha = str(record.get("science_native_file_sha256", record["science_file_sha256"])).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", native_sha):
+        raise ValueError(f"{exposure.id}: native science MEF SHA-256 is malformed")
+    if str(record.get("science_file_sha256", "")).lower() != native_sha:
+        raise ValueError(f"{exposure.id}: science_file_sha256 must identify the native science MEF")
+    cutout_sha = str(record.get("science_cutout_sha256", "")).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", cutout_sha) or cutout_sha != str(exposure.source_sha256).lower():
+        raise ValueError(f"{exposure.id}: exact science cutout SHA-256 mismatch; record science_cutout_sha256")
+    if str(record["science_source_uri"]) != str(exposure.source_uri):
+        raise ValueError(f"{exposure.id}: science archive URI mismatch")
+    if str(record["detector"]).upper().replace("D", "") != str(exposure.det):
+        raise ValueError(f"{exposure.id}: detector mismatch")
+    if str(record["image_unit"]).strip() != str(exposure.image_unit).strip() or exposure.image_unit != "MJy/sr":
+        raise ValueError(f"{exposure.id}: IMAGE unit mismatch or unsupported")
+    exposure_time = float(getattr(exposure, "source_exposure_time_s", 0.0))
+    if not math.isfinite(exposure_time) or exposure_time <= 0:
+        raise ValueError(f"{exposure.id}: exact exposure time is unavailable")
+    if not math.isclose(float(record["exposure_time_s"]), exposure_time, rel_tol=0, abs_tol=1e-6):
+        raise ValueError(f"{exposure.id}: calibration record exposure time mismatch")
+    if not str(record["calibration_uri"]).startswith("https://"):
+        raise ValueError(f"{exposure.id}: calibration URI must be HTTPS")
+    origin = getattr(exposure, "detector_origin_xy", None)
+    if origin is None:
+        raise ValueError(f"{exposure.id}: native detector origin has not been verified")
+    from research_discovery.spherex.electron_conversion import derive_electrons_per_image_unit
+    return derive_electrons_per_image_unit(calibration_path=record["calibration_file_path"],
+        expected_sha256=record["calibration_sha256"], detector=exposure.det,
+        calibration_bunit=record["calibration_bunit"], exposure_time_s=exposure_time,
+        origin_xy=origin, image_shape=exposure.img.shape, science_image_unit=exposure.image_unit)
+
+
+
+def plant(exps, sources, pad=10, *, electron_calibration_records=None,
+          electrons_per_image_unit=None, seed=1):
+    """Plant sources in copies of exposures.
+
+    Source shot noise is enabled only through one signed-off calibration record
+    per exact exposure. Records are matched to exposure ID, detector, archive URI,
+    cutout SHA-256 and IMAGE unit, and their local calibration bytes are re-hashed.
+    A bare numeric gain is rejected. Without a record, the deterministic path remains.
+    """
+    if electrons_per_image_unit is not None:
+        raise ValueError("A numeric gain alone is not accepted; use electron_calibration_records keyed by exposure ID.")
+    records = electron_calibration_records or {}
+    if not isinstance(records, Mapping):
+        raise TypeError("electron_calibration_records must map exposure IDs to calibration records")
+    rng = np.random.default_rng(seed)
     ep = P.epochs_of(exps)
     out = []
-    for i, e in enumerate(exps):
-        e = copy.deepcopy(e)
+    for i, original in enumerate(exps):
+        e = copy.deepcopy(original)
         h, w = e.img.shape
+        if e.var.shape != e.img.shape or e.flags.shape != e.img.shape:
+            raise ValueError(f"{e.id}: IMAGE, VARIANCE and FLAGS are not aligned")
         yy, xx = np.mgrid[-pad:h + pad, -pad:w + pad]
-        for s in sources:
-            fl = sky.flux_of(s, e.lam, e.mjd, ep[i])
-            if fl <= 0:
+        record = records.get(str(e.id))
+        conversion_map = _calibrated_gain(e, record) if record is not None else None
+        for source in sources:
+            fl = sky.flux_of(source, e.lam, e.mjd, ep[i])
+            if not math.isfinite(float(fl)) or fl <= 0:
                 continue
-            ra, dec = sky.pos_of(s, e.mjd)
+            ra, dec = sky.pos_of(source, e.mjd)
             x, y = (float(v[0]) for v in core.to_pix(e.wcs, ra, dec))
             if not (-3 < x < w + 3 and -3 < y < h + 3):
                 continue
-            k = core.kern(e.psf, xx, yy, x, y)
-            tot = float(k.sum())
-            if tot <= 0:
+            kernel = np.asarray(core.kern(e.psf, xx, yy, x, y), dtype=float)
+            if not np.isfinite(kernel).all() or np.any(kernel < 0):
+                e.notes.append("Injection skipped: PSF kernel is non-finite or negative.")
                 continue
-            e.img = e.img + fl / core.UJY * (k / tot)[pad:pad + h, pad:pad + w]
+            total = float(kernel.sum())
+            if not math.isfinite(total) or total <= 0:
+                e.notes.append("Injection skipped: PSF kernel has no positive integral.")
+                continue
+            support = kernel > kernel.max() * 1e-8
+            support_y, support_x = np.where(support)
+            detector_x = support_x - pad
+            detector_y = support_y - pad
+            if (detector_x.min() < 0 or detector_y.min() < 0 or
+                detector_x.max() >= w or detector_y.max() >= h):
+                e.notes.append("Injection skipped: complete PSF support would be clipped at the cutout edge.")
+                continue
+            source_signal = fl / core.UJY * (kernel / total)[pad:pad + h, pad:pad + w]
+            footprint = source_signal > source_signal.max() * 1e-6
+            invalid = (~np.isfinite(e.img) | ~np.isfinite(e.var) | (e.var <= 0) |
+                       ((e.flags & e.bad) != 0))
+            if np.any(footprint & invalid):
+                e.notes.append("Injection skipped: PSF footprint intersects invalid variance or a bad-flagged pixel.")
+                continue
+            if conversion_map is None:
+                e.img = e.img + source_signal
+                e.notes.append("Injection source photon noise not modelled: deterministic signal; no verified exposure-specific absolute-gain map.")
+            else:
+                active = source_signal > source_signal.max() * 1e-6
+                valid_conversion = np.isfinite(conversion_map) & (conversion_map > 0)
+                if np.any(active & ~valid_conversion):
+                    e.notes.append("Injection skipped: absolute-gain map is invalid inside the PSF footprint.")
+                    continue
+                expected_electrons = np.zeros_like(source_signal, dtype=float)
+                expected_electrons[active] = source_signal[active] * conversion_map[active]
+                source_realization = np.zeros_like(source_signal, dtype=float)
+                variance_increment = np.zeros_like(source_signal, dtype=float)
+                source_realization[active] = rng.poisson(expected_electrons[active]) / conversion_map[active]
+                variance_increment[active] = expected_electrons[active] / conversion_map[active] ** 2
+                e.img = e.img + source_realization
+                e.var = e.var + variance_increment
+                e.notes.append("Injection source photon noise and variance were simulated from the verified per-pixel absolute-gain matrix and exposure time.")
         out.append(e)
     return out
 
@@ -78,7 +190,8 @@ def verdict(c):
     return "unknown" if p["unknown"] else p["verdict"]
 
 
-def trials(exps, cat, center, size, n_trials=4, per=6, seed=1, mags=(14.0, 18.5)):
+def trials(exps, cat, center, size, n_trials=4, per=6, seed=1, mags=(14.0, 18.5),
+           electron_calibration_records=None, electrons_per_image_unit=None):
     """Plant, run and score. Returns the scores and the labelled rows for training."""
     base = P.run(core.prepare(copy.deepcopy(exps)), cat, center=center, size=size)
     bx, by = [c["x"] for c in base["cands"]], [c["y"] for c in base["cands"]]
@@ -97,7 +210,10 @@ def trials(exps, cat, center, size, n_trials=4, per=6, seed=1, mags=(14.0, 18.5)
     for t in range(n_trials):
         rng = np.random.default_rng(seed + 7919 * t)
         src = plan_sources(rng, center, size, avoid, per, n_ep, mags)
-        S = P.run(core.prepare(plant(exps, src)), cat, center=center, size=size)
+        S = P.run(core.prepare(plant(
+            exps, src, electron_calibration_records=electron_calibration_records,
+            electrons_per_image_unit=electrons_per_image_unit, seed=seed + 7919 * t
+        )), cat, center=center, size=size)
         truth = sky.truth_list(dict(sources=src, artefacts=[], center=center))
         _, found, missed = P.match_truth(S, truth)
         for c in S["cands"]:

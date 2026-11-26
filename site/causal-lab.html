@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Nakshatra CHRONOS Causal Sky Twin research laboratory. Test competing physical explanations for changes in infrared observations.">
+<title>Causal Sky Twin | Nakshatra CHRONOS</title>
+<link rel="stylesheet" href="causal-lab.css">
+</head>
+<body>
+<div class="starfield" aria-hidden="true"></div>
+<header class="topbar">
+<a class="brand" href="observatory.html" aria-label="Return to Nakshatra CHRONOS observatory"><span class="brand-mark">✧</span><span><small>NAKSHATRA</small><strong>CHRONOS</strong></span></a>
+<nav class="toplinks" aria-label="Main navigation"><a href="observatory.html">Main observatory</a><a href="chronos-lab.html">Research tools</a><a href="story.html">The story</a></nav>
+<span class="top-tag">PHYSICS RESEARCH</span>
+</header>
+<main>
+<section class="hero">
+<div class="hero-copy">
+<div class="eyebrow"><span class="pulse"></span> CHRONOS RESEARCH WORKSPACE · CAUSAL SKY TWIN</div>
+<h1>Did the sky change,<br><em>or did the instrument?</em></h1>
+<p class="hero-lede">A measured signal can carry several explanations. CHRONOS puts the sky model and the detector model in competition, tests what each predicts, and keeps uncertainty visible when the evidence cannot decide.</p>
+<div class="hero-actions"><a class="button primary" href="#experiment">Open an investigation <span>↘</span></a><a class="button quiet" href="#method">Understand the method</a></div>
+<div class="hero-footnote">One research question · Physics · SPHEREx infrared observations</div>
+        <div class="api-note" id="api-mode">Checking the research API…</div>
+</div>
+<div class="hero-visual" aria-label="Diagram of an observation being separated into sky and instrument explanations">
+<svg viewBox="0 0 600 410" role="img" aria-labelledby="hero-svg-title hero-svg-desc">
+<title id="hero-svg-title">The causal investigation</title><desc id="hero-svg-desc">An observed signal branches into a sky model and an instrument model, then enters model comparison and falsification.</desc>
+<defs><linearGradient id="beam" x1="0" x2="1"><stop offset="0" stop-color="#79d7c7" stop-opacity=".1"/><stop offset="1" stop-color="#79d7c7" stop-opacity=".85"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<g opacity=".18" stroke="#94b9c0" stroke-width="1"><path d="M30 40H570M30 100H570M30 160H570M30 220H570M30 280H570M30 340H570"/><path d="M70 20V385M170 20V385M270 20V385M370 20V385M470 20V385M570 20V385"/></g>
+<g fill="#d8e5e5" opacity=".7"><circle cx="58" cy="65" r="1.8"/><circle cx="126" cy="145" r="1.3"/><circle cx="210" cy="35" r="1.7"/><circle cx="330" cy="92" r="1.2"/><circle cx="516" cy="52" r="1.8"/><circle cx="550" cy="230" r="1.4"/><circle cx="92" cy="310" r="1.5"/><circle cx="450" cy="352" r="1.7"/><circle cx="294" cy="378" r="1.2"/></g>
+<path d="M65 190H155" stroke="url(#beam)" stroke-width="3" fill="none"/><path d="M155 190L235 110H325" stroke="#79d7c7" stroke-width="2.4" fill="none" filter="url(#glow)"/><path d="M155 190L235 270H325" stroke="#e4b47a" stroke-width="2.4" fill="none" filter="url(#glow)"/><path d="M325 110L394 190H465M325 270L394 190" stroke="#aab8c4" stroke-width="1.8" fill="none" stroke-dasharray="5 5"/><path d="M465 190H535" stroke="#c9d6df" stroke-width="2" fill="none"/>
+<g><circle cx="65" cy="190" r="35" fill="#132a37" stroke="#6fb7b6" stroke-width="1.5"/><circle cx="65" cy="190" r="20" fill="none" stroke="#6fb7b6" opacity=".65"/><circle cx="65" cy="190" r="8" fill="#f4f0dd" filter="url(#glow)"/><text x="65" y="245" text-anchor="middle" class="sv-label">MEASUREMENT</text></g>
+<g><rect x="325" y="75" width="125" height="70" rx="12" fill="#123d3d" stroke="#79d7c7" stroke-width="1.5"/><circle cx="345" cy="97" r="4" fill="#79d7c7"/><text x="387" y="102" text-anchor="middle" class="sv-title">SKY MODEL</text><text x="387" y="121" text-anchor="middle" class="sv-small">source · motion · flux</text></g>
+<g><rect x="325" y="235" width="125" height="70" rx="12" fill="#3b3027" stroke="#e4b47a" stroke-width="1.5"/><circle cx="345" cy="257" r="4" fill="#e4b47a"/><text x="387" y="262" text-anchor="middle" class="sv-title">INSTRUMENT</text><text x="387" y="281" text-anchor="middle" class="sv-small">detector · noise · flags</text></g>
+<g><circle cx="394" cy="190" r="7" fill="#d7e2e1" filter="url(#glow)"/><circle cx="500" cy="190" r="35" fill="#1c293e" stroke="#aab8c4" stroke-width="1.5"/><path d="M485 190l10 10 20-24" fill="none" stroke="#dce8e5" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><text x="500" y="245" text-anchor="middle" class="sv-label">FALSIFICATION</text></g>
+<text x="65" y="135" text-anchor="middle" class="sv-small">RAW EVIDENCE</text><text x="500" y="135" text-anchor="middle" class="sv-small">TEST THE CLAIM</text>
+<g fill="#9fb5c1" font-size="10" font-family="sans-serif" letter-spacing="1"><text x="238" y="82">ASTROPHYSICAL</text><text x="238" y="295">INSTRUMENTAL</text></g>
+</svg>
+<div class="visual-caption"><span class="live-dot"></span> Every explanation must answer to the measurements.</div>
+</div>
+</section>
+<section class="workspace-index" aria-label="Four research workspaces">
+  <a href="#experiment"><span>01</span><b>Causal investigation</b><small>Sky, detector, competing explanations and falsification</small></a>
+  <a href="#spectrum"><span>02</span><b>Spectral evolution</b><small>Time-resolved measurements and missing-data-aware reconstruction</small></a>
+  <a href="#identity"><span>03</span><b>Cosmic identity network</b><small>Epoch-aware counterpart probabilities and source history</small></a>
+  <a href="#benchmark"><span>04</span><b>Experimental observatory</b><small>Detector tests, planning, benchmarks and reproducibility</small></a>
+</section>
+<section class="principle-strip" id="method">
+<article><span>01</span><b>Measure</b><small>Keep the original observation and its uncertainties.</small></article>
+<article><span>02</span><b>Compete</b><small>Fit physical alternatives to the same evidence.</small></article>
+<article><span>03</span><b>Challenge</b><small>Change assumptions and attempt to break the result.</small></article>
+<article><span>04</span><b>Reproduce</b><small>Record the files, calibration and processing choices.</small></article>
+</section>
+<section class="workspace" id="experiment">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 01 · LIVE EXPERIMENT</div><h2>Start with a controlled case</h2></div><span class="label">MEASUREMENT FIRST</span></div>
+<div class="experiment-layout">
+<aside class="control-panel">
+<label for="scenario">Choose a test condition</label>
+<select id="scenario"><option value="static_source">Stable source</option><option value="achromatic_variable">Achromatic variability</option><option value="chromatic_variable">Chromatic variability</option><option value="transient">Temporary transient</option><option value="moving_source">Moving source</option><option value="instrumental_artifact">Detector-related signal</option><option value="mixed_sky_detector">Sky change plus detector effect</option></select>
+<button class="button primary full" id="load-case">Load controlled case <span>↗</span></button>
+<div class="control-divider"></div><div class="control-subtitle">OBSERVATION RECORD</div>
+<div class="meta-line"><span>Data class</span><b id="data-class">Not loaded</b></div><div class="meta-line"><span>Measurements</span><b id="observation-count">—</b></div><div class="meta-line"><span>Time baseline</span><b id="time-baseline">—</b></div><div class="meta-line"><span>Wavelength samples</span><b id="wave-count">—</b></div>
+<div class="control-divider"></div><button class="button outline full" id="analyze-case">Compare explanations <span>→</span></button>
+<p class="panel-note">Synthetic fixtures are labelled and are never counted as real sky discoveries. You can replace them with measured rows in the data editor.</p>
+</aside>
+<div class="analysis-panel">
+<div class="panel-topline"><span>CAUSAL INVESTIGATION</span><span id="run-status" class="status-chip">Awaiting observations</span></div>
+<div class="result-hero" id="verdict-box"><div class="result-symbol">◎</div><div><small>LEADING EXPLANATION</small><h3>Awaiting an observation set</h3><p>Load a controlled case, or paste a measurement table and run the comparison.</p></div></div>
+<div class="model-grid" id="model-grid"><div class="empty-state">Model comparison will appear here.</div></div>
+          <div class="identifiability-panel">
+            <div class="chart-title">IDENTIFIABILITY AUDIT <span>Can these measurements separate the effects?</span></div>
+            <button class="button outline" id="run-identifiability">Audit the observation design</button>
+            <div id="identifiability-result" class="empty-state">The audit checks epoch coverage, wavelength diversity, detector-template information and design-matrix degeneracy.</div>
+          </div>
+<div class="coordinate-grid"><div class="chart-card"><div class="chart-title">SKY-COORDINATE HISTORY <span>aligned to the sky</span></div><canvas id="sky-chart" width="520" height="190" aria-label="Sky-coordinate observation history"></canvas></div><div class="chart-card"><div class="chart-title">DETECTOR-COORDINATE HISTORY <span>detector pixel frame</span></div><canvas id="detector-chart" width="520" height="190" aria-label="Detector-coordinate observation history"></canvas></div></div>
+<div class="coordinate-grid">
+ <div class="chart-card"><div class="chart-title">SKY / DETECTOR TRAJECTORY BRAID <span>paired exposure indices</span></div><canvas id="trajectory-braid" width="520" height="190" aria-label="Paired sky and detector coordinates"></canvas></div>
+ <div class="chart-card"><div class="chart-title">OBSERVATION TIMELINE <span>select a visit</span></div><canvas id="observation-timeline" width="520" height="190" tabindex="0" role="button" aria-label="Keyboard accessible observation timeline"></canvas><div id="selected-exposure" class="panel-note" aria-live="polite">No exposure selected.</div></div>
+</div>
+<details class="data-editor"><summary>View or replace the observation measurements (JSON)</summary><p>Each row needs time, wavelength, flux, uncertainty, sky position, detector position, detector ID and calibration group. Coordinates and uncertainties must come from a verified measurement pipeline.</p><textarea id="observations-json" spellcheck="false" rows="12" aria-label="Observation data JSON"></textarea><div class="inline-actions"><button class="button outline" id="apply-json">Use these measurements</button><button class="button text-button" id="copy-schema">Copy field schema</button></div></details>
+<pre class="raw-output" id="causal-raw" hidden></pre>
+</div>
+</div>
+</section>
+<section class="workspace" id="falsification">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 02 · COUNTERFACTUAL LAB</div><h2>Try to break the explanation</h2></div><span class="label">CONTROLLED INTERVENTIONS</span></div>
+<div class="split-layout"><div class="text-panel"><p>Change one part of the measurement record while preserving the original input. Re-run the model comparison and see whether the leading explanation changes.</p><label for="intervention">Counterfactual</label><select id="intervention"><option value="sky_variability">Add a sky brightness trend</option><option value="detector_template">Add detector-template coupling</option><option value="moving_source">Add sky motion</option><option value="transient">Add a temporary event</option><option value="mixed">Add both sky and detector terms</option></select><div class="form-row"><label for="cf-amplitude">Sky or event amplitude</label><input id="cf-amplitude" type="number" step="0.5" value="12"></div><div class="form-row"><label for="cf-template">Detector-template amplitude</label><input id="cf-template" type="number" step="0.5" value="10"></div><button class="button primary" id="run-counterfactual">Run counterfactual <span>↗</span></button><p class="panel-note">This first version intervenes on measured rows. It does not alter raw FITS pixels or claim a calibrated instrument simulation.</p></div><div class="outcome-panel"><div class="chart-title">BEFORE / AFTER COMPARISON</div><div class="counterfactual-results" id="counterfactual-result"><div class="empty-state">Run an investigation first, then apply a counterfactual.</div></div></div></div>
+</section>
+<section class="workspace" id="spectrum">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 03 · SPECTROTEMPORAL HISTORY</div><h2>Reconstruct what was actually sampled</h2></div><span class="label">F(λ, t)</span></div>
+<div class="split-layout"><div class="text-panel"><p>Build a local estimate from irregular measurements, with the observation times and wavelength coverage kept explicit. Unsupported cells remain missing instead of being silently filled.</p><div class="form-row"><label for="wave-bandwidth">Wavelength bandwidth (µm)</label><input id="wave-bandwidth" type="number" min=".001" step=".01" value=".22"></div><div class="form-row"><label for="time-bandwidth">Time bandwidth (days)</label><input id="time-bandwidth" type="number" min=".1" step="1" value="12"></div><div class="form-row"><label for="shared-calibration-fraction">Shared calibration fractional σ</label><input id="shared-calibration-fraction" type="number" min="0" max="1" step=".001" value="0"></div><button class="button primary" id="reconstruct-spectrum">Reconstruct sampled history <span>↗</span></button>
+<div class="form-row"><label for="measurement-covariance">Full observation covariance matrix (JSON; original input order)</label></div>
+<textarea id="measurement-covariance" rows="4" spellcheck="false" placeholder="Optional N by N covariance matrix in flux squared."></textarea>
+<label class="inline-check"><input type="checkbox" id="include-grid-covariance"> Return full supported-grid covariance (maximum 400 cells)</label>
+<div class="fineprint" id="spectrum-summary">Load observations to begin. The reconstruction is a local smoother, not a physical source model.</div>
+          <label for="feature-epochs">Epoch spectra for a pre-defined feature (JSON)</label>
+          <textarea id="feature-epochs" rows="7" spellcheck="false" placeholder='[{"epoch_id":"E1","mjd":60000,"dataset_class":"synthetic","synthetic_fixture":true,"calibration_group":"SYNTHETIC:EXAMPLE","wavelength_unit":"um","wavelength_validated":true,"wavelength_source":"synthetic_fixture","wavelength_um":[1.0,1.1,1.2],"flux":[1.0,0.9,1.0],"flux_unit":"relative","sigma":[0.05,0.05,0.05],"valid":[true,true,true],"resolution":{"lsf_fwhm_um":0.02}}]'></textarea>
+          <div class="form-row"><label for="feature-interval">Feature interval (µm; lower,upper)</label><input id="feature-interval" value="1.1,1.2"></div>
+          <div class="form-row"><label for="feature-blue">Blue continuum (µm)</label><input id="feature-blue" value="1.0,1.05"></div>
+          <div class="form-row"><label for="feature-red">Red continuum (µm)</label><input id="feature-red" value="1.25,1.3"></div>
+<div class="form-row"><label for="feature-resolution">Resolving power R (optional)</label><input id="feature-resolution" type="number" min="1" step="1" placeholder="Measured resolving power"></div>
+<div class="form-row"><label for="feature-lsf">LSF FWHM (µm; optional)</label><input id="feature-lsf" type="number" min=".000001" step=".001" placeholder="Documented LSF FWHM"></div>
+<div class="form-row"><label for="feature-continuum-model">Continuum model</label><select id="feature-continuum-model"><option value="linear">Linear</option><option value="constant">Constant</option></select></div>
+<label for="feature-blends">Predeclared blend intervals (JSON)</label>
+<textarea id="feature-blends" rows="3" spellcheck="false" placeholder="[[lower_um, upper_um]] or []">[]</textarea>
+<label for="feature-lab-references">Laboratory reference spectra (JSON, optional)</label>
+<textarea id="feature-lab-references" rows="5" spellcheck="false" placeholder='[{"reference_id":"LAB-1","source_uri":"https://...","sha256":"...","wavelength_unit":"um","flux_unit":"Jy","lsf_fwhm_um":0.01,"wavelength_um":[...],"intensity":[...]}]'>[]</textarea>
+<p class="panel-note">A lab comparison is only attempted when units and documented resolution are compatible. Similarity is not a molecular identification.</p>
+
+          <button class="button outline" id="measure-feature-evolution">Measure feature evolution</button>
+          <div id="feature-evolution-result" class="panel-note">This measures a pre-specified band. It does not identify a molecule.</div></div><div class="heatmap-panel"><div class="heatmap-heading"><span>TIME × WAVELENGTH</span><small>Flux estimate · NaN cells are unsupported</small></div><canvas id="spectral-heatmap" width="780" height="300" tabindex="0" role="grid" aria-label="Selectable spectral evolution heatmap. Rows are epochs and columns are wavelengths. Select a cell to inspect its source observations and uncertainties."></canvas><div class="heatmap-legend"><span>Lower measured flux</span><div class="gradient-bar"></div><span>Higher measured flux</span></div><div class="spectral-provenance" id="spectral-provenance" aria-live="polite"><div class="panel-note">After reconstruction, select a supported cell to inspect its provenance and uncertainty components. Hatched cells have insufficient support.</div></div></div></div>
+</section>
+
+<section class="workspace" id="candidate-library">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 04 · CANDIDATE INDEX</div><h2>Search and compare investigations</h2></div><span class="label">API-DRIVEN</span></div>
+<div class="split-layout">
+ <div class="text-panel">
+  <label for="candidate-query">Candidate or source ID</label><input id="candidate-query" type="search" placeholder="Search loaded observation rows">
+  <div class="form-row"><label for="candidate-class-filter">Data class</label><select id="candidate-class-filter"><option value="">All classes</option><option value="real">Real</option><option value="synthetic">Synthetic</option><option value="illustrative">Illustrative</option><option value="unverified">Unverified</option></select></div>
+  <div class="form-row"><label for="candidate-cal-filter">Calibration group</label><input id="candidate-cal-filter" placeholder="Optional exact group"></div>
+  <button class="button primary" id="search-candidates">Search loaded candidates</button>
+  <div id="candidate-search-results" class="outcome-panel"><div class="empty-state">Load or paste observations, then search.</div></div>
+ </div>
+ <div class="outcome-panel">
+  <div class="chart-title">SAVED SHORTLIST <span id="shortlist-count">0 candidates</span></div>
+  <div id="shortlist-results"><div class="empty-state">No candidates saved.</div></div>
+  <div class="inline-actions"><button class="button outline" id="share-shortlist">Copy shareable URL</button><button class="button outline" id="clear-shortlist">Clear shortlist</button></div>
+  <p class="panel-note">The URL shares candidate IDs only. It does not include private archive data.</p>
+  <label for="compare-a">Compare candidates</label><select id="compare-a"><option value="">First candidate</option></select>
+  <select id="compare-b" aria-label="Second candidate"><option value="">Second candidate</option></select>
+  <button class="button primary" id="compare-candidates">Compare two investigations</button>
+  <div id="candidate-compare-results"><div class="empty-state">Choose two shortlisted candidates.</div></div>
+ </div>
+</div>
+<div class="inline-actions workspace-export">
+ <button class="button outline" id="export-observations-json">Export observation JSON</button>
+ <button class="button outline" id="export-observations-csv">Export observation CSV</button>
+ <button class="button outline" id="export-heatmap-figure">Export spectral figure</button>
+</div>
+</section>
+
+<section class="workspace" id="identity">
+<div class="coordinate-grid">
+ <div class="chart-card"><div class="chart-title">SELECTED-WAVELENGTH LIGHT CURVE <span>API reconstruction</span></div><canvas id="spectral-lightcurve" width="520" height="180" aria-label="Selected wavelength light curve"></canvas></div>
+ <div class="chart-card"><div class="chart-title">SELECTED-EPOCH SPECTRUM <span>native samples and estimates</span></div><canvas id="epoch-spectrum" width="520" height="180" aria-label="Selected epoch spectrum"></canvas></div>
+</div>
+<div class="chart-card"><div class="chart-title">UNCERTAINTY DECOMPOSITION <span>statistical, calibration and total</span></div><canvas id="spectral-uncertainty" width="780" height="160" aria-label="Spectral uncertainty components"></canvas></div>
+</div>
+
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 04 · SOURCE IDENTITY</div><h2>Do these observations belong to the same object?</h2></div><span class="label">EPOCH AWARE</span></div>
+<div class="split-layout"><div class="text-panel"><p>Propagate catalogue positions to a common epoch, account for positional uncertainty and local background density, and retain a no-counterpart option.</p><label for="identity-candidate">Candidate (JSON)</label><textarea id="identity-candidate" rows="5" spellcheck="false">{"candidate_id":"CANDIDATE-01","ra":359.9998,"dec":0.0,"epoch_year":2026.0,"position_sigma_arcsec":0.6}</textarea><label for="identity-catalogue">Catalogue sources (JSON)</label><textarea id="identity-catalogue" rows="7" spellcheck="false">[{"source_id":"GAIA-LIKE-01","ra":0.0001,"dec":0.0,"epoch_year":2016.0,"pmra_cosdec_masyr":12.0,"pmdec_masyr":-3.0,"position_sigma_arcsec":0.3,"pmra_error_masyr":0.2,"pmdec_error_masyr":0.2},{"source_id":"OTHER-SOURCE","ra":0.0015,"dec":0.0004,"epoch_year":2016.0,"pmra_cosdec_masyr":0.0,"pmdec_masyr":0.0,"position_sigma_arcsec":0.5}]</textarea><button class="button primary" id="run-identity">Evaluate possible counterparts <span>↗</span></button><p class="panel-note">Illustrative rows are not a catalogue query. The displayed association probability depends on the prior and background density you supply.</p></div><div class="outcome-panel"><div class="chart-title">ASSOCIATION NETWORK</div><div id="identity-result"><div class="empty-state">Potential counterparts and their uncertainty will appear here.</div></div>
+<canvas id="identity-network" width="520" height="240" aria-label="Probabilistic counterpart network including the no-match alternative"></canvas></div></div>
+</section>
+<section class="workspace" id="planner">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 05 · NEXT OBSERVATION</div><h2>What measurement would reduce uncertainty most?</h2></div><span class="label">INFORMATION GAIN</span></div>
+<div class="split-layout"><div class="text-panel"><p>Rank candidate follow-up times by expected reduction in model uncertainty. Forecasts must come from a physical model or supplied measurement analysis. Visibility is accepted only when independently calculated.</p><label for="plan-json">Candidate observation forecasts (JSON)</label><textarea id="plan-json" rows="12" spellcheck="false">[]</textarea>
+<p class="panel-note">Each candidate forecast needs candidate_observation_id, time, measurement_option, predictions for every competing fitted model, and forecast_provenance with fit_id and input_observation_ids for each model. Recommendation also requires a structured feasibility record: verified status, feasible boolean, HTTPS source_uri, checked_utc, calculator, query_id, evidence_sha256 and query_parameters. Do not use invented visibility windows.</p><div class="form-row"><label for="plan-noise">Expected measurement uncertainty</label><input id="plan-noise" type="number" min=".0001" step=".1" value="2"></div><label for="plan-alternative-priors">Alternative prior sets (optional JSON)</label><textarea id="plan-alternative-priors" rows="4" spellcheck="false" placeholder='{"detector_favoured":{"sky_variable":0.2,"detector_fixed":0.6,"mixed":0.2}}'></textarea><p class="panel-note">Alternative priors are compared with the candidate forecasts. A ranked forecast is not a visibility calculation.</p><button class="button primary" id="run-plan">Rank follow-up measurements <span>↗</span></button></div><div class="outcome-panel"><div class="chart-title">RANKED EXPERIMENTS</div><div id="plan-result"><div class="empty-state">The highest expected information gain will be ranked first.</div></div>
+<canvas id="information-gain-landscape" width="520" height="240" aria-label="API ranked expected information gain landscape"></canvas></div></div>
+</section>
+<section class="workspace" id="detector">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 06 · DETECTOR EXPERIMENT</div><h2>Test the detector physics separately</h2></div><span class="label">ELECTRON DOMAIN</span></div>
+<div class="split-layout"><div class="text-panel"><p>Run a controlled electron-domain exposure with a supplied PSF, source flux, background, dark current and read noise. This is the groundwork for more realistic injections.</p><div class="form-row"><label for="detector-flux">Expected source electrons</label><input id="detector-flux" type="number" min="0" step="100" value="1200"></div><div class="form-row"><label for="detector-background">Background electrons / pixel</label><input id="detector-background" type="number" min="0" step="1" value="18"></div><div class="form-row"><label for="detector-read">Read noise (electrons)</label><input id="detector-read" type="number" min="0" step=".1" value="4"></div><button class="button primary" id="run-detector">Simulate detector frame <span>↗</span></button><p class="panel-note">Generic detector experiment only. Do not treat its parameters as SPHEREx calibration values.</p></div><div class="heatmap-panel"><div class="heatmap-heading"><span>SIMULATED FRAME</span><small id="detector-summary">No simulation run</small></div><canvas id="detector-heatmap" width="480" height="360" aria-label="Simulated detector frame"></canvas>
+<div class="form-row"><label for="decomposition-view">Displayed measurement component</label><select id="decomposition-view"><option value="measured_electrons">Measured</option><option value="source_electrons">Source</option><option value="background_electrons">Background</option><option value="dark_current_electrons">Dark current</option><option value="unexplained_residual_electrons">Residual</option></select></div>
+<div id="measurement-decomposition" class="panel-note">Select a component after running the controlled Python forward model.</div>
+</div></div>
+</section>
+<section class="workspace" id="benchmark">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 07 · ADVERSARIAL VALIDATION</div><h2>Measure where the method succeeds and fails</h2></div><span class="label">ABSTENTION INCLUDED</span></div>
+<div class="baseline-panel">
+        <div class="chart-title">FOUR-BASELINE COMPARISON <span>matched false-alarm rate or completeness</span></div>
+        <p class="panel-note">Supply detections from the same field and frozen truth set. Each detection must contain x, y and score for each method.</p>
+        <label for="baseline-truth">Truth positions (JSON)</label>
+        <textarea id="baseline-truth" rows="3" spellcheck="false">[[10,10],[20,20],[30,30]]</textarea>
+        <label for="baseline-methods">Baseline detections (JSON)</label>
+        <textarea id="baseline-methods" rows="8" spellcheck="false">{"snr_only":[{"x":10.2,"y":10.1,"score":8}],"chronos_pda":[{"x":10.1,"y":10.1,"score":0.8}],"instrument_forensics":[{"x":20.2,"y":20.1,"score":0.7}],"sky_detector_twin":[{"x":10.1,"y":10.1,"score":0.9},{"x":20.1,"y":20.1,"score":0.9}]}</textarea>
+        <div class="form-row"><label for="baseline-thresholds">Score thresholds</label><input id="baseline-thresholds" value="0.2,0.5,0.8"></div>
+        <div class="form-row"><label for="baseline-fpr">Target false candidates per field</label><input id="baseline-fpr" type="number" min="0" step=".1" value="1"></div>
+        <button class="button outline" id="run-baselines">Compare four baselines</button>
+        <div id="baseline-result" class="panel-note">This endpoint evaluates supplied detections; it does not run the underlying detection algorithms.</div>
+      </div>
+      <div class="benchmark-card"><div class="benchmark-copy"><h3>Run the seven controlled challenge cases</h3><p>Compare the model decision with the hidden synthetic label. Report accuracy and coverage together. This checks the software pipeline; it is not a substitute for blind injections into independent real sky fields.</p><button class="button primary" id="run-benchmark">Run synthetic stress test <span>↗</span></button><div class="progress-track"><div id="benchmark-progress"></div></div><small id="benchmark-status">Ready when observations and API are available.</small></div><div class="benchmark-metrics" id="benchmark-result"><div class="metric"><small>CASES</small><b>7</b></div><div class="metric"><small>COVERAGE</small><b>—</b></div><div class="metric"><small>ACCURACY</small><b>—</b></div><div class="metric"><small>ABSTENTIONS</small><b>—</b></div></div></div><div id="benchmark-table" class="table-wrap"></div>
+</section>
+<section class="workspace" id="population">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 08 · POPULATION STUDY</div><h2>From candidates to a defensible rate</h2></div><span class="label">SELECTION CORRECTED</span></div>
+<div class="identifiability-panel">
+ <div class="chart-title">POPULATION FEASIBILITY GATE <span>Audit archive coverage before outcomes</span></div>
+ <p class="panel-note">Provide real, independent fields with classified YSO sources, source-specific epochs, CWAVE/CBAND provenance, measured flux uncertainties, injection recovery and identified null controls. The API refuses rate estimation unless the same fields pass the coverage gate.</p>
+ <label for="population-coverage-json">Real archive field records (JSON)</label>
+ <textarea id="population-coverage-json" rows="11" spellcheck="false" placeholder='[]'></textarea>
+ <div class="form-row"><label for="population-feature">Predeclared feature interval (µm)</label><input id="population-feature" value="3.05,3.15"></div>
+ <div class="form-row"><label for="population-blue">Blue continuum (µm)</label><input id="population-blue" value="2.8,2.95"></div>
+ <div class="form-row"><label for="population-red">Red continuum (µm)</label><input id="population-red" value="3.25,3.4"></div>
+ <button class="button primary" id="assess-population-coverage">Assess archive coverage</button>
+ <div id="population-coverage-result" class="panel-note">No coverage audit run. Synthetic data cannot pass the real-field gate.</div>
+ <div class="form-row"><label for="population-preregistration">Preregistration SHA-256</label><input id="population-preregistration" spellcheck="false" placeholder="64-character protocol digest"></div>
+</div>
+<div class="split-layout">
+ <div class="text-panel">
+  <p>A population rate is only estimated after the server repeats a successful coverage audit and receives a preregistration digest. Each field must also include observed_events, null_events, area_deg2, baseline_days, n_injected and n_recovered.</p>
+  <button class="button primary" id="run-population">Estimate gated YSO rate</button>
+ </div>
+ <div class="outcome-panel"><div class="chart-title">POPULATION ESTIMATE</div><div id="population-result"><div class="empty-state">No population result. An infeasible sample remains unanalysed.</div></div></div>
+</div>
+</section>
+<section class="workspace" id="evidence">
+<div class="section-heading"><div><div class="eyebrow">WORKSPACE 09 · EVIDENCE AND PROVENANCE</div><h2>Leave an analysis that another researcher can reproduce</h2></div><span class="label">CONTENT ADDRESSED</span></div>
+<div class="split-layout"><div class="text-panel"><p>Record actual archive identifiers, product versions, detector IDs, file hashes, processing choices and software version. The manifest seals the metadata; it does not certify that the metadata are true.</p><label for="manifest-json">Archive manifest (JSON)</label><textarea id="manifest-json" rows="11" spellcheck="false">{
+"project":"Nakshatra CHRONOS",
+"calibration_group":"REPLACE_WITH_VERIFIED_GROUP",
+"source_query":{"archive":"IRSA SPHEREx","query":"RECORD_EXACT_COORDINATES_FILTERS_AND_QUERY"},
+"retrieved_at":"2026-11-25T00:00:00Z",
+"files":[{"archive_id":"REPLACE_WITH_ARCHIVE_ID","product_type":"Level-2 spectral image MEF","release":"DR1","detector":"D2","native_uri":"REPLACE_WITH_EXACT_HTTPS_ARCHIVE_URI","sha256":"0000000000000000000000000000000000000000000000000000000000000000","bytes":0,"observation_time_mjd":60000.0,"processing_version":"REPLACE_WITH_PIPELINE_VERSION","calibration_version":"REPLACE_WITH_CALIBRATION_VERSION"}],
+"software":{"python_version":"RECORD_PYTHON_VERSION","project_version":"RECORD_PROJECT_VERSION","pipeline_commit":"REPLACE_WITH_FULL_GIT_COMMIT"},
+"processing_choices":{"wavelength_source":"CWAVE/CBAND","psf":"RECORD_VERIFIED_DETECTOR_EPSF","flags":"RECORD_ADOPTED_FLAG_BITS"}
+}</textarea><button class="button primary" id="create-manifest">Create and verify manifest <span>↗</span></button>
+          <button class="button outline" id="create-evidence-graph">Build claim-to-measurement graph</button></div><div class="outcome-panel"><div class="chart-title">PROVENANCE RECORD</div><div id="manifest-result"><div class="empty-state">Replace the example placeholders with verified archive metadata before sealing.</div></div>
+          <div id="evidence-graph-result" class="panel-note">Run an analysis and create a provenance manifest before exporting the evidence graph.</div>
+<canvas id="evidence-lineage" width="520" height="220" aria-label="Claim to measurement evidence graph"></canvas><label for="reproduction-command">Exact reproduction command</label><textarea id="reproduction-command" rows="3" spellcheck="false" placeholder="Paste the exact command that recreates this investigation from the manifest."></textarea><button class="button primary" id="export-investigation-package">Export reproducible investigation ZIP <span>↗</span></button><div id="package-result" class="panel-note">Requires a verified manifest, an analysis and a reproduction command. The HTTP export contains metadata and source references, not original FITS bytes.</div></div></div>
+</section>
+<section class="closing"><div class="eyebrow">THE SCIENTIFIC STANDARD</div><h2>Unknown is not failure.<br><em>It is a result the evidence has earned.</em></h2><p>CHRONOS will call a feature complete only after it survives calibration checks, negative controls, independent field-held-out testing and reproducible analysis on real archive data.</p><div class="closing-links"><a href="observatory.html">Return to the observatory ↗</a><a href="https://github.com/PRITIDIPADAS/nakshatra-chronus">Inspect the source code ↗</a></div></section>
+</main>
+<footer><span>NAKSHATRA CHRONOS</span><span>Physics · Astronomical change · Instrument-aware evidence</span><span>Research preview</span></footer>
+<script src="causal-lab.js"></script>
+</body>
+</html>

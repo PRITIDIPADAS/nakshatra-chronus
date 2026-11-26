@@ -1,0 +1,79 @@
+name: SPHEREx real field retrieval and audit
+
+on:
+  push:
+    branches:
+      - chronos-5-causal-sky-twin
+    paths:
+      - .github/workflows/spherex-real-field-audit.yml
+      - research_discovery/spherex/run_real_field_audit.py
+      - research_discovery/spherex/psf_physicality.py
+      - research_discovery/spherex/run_provenance_calibration_audit.py
+      - research_discovery/spherex/fetch_native_mefs.py
+      - research_discovery/spherex/discover_calibrations.py
+      - research_discovery/spherex/probe_calibration_tap.py
+      - research_discovery/spherex/native_mef_audit.py
+      - research_discovery/spherex/calibration_compatibility.py
+      - research_discovery/spherex/extract_epsf_stamp.py
+      - research_discovery/spherex/flag_policy.py
+      - research_discovery/spherex/coordinate_transform.py
+      - research_discovery/validation/injection_recovery.py
+      - research_discovery/spherex/electron_conversion.py
+      - research_discovery/spherex/electron_calibration_record.schema.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m101-dr1-d2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out the requested branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: research_discovery/requirements-research.txt
+
+      - name: Install archive and FITS dependencies
+        run: python -m pip install -r research_discovery/requirements-research.txt
+
+      - name: Compile the retrieval and audit package
+        run: python -m compileall -q research_discovery/spherex
+
+      - name: Inspect the documented DR1 calibration TAP collection
+        run: |
+          set -euo pipefail
+          python -m research_discovery.spherex.probe_calibration_tap \
+            --rows 50 \
+            --out data/spherex_m101_audit/calibration_tap_inspection.json 2>&1 | tee calibration-tap.log
+
+      - name: Retrieve native science MEF and exact provenance-linked calibration inputs
+        run: |
+          set -euo pipefail
+          CHRONOS_GIT_COMMIT="$GITHUB_SHA" python -m research_discovery.spherex.run_real_field_audit \
+            --field "M101,210.80227,54.34895" \
+            --science-uri "ibe/data/spherex/dr1/level2/2025W19_2B/l2b-v27-2026-198/2/level2_2025W19_2B_0346_1D2_spx_l2b-v27-2026-198.fits" \
+            --bandpass SPHEREx-D2 \
+            --release dr1 \
+            --limit-per-family 5 \
+            --out data/spherex_m101_audit 2>&1 | tee spherex-real-field.log
+
+      - name: Upload science MEF, exact calibration inputs and provenance records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spherex-m101-dr1-d2-provenance-calibration-audit
+          path: |
+            data/spherex_m101_audit/
+            spherex-real-field.log
+            calibration-tap.log
+          if-no-files-found: warn
+          retention-days: 30

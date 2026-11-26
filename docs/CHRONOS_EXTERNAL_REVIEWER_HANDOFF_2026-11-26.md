@@ -69,8 +69,6 @@ Required order:
 6. Only the custodian unblinds, after verifying the complete detection run and frozen config. Preserve all failed runs and control-field outcomes.
 7. The predeclared superiority gate requires a positive family-wise-adjusted paired independent-field lower confidence bound against every comparator and false-candidate/non-inferiority criteria. A failure is a valid result.
 
-The source-selection fit additionally requires signed independent-field records. Before any real selection fit can pass, the deployment owner must provision the externally confirmed custodian's Ed25519 key ID/public key, the custodian ID, and the out-of-band independence confirmation environment flag documented in [the field-independence contract](CHRONOS_FIELD_INDEPENDENCE_ATTESTATION.md). Every field attestation must bind its signed footprint, science manifest, field group and preregistration; signed spherical footprint caps must be pairwise disjoint. The deterministic signing keys used in tests are fictional and are not acceptable for empirical analysis.
-
 The current preregistration document is explicitly a **draft**. It is not an externally registered receipt and does not retroactively preregister prior experiments.
 
 ## 5. Signed calibration review record: how to use it
@@ -104,8 +102,11 @@ python scripts/verify_spherex_calibration_review.py \
   --expected-commit "<full 40-character commit SHA>" \
   --expected-input-digests /review/expected_input_digests.json \
   --signed-report /review/signed_report.pdf \
-  --reproduction-artifact /review/reproduction.zip
+  --reproduction-artifact /review/reproduction.zip \
+  --confirm-reviewer-identity-independence-out-of-band
 ```
+
+Use the final flag only after the maintainer has independently confirmed the reviewer’s real identity, expertise, affiliation and independence outside the review bundle. Without it, a valid signature still returns `external_identity_and_independence_confirmed=false` and cannot satisfy the release-readiness gate. The flag is a recorded human confirmation, not a cryptographic proof of credentials.
 
 The expected digest JSON must contain exactly the nine required keys listed above. Exit code 0 means the signature, pin, commit, report bytes and reproduction bytes verify; exit code 2 means the record did not verify.
 

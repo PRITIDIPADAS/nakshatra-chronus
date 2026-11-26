@@ -151,6 +151,10 @@ def test_joint_selection_function_uses_fixed_bins_and_jeffreys_intervals():
     assert fitted["trial_count"] == 20
     assert fitted["independent_field_count"] == 5
     assert fitted["supported_cell_count"] == 1
+    independence_audit = fitted["field_independence_audit"]
+    assert independence_audit["status"] == "verified_signed_independent_fields"
+    assert independence_audit["independent_group_count"] == 5
+    assert independence_audit["spatial_caps_pairwise_disjoint"] is True
     prediction = predict_selection_probability(fitted, {
         "flux_jy": 0.5, "wavelength_um": 2.5,
         "crowding_index": 0.4, "background_rms": 0.2,
@@ -286,6 +290,11 @@ def test_source_linked_yso_event_yield_revalidates_source_rows_and_selection_tri
             }],
         })
 
+    # The synthetic end-to-end coverage fixture must exercise the same signed
+    # field-independence contract as the production real-field selection fit.
+    for field_index, field in enumerate(fields):
+        _sign_test_field(field, field_index)
+
     trials = _trials()
     for trial in trials:
         trial["event_definition_sha256"] = event_definition
@@ -387,32 +396,64 @@ def test_selection_function_rejects_overlapping_signed_independent_footprints():
     from chronos_population.selection import fit_selection_function
     fields = _field_records()
     _sign_test_field(fields[1], 1, footprint={
-        "center_ra_deg": 0.0, "center_dec_deg": -20.0, "maximum_radius_deg": 0.5,
+        "center_ra_deg": 0.25, "center_dec_deg": -20.0, "maximum_radius_deg": 0.5,
     })
     with pytest.raises(ValueError, match="overlap or cannot be proven disjoint"):
         fit_selection_function(_trials(), _bin_spec(), field_records=fields,
                                minimum_trials_per_cell=20, minimum_independent_fields=5)
 
 
-def test_selection_function_requires_out_of_band_custodian_identity_and_independence_pins(monkeypatch):
+def test_selection_function_rejects_valid_shape_but_invalid_ed25519_signature():
+    import base64
     from chronos_population.selection import fit_selection_function
-    fields = _field_records()
-
-    monkeypatch.setenv("CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_ID", "different-custodian")
-    with pytest.raises(ValueError, match="signed custodian identity does not match"):
-        fit_selection_function(_trials(), _bin_spec(), field_records=fields,
-                               minimum_trials_per_cell=20, minimum_independent_fields=5)
 
     fields = _field_records()
-    monkeypatch.delenv("CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_OUT_OF_BAND_INDEPENDENCE_VERIFIED")
-    with pytest.raises(ValueError, match="confirmed out-of-band"):
-        fit_selection_function(_trials(), _bin_spec(), field_records=fields,
-                               minimum_trials_per_cell=20, minimum_independent_fields=5)
+    # Preserve the envelope/payload schema and field binding; only the
+    # cryptographic signature is replaced with an invalid 64-byte signature.
+    fields[0]["field_independence_attestation"]["signature_base64"] = base64.b64encode(
+        bytes(64)
+    ).decode("ascii")
+    with pytest.raises(ValueError, match="custodian field-independence signature is invalid"):
+        fit_selection_function(
+            _trials(), _bin_spec(), field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+        )
 
 
-def test_field_independence_signature_requires_custodian_independence_attestation():
-    from chronos_population.independence import verify_field_independence_attestation
+def test_selection_function_requires_out_of_band_custodian_identity_pin(monkeypatch):
+    from chronos_population.selection import fit_selection_function
+
+    fields = _field_records()
+    monkeypatch.setenv("CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_ID", "unrelated-custodian")
+    with pytest.raises(ValueError, match="does not match the out-of-band pinned custodian"):
+        fit_selection_function(
+            _trials(), _bin_spec(), field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+        )
+
+
+def test_selection_function_requires_out_of_band_custodian_independence_confirmation(monkeypatch):
+    from chronos_population.selection import fit_selection_function
+
+    fields = _field_records()
+    monkeypatch.delenv(
+        "CHRONOS_FIELD_INDEPENDENCE_CUSTODIAN_OUT_OF_BAND_INDEPENDENCE_VERIFIED",
+        raising=False,
+    )
+    with pytest.raises(ValueError, match="must be confirmed out-of-band"):
+        fit_selection_function(
+            _trials(), _bin_spec(), field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+        )
+
+
+def test_selection_function_requires_signed_custodian_independence_assertion():
+    from chronos_population.selection import fit_selection_function
+
     fields = _field_records()
     fields[0]["field_independence_attestation"]["payload"]["custodian_independent_of_analysis_team"] = False
-    with pytest.raises(ValueError, match="did not attest independence"):
-        verify_field_independence_attestation(fields[0])
+    with pytest.raises(ValueError, match="custodian did not attest independence from the analysis team"):
+        fit_selection_function(
+            _trials(), _bin_spec(), field_records=fields,
+            minimum_trials_per_cell=20, minimum_independent_fields=5,
+        )

@@ -140,7 +140,7 @@ def test_native_audit_retry_recovers_only_transient_irsa_transport_failure(tmp_p
     assert attempts[0]["transient_irsa_failure"] is True
     assert attempts[1]["native_audit_present"] is True
     assert sleeps == [5]
-    assert "ATTEMPT 1 return_code=1" in (epoch_dir / "native_audit_runner.log").read_text(encoding="utf-8")
+    assert "ATTEMPT 01" in (epoch_dir / "native_audit_runner.log").read_text(encoding="utf-8")
 
 
 def test_native_audit_retry_does_not_retry_scientific_or_flag_quality_failures(tmp_path, monkeypatch):

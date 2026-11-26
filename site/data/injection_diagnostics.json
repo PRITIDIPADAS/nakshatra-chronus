@@ -1,0 +1,514 @@
+{
+ "source": "GitHub Actions run 45787598732 (SPHEREx multi-field calibrated Jy pilot, 2026-11-26), printed by research_discovery/spherex/summarize_injection_diagnostics.py",
+ "levels": [
+  "0.5 x local 5 sigma",
+  "1 x local 5 sigma",
+  "2 x local 5 sigma"
+ ],
+ "fields": [
+  {
+   "field": "HighLatitude_Control",
+   "levels": [
+    {
+     "recovered": 6,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 5.061,
+     "median_post_snr": 5.781,
+     "median_source_only_snr": 2.297,
+     "median_snr_delta": 0.519,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 11,
+      "recovered": 6,
+      "below_threshold": 3
+     }
+    },
+    {
+     "recovered": 13,
+     "n": 20,
+     "source_only_recovered": 2,
+     "median_baseline_snr": 4.647,
+     "median_post_snr": 7.286,
+     "median_source_only_snr": 4.367,
+     "median_snr_delta": 2.257,
+     "reasons": {
+      "recovered": 13,
+      "suppressed_by_brighter_neighbour": 7
+     }
+    },
+    {
+     "recovered": 17,
+     "n": 20,
+     "source_only_recovered": 20,
+     "median_baseline_snr": 5.096,
+     "median_post_snr": 10.851,
+     "median_source_only_snr": 7.7,
+     "median_snr_delta": 5.369,
+     "reasons": {
+      "recovered": 17,
+      "suppressed_by_brighter_neighbour": 3
+     }
+    }
+   ],
+   "structured_background_variant": {
+    "role": "secondary diagnostic; the primary recovery rule above is unchanged",
+    "empirical_five_sigma_jy": 0.00012431078149249187,
+    "pipeline_five_sigma_jy": 0.00011406305949157227,
+    "sensitivity_ratio": 1.0898426015100602,
+    "local_noise_scale_median": 1.0889293716151642,
+    "flux_levels_jy": [
+     6.215539074624594e-05,
+     0.00012431078149249187,
+     0.00024862156298498375
+    ],
+    "recovered": [
+     0,
+     4,
+     17
+    ],
+    "n_per_level": 20,
+    "n_baseline_detections": 118,
+    "structured_background": {
+     "cell_px": 32,
+     "noise_scale_median": 1.1135937885509293,
+     "noise_scale_p90": 1.1873223151182795
+    }
+   },
+   "image": {
+    "file": "level2_2025W20_1C_0491_1D2_spx_l2b-v27-2026-198.fits",
+    "region_image": {
+     "median": 0.17786,
+     "mad_sigma": 0.01807
+    },
+    "global_image": {
+     "median": 0.17796,
+     "mad_sigma": 0.01964
+    },
+    "region_sqrt_variance_median": 0.01537,
+    "global_sqrt_variance_median": 0.01538,
+    "region_noise_excess": 1.176,
+    "region_flagged_fraction": 0.362,
+    "region_zodi_median": 0.14748
+   }
+  },
+  {
+   "field": "Lupus_III",
+   "levels": [
+    {
+     "recovered": 0,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 34.712,
+     "median_post_snr": 35.29,
+     "median_source_only_snr": 2.768,
+     "median_snr_delta": 0.176,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 20
+     }
+    },
+    {
+     "recovered": 0,
+     "n": 20,
+     "source_only_recovered": 9,
+     "median_baseline_snr": 31.378,
+     "median_post_snr": 31.89,
+     "median_source_only_snr": 4.973,
+     "median_snr_delta": 0.687,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 20
+     }
+    },
+    {
+     "recovered": 0,
+     "n": 20,
+     "source_only_recovered": 20,
+     "median_baseline_snr": 33.028,
+     "median_post_snr": 33.928,
+     "median_source_only_snr": 9.67,
+     "median_snr_delta": 0.929,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 20
+     }
+    }
+   ],
+   "structured_background_variant": {
+    "role": "secondary diagnostic; the primary recovery rule above is unchanged",
+    "empirical_five_sigma_jy": 0.0006522866005990443,
+    "pipeline_five_sigma_jy": 0.00021115834027597317,
+    "sensitivity_ratio": 3.089087552717733,
+    "local_noise_scale_median": 3.0961917413908155,
+    "flux_levels_jy": [
+     0.00032614330029952216,
+     0.0006522866005990443,
+     0.0013045732011980886
+    ],
+    "recovered": [
+     0,
+     7,
+     5
+    ],
+    "n_per_level": 20,
+    "n_baseline_detections": 226,
+    "structured_background": {
+     "cell_px": 32,
+     "noise_scale_median": 3.0110730802131953,
+     "noise_scale_p90": 3.7136363022295007
+    }
+   },
+   "image": {
+    "file": "level2_2025W32_1A_0663_1D2_spx_l2b-v27-2026-226.fits",
+    "region_image": {
+     "median": 0.51943,
+     "mad_sigma": 0.13817
+    },
+    "global_image": {
+     "median": 0.51379,
+     "mad_sigma": 0.13771
+    },
+    "region_sqrt_variance_median": 0.02524,
+    "global_sqrt_variance_median": 0.0252,
+    "region_noise_excess": 5.474,
+    "region_flagged_fraction": 0.9998,
+    "region_zodi_median": 0.23139
+   }
+  },
+  {
+   "field": "Orion_A",
+   "levels": [
+    {
+     "recovered": 3,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 13.621,
+     "median_post_snr": 14.21,
+     "median_source_only_snr": 2.183,
+     "median_snr_delta": 0.378,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 17,
+      "recovered": 3
+     }
+    },
+    {
+     "recovered": 5,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 14.197,
+     "median_post_snr": 15.498,
+     "median_source_only_snr": 4.2,
+     "median_snr_delta": 1.285,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 15,
+      "recovered": 5
+     }
+    },
+    {
+     "recovered": 11,
+     "n": 20,
+     "source_only_recovered": 20,
+     "median_baseline_snr": 15.193,
+     "median_post_snr": 18.027,
+     "median_source_only_snr": 8.207,
+     "median_snr_delta": 4.755,
+     "reasons": {
+      "recovered": 11,
+      "suppressed_by_brighter_neighbour": 9
+     }
+    }
+   ],
+   "structured_background_variant": {
+    "role": "secondary diagnostic; the primary recovery rule above is unchanged",
+    "empirical_five_sigma_jy": 0.00019679704394787094,
+    "pipeline_five_sigma_jy": 0.00015931672622955078,
+    "sensitivity_ratio": 1.2352566400612377,
+    "local_noise_scale_median": 1.233572550622485,
+    "flux_levels_jy": [
+     9.839852197393547e-05,
+     0.00019679704394787094,
+     0.0003935940878957419
+    ],
+    "recovered": [
+     0,
+     0,
+     12
+    ],
+    "n_per_level": 20,
+    "n_baseline_detections": 192,
+    "structured_background": {
+     "cell_px": 32,
+     "noise_scale_median": 1.2290800589517583,
+     "noise_scale_p90": 2.330765318156314
+    }
+   },
+   "image": {
+    "file": "level2_2025W37_1A_0365_1D2_spx_l2b-v27-2026-235.fits",
+    "region_image": {
+     "median": 0.3738,
+     "mad_sigma": 0.04894
+    },
+    "global_image": {
+     "median": 0.34182,
+     "mad_sigma": 0.0592
+    },
+    "region_sqrt_variance_median": 0.0216,
+    "global_sqrt_variance_median": 0.02085,
+    "region_noise_excess": 2.266,
+    "region_flagged_fraction": 0.6404,
+    "region_zodi_median": 0.2444
+   }
+  },
+  {
+   "field": "Perseus_NGC1333",
+   "levels": [
+    {
+     "recovered": 3,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 9.197,
+     "median_post_snr": 9.802,
+     "median_source_only_snr": 2.318,
+     "median_snr_delta": 0.207,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 17,
+      "recovered": 3
+     }
+    },
+    {
+     "recovered": 5,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 7.791,
+     "median_post_snr": 10.054,
+     "median_source_only_snr": 4.376,
+     "median_snr_delta": 2.342,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 15,
+      "recovered": 5
+     }
+    },
+    {
+     "recovered": 12,
+     "n": 20,
+     "source_only_recovered": 20,
+     "median_baseline_snr": 8.593,
+     "median_post_snr": 14.129,
+     "median_source_only_snr": 8.118,
+     "median_snr_delta": 5.734,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 8,
+      "recovered": 12
+     }
+    }
+   ],
+   "structured_background_variant": {
+    "role": "secondary diagnostic; the primary recovery rule above is unchanged",
+    "empirical_five_sigma_jy": 0.0002442153150608581,
+    "pipeline_five_sigma_jy": 0.00016158788957217708,
+    "sensitivity_ratio": 1.5113466467533354,
+    "local_noise_scale_median": 1.5252372682086632,
+    "flux_levels_jy": [
+     0.00012210765753042905,
+     0.0002442153150608581,
+     0.0004884306301217162
+    ],
+    "recovered": [
+     0,
+     7,
+     18
+    ],
+    "n_per_level": 20,
+    "n_baseline_detections": 166,
+    "structured_background": {
+     "cell_px": 32,
+     "noise_scale_median": 1.1708981441855588,
+     "noise_scale_p90": 1.4969751098840407
+    }
+   },
+   "image": {
+    "file": "level2_2025W34_1B_0227_1D2_spx_l2b-v27-2026-228.fits",
+    "region_image": {
+     "median": 0.37942,
+     "mad_sigma": 0.04277
+    },
+    "global_image": {
+     "median": 0.36745,
+     "mad_sigma": 0.03837
+    },
+    "region_sqrt_variance_median": 0.02172,
+    "global_sqrt_variance_median": 0.02141,
+    "region_noise_excess": 1.969,
+    "region_flagged_fraction": 0.5206,
+    "region_zodi_median": 0.29715
+   }
+  },
+  {
+   "field": "Rho_Ophiuchi",
+   "levels": [
+    {
+     "recovered": 2,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 25.623,
+     "median_post_snr": 26.762,
+     "median_source_only_snr": 2.383,
+     "median_snr_delta": 0.341,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 18,
+      "recovered": 2
+     }
+    },
+    {
+     "recovered": 4,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 25.27,
+     "median_post_snr": 27.102,
+     "median_source_only_snr": 4.648,
+     "median_snr_delta": 1.206,
+     "reasons": {
+      "recovered": 4,
+      "suppressed_by_brighter_neighbour": 16
+     }
+    },
+    {
+     "recovered": 9,
+     "n": 20,
+     "source_only_recovered": 20,
+     "median_baseline_snr": 25.24,
+     "median_post_snr": 29.351,
+     "median_source_only_snr": 8.439,
+     "median_snr_delta": 4.749,
+     "reasons": {
+      "recovered": 9,
+      "suppressed_by_brighter_neighbour": 11
+     }
+    }
+   ],
+   "structured_background_variant": {
+    "role": "secondary diagnostic; the primary recovery rule above is unchanged",
+    "empirical_five_sigma_jy": 0.0004293728978369105,
+    "pipeline_five_sigma_jy": 0.0002049602532906831,
+    "sensitivity_ratio": 2.0949081148331534,
+    "local_noise_scale_median": 2.065676706685306,
+    "flux_levels_jy": [
+     0.00021468644891845526,
+     0.0004293728978369105,
+     0.000858745795673821
+    ],
+    "recovered": [
+     0,
+     3,
+     12
+    ],
+    "n_per_level": 20,
+    "n_baseline_detections": 197,
+    "structured_background": {
+     "cell_px": 32,
+     "noise_scale_median": 1.676941957115984,
+     "noise_scale_p90": 2.18788728864871
+    }
+   },
+   "image": {
+    "file": "level2_2025W31_2A_0170_1D2_spx_l2b-v27-2026-225.fits",
+    "region_image": {
+     "median": 0.60817,
+     "mad_sigma": 0.0931
+    },
+    "global_image": {
+     "median": 0.58463,
+     "mad_sigma": 0.18491
+    },
+    "region_sqrt_variance_median": 0.02717,
+    "global_sqrt_variance_median": 0.02671,
+    "region_noise_excess": 3.427,
+    "region_flagged_fraction": 0.8394,
+    "region_zodi_median": 0.26362
+   }
+  },
+  {
+   "field": "Taurus_Auriga",
+   "levels": [
+    {
+     "recovered": 3,
+     "n": 20,
+     "source_only_recovered": 0,
+     "median_baseline_snr": 5.436,
+     "median_post_snr": 6.199,
+     "median_source_only_snr": 2.25,
+     "median_snr_delta": 0.322,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 16,
+      "below_threshold": 1,
+      "recovered": 3
+     }
+    },
+    {
+     "recovered": 3,
+     "n": 20,
+     "source_only_recovered": 2,
+     "median_baseline_snr": 6.656,
+     "median_post_snr": 8.831,
+     "median_source_only_snr": 4.502,
+     "median_snr_delta": 1.561,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 17,
+      "recovered": 3
+     }
+    },
+    {
+     "recovered": 8,
+     "n": 20,
+     "source_only_recovered": 20,
+     "median_baseline_snr": 6.118,
+     "median_post_snr": 12.542,
+     "median_source_only_snr": 8.478,
+     "median_snr_delta": 5.314,
+     "reasons": {
+      "suppressed_by_brighter_neighbour": 12,
+      "recovered": 8
+     }
+    }
+   ],
+   "structured_background_variant": {
+    "role": "secondary diagnostic; the primary recovery rule above is unchanged",
+    "empirical_five_sigma_jy": 0.00021634688315513406,
+    "pipeline_five_sigma_jy": 0.00017837357915428755,
+    "sensitivity_ratio": 1.2128863712938158,
+    "local_noise_scale_median": 1.213270524652977,
+    "flux_levels_jy": [
+     0.00010817344157756703,
+     0.00021634688315513406,
+     0.0004326937663102681
+    ],
+    "recovered": [
+     0,
+     7,
+     11
+    ],
+    "n_per_level": 20,
+    "n_baseline_detections": 222,
+    "structured_background": {
+     "cell_px": 32,
+     "noise_scale_median": 1.188045920944959,
+     "noise_scale_p90": 1.411460813618706
+    }
+   },
+   "image": {
+    "file": "level2_2025W35_1A_0331_1D2_spx_l2b-v27-2026-230.fits",
+    "region_image": {
+     "median": 0.41492,
+     "mad_sigma": 0.02952
+    },
+    "global_image": {
+     "median": 0.43186,
+     "mad_sigma": 0.04239
+    },
+    "region_sqrt_variance_median": 0.0226,
+    "global_sqrt_variance_median": 0.02308,
+    "region_noise_excess": 1.306,
+    "region_flagged_fraction": 0.627,
+    "region_zodi_median": 0.36643
+   }
+  }
+ ],
+ "lupus": "Solved in part. All 60 primary misses were the same kind: the planted source was outshone by a brighter neighbour, because the cloud's own sky is 5.5 times noisier than the pipeline variance says (1.2 times in the quiet control). Alone, the planted sources were bright enough: 20 of 20 at twice the limit. Modelling that structured sky moves Lupus III's honest 5\u03c3 limit up by a factor of 3.1; injected at that limit, 7 and 5 of 20 are found at one and two times, instead of 0. The primary rule is unchanged."
+}

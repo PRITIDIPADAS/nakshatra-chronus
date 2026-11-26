@@ -69,10 +69,10 @@ def verify_field_independence_attestation(field: Mapping[str, Any]) -> dict[str,
         raise ValueError(f"{fid}: independent_field must be true in addition to custodian attestation")
     key_id, public_b64 = os.environ.get(KEY_ID_ENV, "").strip(), os.environ.get(PUBLIC_KEY_ENV, "").strip()
     expected_custodian_id = os.environ.get(CUSTODIAN_ID_ENV, "").strip()
-    custodian_independence_confirmed = os.environ.get(CUSTODIAN_INDEPENDENCE_ENV, "").strip().lower() == "true"
+    independence_confirmed = os.environ.get(CUSTODIAN_INDEPENDENCE_ENV, "").strip().lower() == "true"
     if not key_id or not public_b64:
         raise ValueError("trusted external field-independence custodian Ed25519 key is not configured")
-    if not expected_custodian_id or not custodian_independence_confirmed:
+    if not expected_custodian_id or not independence_confirmed:
         raise ValueError("custodian identity and independence from the analysis team must be confirmed out-of-band")
     envelope = field.get("field_independence_attestation")
     if not isinstance(envelope, Mapping) or envelope.get("schema") != FIELD_INDEPENDENCE_SCHEMA:
@@ -176,11 +176,20 @@ def audit_independent_field_records(field_records: Sequence[Mapping[str, Any]], 
         "custodian_ids": sorted({v for g in groups.values() for v in g["custodians"]}),
         "spatial_caps_pairwise_disjoint": True,
         "field_attestations": [
-            {"field_id": fid, "independence_group_id": p["independence_group_id"],
-             "release": p["release"], "science_manifest_sha256": p["science_manifest_sha256"],
-             "preregistration_sha256": p["preregistration_sha256"],
-             "footprint_sha256": p["footprint_sha256"], "custodian_id": p["custodian_id"],
-             "attested_utc": p["attested_utc"]}
+            {
+                "field_id": fid,
+                "dataset_class": "real",
+                "independent_field": True,
+                "release": p["release"],
+                "independence_group_id": p["independence_group_id"],
+                "science_manifest_sha256": p["science_manifest_sha256"],
+                "preregistration_sha256": p["preregistration_sha256"],
+                "footprint": p["footprint"],
+                "footprint_sha256": p["footprint_sha256"],
+                "custodian_id": p["custodian_id"],
+                "attested_utc": p["attested_utc"],
+                "signed_attestation": dict(by_id[fid]["field_independence_attestation"]),
+            }
             for fid, p in sorted(verified.items())
         ],
     }

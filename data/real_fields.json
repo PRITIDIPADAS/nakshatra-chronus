@@ -1,0 +1,82 @@
+{
+ "source": "docs/SPHEREX_MULTIFIELD_JY_REVALIDATION_2026-11-25.md and docs/CHRONOS_5_EMPIRICAL_STATUS_2026-11-25.md; GitHub Actions runs 45637115746, 45639895735, 45623016499",
+ "release": "SPHEREx DR1 Level-2, detector D2, one native 2040 x 2040 exposure per field, 20 injections per flux level",
+ "levels": [
+  "0.5 x local 5 sigma",
+  "1 x local 5 sigma",
+  "2 x local 5 sigma"
+ ],
+ "fields": [
+  {
+   "name": "M101",
+   "obs": "2025W19_2B_0346_1",
+   "five_sigma_ujy": 108.396,
+   "recovered": [
+    5,
+    14,
+    17
+   ]
+  },
+  {
+   "name": "High latitude control",
+   "obs": "2025W20_1C_0491_1",
+   "five_sigma_ujy": 114.063,
+   "recovered": [
+    6,
+    13,
+    17
+   ]
+  },
+  {
+   "name": "Perseus / NGC 1333",
+   "obs": "2025W34_1B_0227_1",
+   "five_sigma_ujy": 161.588,
+   "recovered": [
+    3,
+    5,
+    12
+   ]
+  },
+  {
+   "name": "Orion A",
+   "obs": "2025W37_1A_0365_1",
+   "five_sigma_ujy": 159.317,
+   "recovered": [
+    3,
+    5,
+    11
+   ]
+  },
+  {
+   "name": "Rho Ophiuchi",
+   "obs": "2025W31_2A_0170_1",
+   "five_sigma_ujy": 204.96,
+   "recovered": [
+    2,
+    4,
+    9
+   ]
+  },
+  {
+   "name": "Taurus / Auriga",
+   "obs": "2025W35_1A_0331_1",
+   "five_sigma_ujy": 178.374,
+   "recovered": [
+    3,
+    3,
+    8
+   ]
+  },
+  {
+   "name": "Lupus III",
+   "obs": "2025W32_1A_0663_1",
+   "five_sigma_ujy": 211.158,
+   "recovered": [
+    0,
+    0,
+    0
+   ]
+  }
+ ],
+ "n_per_level": 20
+}

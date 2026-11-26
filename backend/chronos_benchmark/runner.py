@@ -1,0 +1,751 @@
+"""Common-input four-baseline benchmark and reproducible comparison reports.
+
+This module evaluates detector outputs produced elsewhere. It does not silently
+run a different field, mask, exposure set or truth catalogue for any baseline.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+from typing import Any, Mapping, Sequence
+
+import numpy as np
+
+from chronos_addons.validation import score_recovery, wilson_interval
+
+REQUIRED_METHODS = (
+    "snr_only",
+    "chronos_pda",
+    "instrument_forensics",
+    "sky_detector_twin",
+)
+SCHEMA = "chronos-four-baseline-package/1.0"
+_SHA256 = set("0123456789abcdef")
+
+
+def canonical_json(value: Any) -> bytes:
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
+
+
+def sha256_json(value: Any) -> str:
+    return hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def _require_sha(value: Any, label: str) -> str:
+    token = str(value).lower()
+    if len(token) != 64 or not set(token) <= _SHA256:
+        raise ValueError(f"{label} must be a 64-character SHA-256 hex digest")
+    return token
+
+
+def truth_catalogue_digest(rows: Sequence[Mapping[str, Any]]) -> str:
+    normal = []
+    seen = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise ValueError(f"truth row {index} must be an object")
+        if "truth_id" not in row or "x" not in row or "y" not in row:
+            raise ValueError(f"truth row {index} requires truth_id, x and y")
+        truth_id = str(row["truth_id"])
+        if not truth_id or truth_id in seen:
+            raise ValueError("truth IDs must be non-empty and unique within a field")
+        seen.add(truth_id)
+        x, y = float(row["x"]), float(row["y"])
+        if not math.isfinite(x) or not math.isfinite(y):
+            raise ValueError(f"truth row {index} coordinates must be finite")
+        item = {k: v for k, v in row.items()}
+        for key in ("flux", "flux_sigma"):
+            if item.get(key) is not None:
+                item[key] = float(item[key])
+                if not math.isfinite(item[key]) or (key == "flux_sigma" and item[key] <= 0):
+                    raise ValueError(f"truth row {index} has invalid {key}")
+        item["truth_id"] = truth_id
+        item["x"], item["y"] = x, y
+        normal.append(item)
+    normal.sort(key=lambda item: item["truth_id"])
+    return sha256_json(normal)
+
+
+def _validate_signature(signature: Mapping[str, Any], truth_rows) -> dict[str, Any]:
+    required = (
+        "field_id", "dataset_class", "exposure_ids", "mask_sha256",
+        "truth_catalogue_sha256", "coordinate_frame", "coordinate_unit",
+    )
+    missing = [key for key in required if key not in signature]
+    if missing:
+        raise ValueError("input_signature is missing: " + ", ".join(missing))
+    out = dict(signature)
+    out["field_id"] = str(out["field_id"])
+    if not out["field_id"]:
+        raise ValueError("field_id cannot be blank")
+    if out["dataset_class"] not in {"real", "synthetic", "illustrative", "unverified"}:
+        raise ValueError("dataset_class must be real, synthetic, illustrative or unverified")
+    exposures = [str(x) for x in out["exposure_ids"]]
+    if not exposures or any(not x for x in exposures) or len(set(exposures)) != len(exposures):
+        raise ValueError("exposure_ids must be non-empty and unique")
+    out["exposure_ids"] = sorted(exposures)
+    out["mask_sha256"] = _require_sha(out["mask_sha256"], "mask_sha256")
+    out["truth_catalogue_sha256"] = _require_sha(
+        out["truth_catalogue_sha256"], "truth_catalogue_sha256"
+    )
+    actual_truth_digest = truth_catalogue_digest(truth_rows)
+    if actual_truth_digest != out["truth_catalogue_sha256"]:
+        raise ValueError("truth catalogue digest does not match input_signature")
+    if out["coordinate_frame"] not in {"sky", "detector"}:
+        raise ValueError("coordinate_frame must be sky or detector")
+    if out["coordinate_unit"] not in {"pixel", "arcsec"}:
+        raise ValueError("coordinate_unit must be pixel or arcsec")
+    if out["coordinate_frame"] == "sky" and out["coordinate_unit"] == "pixel":
+        if not out.get("pixel_wcs_sha256"):
+            raise ValueError("sky-pixel matching requires pixel_wcs_sha256")
+    if out.get("pipeline_input_sha256") is not None:
+        out["pipeline_input_sha256"] = _require_sha(
+            out["pipeline_input_sha256"], "pipeline_input_sha256"
+        )
+    return out
+
+
+def _normalise_detections(method: str, rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(rows, (list, tuple)):
+        raise ValueError(f"{method}.detections must be a list; use [] for no detections")
+    out = []
+    seen = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise ValueError(f"{method} detection {index} must be an object")
+        missing = [k for k in ("detection_id", "x", "y", "score", "provenance") if k not in row]
+        if missing:
+            raise ValueError(f"{method} detection {index} is missing: {', '.join(missing)}")
+        detection_id = str(row["detection_id"])
+        if not detection_id or detection_id in seen:
+            raise ValueError(f"{method} detection IDs must be non-empty and unique")
+        seen.add(detection_id)
+        x, y, score = float(row["x"]), float(row["y"]), float(row["score"])
+        if not all(math.isfinite(v) for v in (x, y, score)):
+            raise ValueError(f"{method} detection {index} has a non-finite coordinate or score")
+        provenance = row["provenance"]
+        if not isinstance(provenance, Mapping) or not provenance:
+            raise ValueError(f"{method} detection {index} needs non-empty provenance")
+        item = dict(row)
+        for key in ("flux", "flux_sigma", "flux_uncertainty"):
+            if item.get(key) is not None:
+                item[key] = float(item[key])
+                if not math.isfinite(item[key]) or (key in {"flux_sigma", "flux_uncertainty"} and item[key] <= 0):
+                    raise ValueError(f"{method} detection {index} has invalid {key}")
+        if item.get("flux_sigma") is not None and item.get("flux_uncertainty") is not None:
+            raise ValueError(f"{method} detection {index} must use only one flux uncertainty field")
+        item.update(detection_id=detection_id, x=x, y=y, score=score,
+                    provenance=dict(provenance))
+        out.append(item)
+    return out
+
+
+def _summarise_astrometry(matches: list[dict[str, Any]]) -> dict[str, Any]:
+    values = [float(row["separation"]) for row in matches]
+    if not values:
+        return {"n": 0, "median": None, "p95": None, "rmse": None, "unit": "input coordinate unit"}
+    arr = np.asarray(values, dtype=float)
+    return {
+        "n": len(values),
+        "median": float(np.median(arr)),
+        "p95": float(np.percentile(arr, 95)),
+        "rmse": float(np.sqrt(np.mean(arr ** 2))),
+        "unit": "input coordinate unit",
+    }
+
+
+def _summarise_flux(matches: list[dict[str, Any]]) -> dict[str, Any]:
+    paired = [row for row in matches if row.get("flux_bias") is not None]
+    bias = np.asarray([float(row["flux_bias"]) for row in paired], dtype=float)
+    fractional = np.asarray([float(row["fractional_flux_bias"]) for row in paired
+                             if row.get("fractional_flux_bias") is not None], dtype=float)
+    pulls = np.asarray([float(row["flux_pull"]) for row in paired
+                        if row.get("flux_pull") is not None], dtype=float)
+    return {
+        "n_flux_matches": int(len(paired)),
+        "median_flux_bias": float(np.median(bias)) if bias.size else None,
+        "median_fractional_flux_bias": float(np.median(fractional)) if fractional.size else None,
+        "flux_pull_rms": float(np.sqrt(np.mean(pulls ** 2))) if pulls.size else None,
+        "uncertainty_coverage_68": float(np.mean(np.abs(pulls) <= 1.0)) if pulls.size else None,
+        "uncertainty_coverage_95": float(np.mean(np.abs(pulls) <= 1.959963984540054)) if pulls.size else None,
+        "warning": "Flux bias and uncertainty coverage are reported only where truth flux and detection uncertainty were provided.",
+    }
+
+
+def _evaluate_field_method(truth_rows, detections, thresholds, match_radius):
+    truth_ids = [str(row["truth_id"]) for row in truth_rows]
+    truth_xy = [[float(row["x"]), float(row["y"])] for row in truth_rows]
+    curve = []
+    for threshold in thresholds:
+        selected = [row for row in detections if row["score"] >= threshold]
+        found = [[row["x"], row["y"]] for row in selected]
+        metric = score_recovery(truth_xy, found, match_radius=match_radius)
+        pairs = metric["matched_pairs"]
+        matched = []
+        used_truth = set()
+        used_detection = set()
+        for pair in pairs:
+            ti, di = int(pair["truth_index"]), int(pair["detection_index"])
+            det = selected[di]
+            truth = truth_rows[ti]
+            used_truth.add(ti)
+            used_detection.add(di)
+            matched_row = {
+                "truth_id": truth_ids[ti],
+                "detection_id": det["detection_id"],
+                "separation": float(pair["separation"]),
+                "score": det["score"],
+                "provenance": det["provenance"],
+            }
+            truth_flux = truth.get("flux")
+            detected_flux = det.get("flux")
+            flux_sigma = det.get("flux_sigma", det.get("flux_uncertainty"))
+            if truth_flux is not None and detected_flux is not None:
+                bias = float(detected_flux) - float(truth_flux)
+                matched_row["truth_flux"] = float(truth_flux)
+                matched_row["detected_flux"] = float(detected_flux)
+                matched_row["flux_bias"] = bias
+                matched_row["fractional_flux_bias"] = bias / float(truth_flux) if float(truth_flux) != 0 else None
+                matched_row["reported_flux_sigma"] = flux_sigma
+                if flux_sigma is not None:
+                    matched_row["flux_pull"] = bias / float(flux_sigma)
+            matched.append(matched_row)
+        unmatched = [
+            {"detection_id": row["detection_id"], "x": row["x"], "y": row["y"],
+             "score": row["score"], "provenance": row["provenance"]}
+            for index, row in enumerate(selected) if index not in used_detection
+        ]
+        missed = [truth_ids[index] for index in range(len(truth_rows)) if index not in used_truth]
+        residuals = _summarise_astrometry(matched)
+        curve.append({
+            "threshold": float(threshold),
+            "detection_count": int(metric["detection_count"]),
+            "true_positive": int(metric["true_positive"]),
+            "false_positive": int(metric["false_positive"]),
+            "false_negative": int(metric["false_negative"]),
+            "precision": metric["precision"],
+            "completeness": metric["recall_completeness"],
+            "false_candidates_per_field": int(metric["false_candidates_per_field"]),
+            "precision_wilson_95": metric["precision_wilson_95"],
+            "completeness_wilson_95": metric["recall_wilson_95"],
+            "astrometric_residuals": residuals,
+            "flux_metrics": _summarise_flux(matched),
+            "matched": matched,
+            "unmatched_detections": unmatched,
+            "non_detections": missed,
+        })
+    return curve
+
+
+def _aggregate_point(field_points: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    tp = sum(int(row["true_positive"]) for row in field_points)
+    fp = sum(int(row["false_positive"]) for row in field_points)
+    fn = sum(int(row["false_negative"]) for row in field_points)
+    n_fields = len(field_points)
+    residuals = [
+        float(match["separation"])
+        for field in field_points for match in field["matched"]
+    ]
+    residual_array = np.asarray(residuals, dtype=float)
+    return {
+        "field_count": n_fields,
+        "true_positive": tp,
+        "false_positive": fp,
+        "false_negative": fn,
+        "precision": tp / (tp + fp) if tp + fp else None,
+        "completeness": tp / (tp + fn) if tp + fn else None,
+        "false_candidates_per_field": fp / n_fields if n_fields else None,
+        "precision_wilson_95": wilson_interval(tp, tp + fp) if tp + fp else None,
+        "completeness_wilson_95": wilson_interval(tp, tp + fn) if tp + fn else None,
+        "astrometric_residuals": {
+            "n": int(residual_array.size),
+            "median": float(np.median(residual_array)) if residual_array.size else None,
+            "p95": float(np.percentile(residual_array, 95)) if residual_array.size else None,
+            "rmse": float(np.sqrt(np.mean(residual_array ** 2))) if residual_array.size else None,
+        },
+        "flux_metrics": _summarise_flux([
+            match for field in field_points for match in field.get("matched", [])
+        ]),
+    }
+
+
+def _field_bootstrap(field_points, *, draws: int, seed: int) -> dict[str, Any]:
+    grouped = {}
+    for index, row in enumerate(field_points):
+        group_id = str(row.get("independence_group_id") or row.get("field_id") or f"field-{index}")
+        grouped.setdefault(group_id, []).append(row)
+    group_ids = sorted(grouped)
+    if len(group_ids) < 2:
+        return {
+            "draws": 0,
+            "seed": int(seed),
+            "independent_group_count": len(group_ids),
+            "intervals_95": None,
+            "warning": "At least two independent sky-field groups are required for field-level bootstrap intervals.",
+        }
+    rng = np.random.default_rng(seed)
+    names = ("precision", "completeness", "false_candidates_per_field")
+    samples = {name: [] for name in names}
+    n_groups = len(group_ids)
+    for _ in range(int(draws)):
+        picked = rng.integers(0, n_groups, size=n_groups)
+        block = []
+        for index in picked:
+            block.extend(grouped[group_ids[int(index)]])
+        point = _aggregate_point(block)
+        for name in names:
+            value = point[name]
+            if value is not None and math.isfinite(float(value)):
+                samples[name].append(float(value))
+    return {
+        "draws": int(draws),
+        "seed": int(seed),
+        "independent_group_count": n_groups,
+        "intervals_95": {
+            name: (
+                [float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))]
+                if values else None
+            )
+            for name, values in samples.items()
+        },
+        "resampling_unit": "independent sky-field group (related observing periods resampled together)",
+    }
+
+
+def _select_operating_point(curve, target_metric, target):
+    if target_metric == "false_candidates_per_field":
+        getter = lambda row: row["false_candidates_per_field"]
+    else:
+        getter = lambda row: row["completeness"]
+    candidates = [row for row in curve if getter(row) is not None]
+    if not candidates:
+        return None
+    chosen = min(
+        candidates,
+        key=lambda row: (abs(float(getter(row)) - float(target)), -float(row["threshold"])),
+    )
+    return {
+        "threshold": chosen["threshold"],
+        "observed_value": getter(chosen),
+        "target_value": float(target),
+        "absolute_target_difference": abs(float(getter(chosen)) - float(target)),
+        "point": chosen,
+        "selection_rule": "nearest observed operating point; no interpolated detections",
+    }
+
+
+def _paired_superiority_bootstrap(per_field, matched, *, draws: int, seed: int):
+    """Paired field-group bootstrap at each method's frozen matched-FPF threshold."""
+    operating_points = {}
+    for method in REQUIRED_METHODS:
+        selected = (matched.get(method) or {}).get("false_candidates_per_field")
+        if not selected or not selected.get("point"):
+            return {
+                "status": "not_evaluable_without_matched_false_candidate_target",
+                "superiority_supported": False,
+                "comparisons": {},
+            }
+        by_field = selected["point"].get("by_field") or []
+        operating_points[method] = {str(row["field_id"]): row for row in by_field}
+
+    grouped_ids = {}
+    for row in per_field:
+        grouped_ids.setdefault(
+            str(row.get("independence_group_id") or row["field_id"]), []
+        ).append(str(row["field_id"]))
+    group_ids = sorted(grouped_ids)
+    if len(group_ids) < 2:
+        return {
+            "status": "insufficient_independent_field_groups",
+            "superiority_supported": False,
+            "independent_group_count": len(group_ids),
+            "comparisons": {},
+        }
+
+    rng = np.random.default_rng(int(seed))
+    comparisons = {}
+    comparator_count = len(REQUIRED_METHODS) - 1
+    bonferroni_tail_percent = 100.0 * 0.05 / (2.0 * comparator_count)
+    for comparator in REQUIRED_METHODS:
+        if comparator == "sky_detector_twin":
+            continue
+        delta_completeness = []
+        delta_false_candidates = []
+        for _ in range(int(draws)):
+            picked = rng.integers(0, len(group_ids), size=len(group_ids))
+            twin_rows, comparator_rows = [], []
+            for group_index in picked:
+                for field_id in grouped_ids[group_ids[int(group_index)]]:
+                    twin_rows.append(operating_points["sky_detector_twin"][field_id])
+                    comparator_rows.append(operating_points[comparator][field_id])
+            twin = _aggregate_point(twin_rows)
+            base = _aggregate_point(comparator_rows)
+            if twin["completeness"] is not None and base["completeness"] is not None:
+                delta_completeness.append(
+                    float(twin["completeness"] - base["completeness"])
+                )
+            if (twin["false_candidates_per_field"] is not None
+                    and base["false_candidates_per_field"] is not None):
+                delta_false_candidates.append(float(
+                    twin["false_candidates_per_field"] - base["false_candidates_per_field"]
+                ))
+        comparisons[comparator] = {
+            "delta_completeness_twin_minus_comparator": {
+                "mean": float(np.mean(delta_completeness)) if delta_completeness else None,
+                "familywise_95_interval_bonferroni": (
+                    [float(np.percentile(delta_completeness, bonferroni_tail_percent)),
+                     float(np.percentile(delta_completeness, 100.0 - bonferroni_tail_percent))]
+                    if delta_completeness else None
+                ),
+                "bootstrap_draws_with_defined_metric": len(delta_completeness),
+            },
+            "delta_false_candidates_per_field_twin_minus_comparator": {
+                "mean": float(np.mean(delta_false_candidates)) if delta_false_candidates else None,
+                "familywise_95_interval_bonferroni": (
+                    [float(np.percentile(delta_false_candidates, bonferroni_tail_percent)),
+                     float(np.percentile(delta_false_candidates, 100.0 - bonferroni_tail_percent))]
+                    if delta_false_candidates else None
+                ),
+                "bootstrap_draws_with_defined_metric": len(delta_false_candidates),
+            },
+        }
+    return {
+        "status": "paired_field_group_bootstrap_completed",
+        "independent_group_count": len(group_ids),
+        "draws": int(draws),
+        "seed": int(seed),
+        "resampling_unit": "independent sky-field group; paired same group for Twin and comparator",
+        "operating_point_policy": "each method's nearest frozen false-candidates-per-field threshold; no interpolation",
+        "multiple_comparison_interval": "two-sided 95% family-wise Bonferroni intervals across the three Twin-versus-comparator tests",
+        "comparisons": comparisons,
+        "superiority_supported": False,
+        "note": "A superiority verdict additionally requires a verified real blind protocol, a predeclared false-candidate non-inferiority margin, correction across comparator tests and all paired confidence-bound gates.",
+    }
+
+
+def compare_benchmark_package(package: Mapping[str, Any], *, bootstrap_draws: int = 2000,
+                              seed: int = 20261125,
+                              verified_blind_protocol: bool = False) -> dict[str, Any]:
+    """Compare the four methods only after validating identical field inputs."""
+    if package.get("schema") != SCHEMA:
+        raise ValueError(f"package schema must be {SCHEMA}")
+    fields = package.get("fields")
+    if not isinstance(fields, list) or not fields:
+        raise ValueError("package.fields must contain at least one field")
+    if int(bootstrap_draws) < 100:
+        raise ValueError("bootstrap_draws must be at least 100 for reported intervals")
+    target = package.get("matched_target")
+    if not isinstance(target, Mapping) or not target or len(target) > 2:
+        raise ValueError("matched_target must contain false_candidates_per_field, completeness or both")
+    allowed_targets = {"false_candidates_per_field", "completeness"}
+    if not set(target).issubset(allowed_targets):
+        raise ValueError("matched_target has an unsupported metric")
+    target_values = {}
+    for target_metric, raw_value in target.items():
+        target_value = float(raw_value)
+        if not math.isfinite(target_value) or target_value < 0 or (
+            target_metric == "completeness" and not 0 < target_value <= 1
+        ):
+            raise ValueError(f"matched target {target_metric} is outside its valid range")
+        target_values[target_metric] = target_value
+
+    thresholds_by_method = package.get("score_thresholds")
+    if not isinstance(thresholds_by_method, Mapping):
+        raise ValueError("score_thresholds must define a threshold list for every baseline")
+    missing = [name for name in REQUIRED_METHODS if name not in thresholds_by_method]
+    if missing:
+        raise ValueError("score_thresholds is missing: " + ", ".join(missing))
+    threshold_map = {}
+    for method in REQUIRED_METHODS:
+        values = sorted({float(x) for x in thresholds_by_method[method]}, reverse=True)
+        if not values or any(not math.isfinite(x) for x in values):
+            raise ValueError(f"{method} needs at least one finite score threshold")
+        threshold_map[method] = values
+
+    field_ids = []
+    per_field = []
+    method_field_points = {name: [] for name in REQUIRED_METHODS}
+    expected_signature = None
+    dataset_classes = set()
+    for index, field in enumerate(fields):
+        signature = _validate_signature(field.get("input_signature") or {}, field.get("truth_catalogue") or [])
+        field_id = signature["field_id"]
+        if field_id in field_ids:
+            raise ValueError(f"duplicate field_id: {field_id}")
+        field_ids.append(field_id)
+        dataset_classes.add(signature["dataset_class"])
+        if field.get("split") not in {"development", "blind_test", "held_out", "not_split"}:
+            raise ValueError(f"field {field_id} must declare split")
+        methods = field.get("methods")
+        if not isinstance(methods, Mapping):
+            raise ValueError(f"field {field_id} is missing method records")
+        missing_methods = [name for name in REQUIRED_METHODS if name not in methods]
+        if missing_methods:
+            raise ValueError(f"field {field_id} is missing methods: {', '.join(missing_methods)}")
+        for method in REQUIRED_METHODS:
+            record = methods[method]
+            if not isinstance(record, Mapping):
+                raise ValueError(f"{field_id}.{method} must be an object")
+            method_signature = _validate_signature(
+                record.get("input_signature") or {}, field.get("truth_catalogue") or []
+            )
+            if method_signature != signature:
+                raise ValueError(
+                    f"{field_id}.{method} input signature differs from the common field signature"
+                )
+            method_field_points[method].append(record)
+        if expected_signature is None:
+            expected_signature = {
+                "coordinate_frame": signature["coordinate_frame"],
+                "coordinate_unit": signature["coordinate_unit"],
+            }
+        elif (
+            signature["coordinate_frame"] != expected_signature["coordinate_frame"]
+            or signature["coordinate_unit"] != expected_signature["coordinate_unit"]
+        ):
+            raise ValueError("all fields in one benchmark must use the same coordinate frame and unit")
+
+        control_type = str(field.get("control_type", "science"))
+        allowed_controls = {
+            "science", "empty_field", "negative_control",
+            "shuffled_time_control", "detector_pattern_control",
+        }
+        if control_type not in allowed_controls:
+            raise ValueError(f"field {field_id}: unsupported control_type {control_type!r}")
+        injection_stratum = field.get("injection_stratum") or {}
+        if not isinstance(injection_stratum, Mapping):
+            raise ValueError(f"field {field_id}: injection_stratum must be an object")
+        radius = float(field.get("match_radius", 0))
+        if not math.isfinite(radius) or radius <= 0:
+            raise ValueError(f"field {field_id} needs a positive match_radius")
+        area = field.get("field_area_deg2")
+        if area is not None and (not math.isfinite(float(area)) or float(area) <= 0):
+            raise ValueError(f"field {field_id} has invalid field_area_deg2")
+        truth = field["truth_catalogue"]
+        method_curves = {}
+        for method in REQUIRED_METHODS:
+            detections = _normalise_detections(
+                method, methods[method].get("detections", [])
+            )
+            curve = _evaluate_field_method(truth, detections, threshold_map[method], radius)
+            method_curves[method] = curve
+        independence_group_id = str(field.get("independence_group_id") or field_id)
+        if not independence_group_id:
+            raise ValueError(f"field {field_id}: independence_group_id cannot be blank")
+        per_field.append({
+            "field_id": field_id,
+            "independence_group_id": independence_group_id,
+            "dataset_class": signature["dataset_class"],
+            "split": field["split"],
+            "control_type": control_type,
+            "injection_stratum": dict(injection_stratum),
+            "input_signature": signature,
+            "match_radius": radius,
+            "field_area_deg2": float(area) if area is not None else None,
+            "truth_count": len(truth),
+            "method_curves": method_curves,
+        })
+
+    aggregate = {}
+    matched = {}
+    for method in REQUIRED_METHODS:
+        threshold_points = []
+        for threshold in threshold_map[method]:
+            selected_fields = []
+            for field_report in per_field:
+                field_curve = field_report["method_curves"][method]
+                point = next(row for row in field_curve if row["threshold"] == threshold)
+                selected_fields.append(point)
+            point = _aggregate_point(selected_fields)
+            point["threshold"] = threshold
+            control_groups = {}
+            stratum_groups = {}
+            for report, field_point in zip(per_field, selected_fields):
+                control_groups.setdefault(report["control_type"], []).append(field_point)
+                for dimension, value in report["injection_stratum"].items():
+                    stratum_groups.setdefault(str(dimension), {}).setdefault(str(value), []).append(field_point)
+            point["by_control_type"] = {
+                label: _aggregate_point(rows)
+                for label, rows in sorted(control_groups.items())
+            }
+            point["by_injection_stratum"] = {
+                dimension: {
+                    label: _aggregate_point(rows)
+                    for label, rows in sorted(groups.items())
+                }
+                for dimension, groups in sorted(stratum_groups.items())
+            }
+            point["by_field"] = [
+                {"field_id": field_report["field_id"], **next(
+                    row for row in field_report["method_curves"][method]
+                    if row["threshold"] == threshold
+                )}
+                for field_report in per_field
+            ]
+            threshold_points.append(point)
+        bootstrap_by_threshold = {}
+        for index, threshold in enumerate(threshold_map[method]):
+            bootstrap_by_threshold[str(threshold)] = _field_bootstrap(
+                [{
+                    "field_id": report["field_id"],
+                    "independence_group_id": report["independence_group_id"],
+                    **next(row for row in report["method_curves"][method]
+                           if row["threshold"] == threshold),
+                } for report in per_field],
+                draws=bootstrap_draws, seed=seed + index,
+            )
+        aggregate[method] = {
+            "threshold_curve": threshold_points,
+            "field_bootstrap_by_threshold": bootstrap_by_threshold,
+        }
+        matched[method] = {
+            metric: _select_operating_point(threshold_points, metric, target_value)
+            for metric, target_value in target_values.items()
+        }
+
+    blind_record = package.get("blind_evaluation") or {}
+    preregistration_sha = str(blind_record.get("preregistration_sha256", "")).lower()
+    preregistration_valid = (
+        len(preregistration_sha) == 64
+        and set(preregistration_sha) <= _SHA256
+    )
+    real_heldout = (
+        dataset_classes == {"real"}
+        and all(row["split"] in {"blind_test", "held_out"} for row in per_field)
+    )
+    unblind_record = blind_record.get("unblinding_record") or {}
+    custodian_attestation_valid = blind_record.get("custodian_attestation_verified") is True
+    scientifically_eligible = bool(
+        verified_blind_protocol and custodian_attestation_valid
+        and real_heldout and preregistration_valid
+        and blind_record.get("configuration_freeze_verified") is True
+        and blind_record.get("truth_released_after_run_freeze") is True
+        and bool(unblind_record.get("encrypted_truth_store_sha256"))
+        and bool(unblind_record.get("heldout_field_tokens_processed"))
+    )
+    eligibility_reasons = []
+    if not verified_blind_protocol:
+        eligibility_reasons.append("blind_unblinding_not_verified_by_custodian_path")
+    if not custodian_attestation_valid:
+        eligibility_reasons.append("independent_custodian_attestation_missing_or_invalid")
+    if not real_heldout:
+        eligibility_reasons.append("requires_only_real_heldout_fields")
+    if not preregistration_valid:
+        eligibility_reasons.append("preregistration_sha256_missing_or_invalid")
+    if blind_record.get("configuration_freeze_verified") is not True:
+        eligibility_reasons.append("frozen_configuration_not_verified")
+    if blind_record.get("truth_released_after_run_freeze") is not True:
+        eligibility_reasons.append("truth_release_order_not_verified")
+    if not unblind_record.get("encrypted_truth_store_sha256") or not unblind_record.get("heldout_field_tokens_processed"):
+        eligibility_reasons.append("unblinding_record_incomplete")
+    paired_superiority = _paired_superiority_bootstrap(
+        per_field, matched, draws=bootstrap_draws, seed=seed + 100003
+    )
+    false_candidate_margin = blind_record.get("false_candidate_noninferiority_margin")
+    margin_valid = (
+        isinstance(false_candidate_margin, (int, float))
+        and math.isfinite(float(false_candidate_margin))
+        and float(false_candidate_margin) >= 0
+    )
+    comparator_gates = []
+    for comparator, values in paired_superiority.get("comparisons", {}).items():
+        comp_ci = (values["delta_completeness_twin_minus_comparator"]
+                   ["familywise_95_interval_bonferroni"])
+        fpf_ci = (values["delta_false_candidates_per_field_twin_minus_comparator"]
+                  ["familywise_95_interval_bonferroni"])
+        comparator_gates.append(bool(
+            comp_ci is not None and comp_ci[0] > 0
+            and fpf_ci is not None and margin_valid
+            and fpf_ci[1] <= float(false_candidate_margin)
+        ))
+    paired_superiority["predeclared_false_candidate_noninferiority_margin"] = (
+        float(false_candidate_margin) if margin_valid else None
+    )
+    paired_superiority["multiple_comparator_correction"] = {
+        "required": True,
+        "method": "bonferroni_95_familywise",
+        "verified_predeclared": blind_record.get("multiple_comparison_correction") == "bonferroni_95_familywise",
+        "note": "The paired percentile bootstrap intervals use two-sided 1 - 0.05/3 coverage per comparator, providing a Bonferroni 95% family-wise interval family."
+    }
+    paired_superiority["superiority_supported"] = bool(
+        scientifically_eligible and margin_valid
+        and len(comparator_gates) == 3 and all(comparator_gates)
+        and paired_superiority.get("status") == "paired_field_group_bootstrap_completed"
+        and blind_record.get("multiple_comparison_correction") == "bonferroni_95_familywise"
+    )
+    if not scientifically_eligible:
+        paired_superiority["verdict_status"] = "not_scientifically_eligible"
+    elif not margin_valid:
+        paired_superiority["verdict_status"] = "missing_predeclared_false_candidate_noninferiority_margin"
+    elif not blind_record.get("multiple_comparison_correction"):
+        paired_superiority["verdict_status"] = "missing_predeclared_multiple_comparison_correction"
+    elif paired_superiority["superiority_supported"]:
+        paired_superiority["verdict_status"] = "superiority_gate_passed"
+    else:
+        paired_superiority["verdict_status"] = "superiority_not_established"
+
+    return {
+        "schema": "chronos-four-baseline-report/1.0",
+        "benchmark_id": str(package.get("benchmark_id", "unnamed")),
+        "methods": list(REQUIRED_METHODS),
+        "fields": per_field,
+        "aggregate": aggregate,
+        "matched_operating_points": {
+            "targets": target_values,
+            "methods": matched,
+            "interpretation": "Each target is matched independently using the nearest observed threshold for each method.",
+        },
+        "paired_superiority": paired_superiority,
+        "reproducibility": {
+            "input_signature_fields": [
+                "field_id", "dataset_class", "exposure_ids", "mask_sha256",
+                "truth_catalogue_sha256", "coordinate_frame", "coordinate_unit",
+            ],
+            "score_thresholds": threshold_map,
+            "matching_radii_by_field": {
+                row["field_id"]: row["match_radius"] for row in per_field
+            },
+            "bootstrap_draws": int(bootstrap_draws),
+            "bootstrap_seed": int(seed),
+            "truth_catalogue_digests_verified": True,
+            "same_input_enforced_for_all_methods": True,
+        },
+        "scientific_claim_eligible": scientifically_eligible,
+        "scientific_eligibility_reasons": eligibility_reasons,
+        "blind_evaluation": blind_record,
+        "ood_reporting": {
+            "field_labels_present": all(row.get("ood_status", "not_labelled") != "not_labelled" for row in per_field),
+            "status_by_field": {row["field_id"]: row.get("ood_status", "not_labelled") for row in per_field},
+            "note": "OOD labels are supplied field strata; no OOD detector is inferred by this evaluator.",
+        },
+        "evaluation_strata": {
+            label: {
+                method: _aggregate_point([
+                    next(point for point in field["method_curves"][method]
+                         if point["threshold"] == threshold_map[method][0])
+                    for field in per_field if str(field.get("evaluation_stratum", "unspecified")) == label
+                ])
+                for method in REQUIRED_METHODS
+            }
+            for label in sorted({str(field.get("evaluation_stratum", "unspecified")) for field in per_field})
+        },
+        "interpretation": (
+            "All four methods were evaluated on the same declared field inputs and truth catalogues. "
+            "This report does not establish a performance advantage unless it is based on independent, "
+            "real, held-out fields and a preregistered threshold policy."
+        ),
+        "limitations": [
+            "This evaluator scores supplied detector records; method execution must be performed by the same frozen pipeline runner.",
+            "Matched operating points select the nearest observed threshold and do not interpolate detections.",
+            "Field bootstrap intervals require independent fields and do not correct selection bias.",
+            "For sky-coordinate arcsecond comparisons, the same validated WCS transform and coordinate convention must be used for truth and detections.",
+            "No winner is declared by this report.",
+            "Scientific eligibility requires the verified blind-unblinding path, a preregistration digest and a custodian unblinding record.",
+            "Flux metrics are available only when truth flux and reported detection uncertainty are supplied.",
+            "OOD stratification is descriptive and depends on externally predeclared field labels.",
+        ],
+    }

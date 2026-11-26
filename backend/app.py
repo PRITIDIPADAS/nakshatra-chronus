@@ -16,6 +16,7 @@ import core
 import extras
 import observatory
 from chronos_addons.api import router as chronos_addons_router
+from chronos_causal.api import router as chronos_causal_router
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONT = os.path.join(ROOT, "frontend")
@@ -45,6 +46,7 @@ observatory.TARGETS.update(TARGETS)
 app.include_router(extras.router)
 app.include_router(observatory.router)
 app.include_router(chronos_addons_router)
+app.include_router(chronos_causal_router)
 
 
 def ex(i):

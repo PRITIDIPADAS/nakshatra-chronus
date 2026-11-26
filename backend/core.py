@@ -55,6 +55,13 @@ class Exp:
     notes: list = field(default_factory=list)
     dxy: tuple = (0.0, 0.0)  # detector pixel of cutout pixel 0, 0 (alternate WCS A in real files)
     frame: str = ""  # exposures with the same frame were taken at the same time (one array on each side of the dichroic)
+    source_uri: str = ""
+    source_observation_id: str = ""
+    source_sha256: str = ""
+    image_unit: str = "MJy/sr"
+    source_exposure_time_s: float = 0.0
+    detector_origin_xy: tuple | None = None
+
 
     @property
     def core(self):
@@ -495,7 +502,12 @@ def ratio_rows(exps, rows):
 
 
 def forecast(e, sed):
-    """Expected signal to noise of the target in one exposure from an AB magnitude model. Made before any measurement."""
+    """Legacy planning estimate at the displayed channel; not calibrated science photometry.
+
+    Scientific colour matching and CHRONOS 5 inference independently require a
+    verified CWAVE/CBAND wavelength. This planning-only forecast preserves the
+    original observatory's approximate display-channel estimate.
+    """
     m = model_mag(sed, e.lam)
     yy, xx = np.indices(e.img.shape)
     x, y = e.xy

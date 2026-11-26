@@ -18,6 +18,30 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE = os.path.join(ROOT, "cache")
 TARGETS = {}
 MEMO = {}
+MEMO_MAX = 32
+CACHE_MB = float(os.environ.get("CHRONOS_CACHE_MB", "512"))
+
+
+def _remember(k, v):
+    MEMO[k] = v
+    while len(MEMO) > MEMO_MAX:
+        MEMO.pop(next(iter(MEMO)))
+
+
+def prune_cache(limit_mb=None):
+    """Delete the oldest cached investigations until the folder fits the size limit."""
+    limit = (CACHE_MB if limit_mb is None else limit_mb) * 1e6
+    if not os.path.isdir(CACHE):
+        return 0
+    files = [os.path.join(CACHE, f) for f in os.listdir(CACHE) if f.startswith("inv_")]
+    files.sort(key=os.path.getmtime)
+    total, removed = sum(os.path.getsize(f) for f in files), 0
+    while files and total > limit:
+        f = files.pop(0)
+        total -= os.path.getsize(f)
+        os.remove(f)
+        removed += 1
+    return removed
 FIELDS = {
     "demo": dict(name="Practice field", center=(150.11917, 2.20583), seed=3, note="A quiet patch with one of each kind of change planted."),
     "quiet": dict(name="Control field (nothing planted)", center=(210.8, 54.35), seed=4, events="none",
@@ -103,11 +127,13 @@ def cached(key, mode, ra, dec, size, fov, deep=True):
     os.makedirs(CACHE, exist_ok=True)
     p = os.path.join(CACHE, "inv_" + hashlib.sha1(k.encode()).hexdigest()[:16] + ".json")
     if os.path.exists(p):
-        MEMO[k] = json.load(open(p))
+        os.utime(p)
+        _remember(k, json.load(open(p)))
         return MEMO[k]
     out = json.loads(json.dumps(run_field(key, mode, ra, dec, size, fov, deep=deep), default=I_json))
     json.dump(out, open(p, "w"))
-    MEMO[k] = out
+    prune_cache()
+    _remember(k, out)
     return out
 
 

@@ -16,7 +16,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 SIA_URL = "https://irsa.ipac.caltech.edu/SIA"
-DEFAULT_COLLECTIONS = ("spherex_dr1", "spherex_qr3")
+DEFAULT_COLLECTIONS = ("spherex_dr1", "spherex_dr1_deep", "spherex_qr3", "spherex_qr3_deep")
 
 
 def _table_from_votable(payload: bytes):
@@ -73,7 +73,7 @@ def _safe_filename(url: str, fallback: str) -> str:
 
 def download_manifest(table, outdir: Path, *, limit: int | None = None,
                       timeout: int = 180) -> list[dict[str, Any]]:
-    """Download SIA access_url products; preserve source URL and SHA-256."""
+    """Download products atomically and retain failures/partials as explicit records."""
     try:
         import requests
     except ImportError as exc:
@@ -84,26 +84,55 @@ def download_manifest(table, outdir: Path, *, limit: int | None = None,
     rows = table if limit is None else table[:limit]
     manifest: list[dict[str, Any]] = []
     for i, row in enumerate(rows):
-        url = str(row["access_url"])
-        if not url or url.lower() == "masked":
+        raw_url = str(row["access_url"]).strip()
+        item = {str(k): (None if str(row[k]).lower() in {"masked", "none", "nan"} else str(row[k]))
+                for k in table.colnames}
+        if not raw_url or raw_url.lower() == "masked":
+            item.update({"status": "rejected", "error": "SIA2 row has no access_url"})
+            manifest.append(item)
             continue
+        url = raw_url
         fname = _safe_filename(url, f"spherex_dr1_{i:05d}.fits")
-        dest = outdir / fname
-        r = requests.get(url, timeout=timeout, stream=True)
-        r.raise_for_status()
+        dest = outdir / f"{i:05d}_{fname}"
+        tmp = dest.with_suffix(dest.suffix + ".part")
         digest = hashlib.sha256()
         nbytes = 0
-        tmp = dest.with_suffix(dest.suffix + ".part")
-        with tmp.open("wb") as f:
-            for block in r.iter_content(1024 * 1024):
-                if block:
-                    f.write(block); digest.update(block); nbytes += len(block)
-        tmp.replace(dest)
-        item = {str(k): (str(row[k]) if row[k] is not None else None) for k in table.colnames}
-        item.update({"local_path": str(dest), "bytes": nbytes,
-                     "sha256": digest.hexdigest(), "source_url": url})
+        response = None
+        try:
+            response = requests.get(url, timeout=(30, timeout), stream=True)
+            response.raise_for_status()
+            expected = response.headers.get("Content-Length")
+            with tmp.open("wb") as f:
+                for block in response.iter_content(1024 * 1024):
+                    if block:
+                        f.write(block)
+                        digest.update(block)
+                        nbytes += len(block)
+                f.flush()
+                os.fsync(f.fileno())
+            if expected is not None and nbytes != int(expected):
+                raise IOError(f"Content-Length mismatch: expected {expected}, received {nbytes}")
+            with tmp.open("rb") as f:
+                signature = f.read(8)
+            if signature != b"SIMPLE  ":
+                raise IOError(f"Downloaded payload is not a primary FITS file: {signature!r}")
+            tmp.replace(dest)
+            item.update({"status": "downloaded", "local_path": str(dest), "bytes": nbytes,
+                         "sha256": digest.hexdigest(), "source_url": url})
+        except Exception as exc:
+            status = "partial" if tmp.exists() and tmp.stat().st_size else "failed"
+            item.update({"status": status, "local_path": str(tmp) if status == "partial" else None,
+                         "bytes": nbytes if nbytes else None, "sha256": None,
+                         "source_url": url, "error": f"{type(exc).__name__}: {exc}"})
+            if status == "failed":
+                tmp.unlink(missing_ok=True)
+        if response is not None:
+            item.update({"http_status": response.status_code, "etag": response.headers.get("ETag"),
+                         "last_modified": response.headers.get("Last-Modified"),
+                         "content_type": response.headers.get("Content-Type")})
         manifest.append(item)
-        print(f"[{len(manifest)}] {dest.name}: {nbytes:,} bytes sha256={digest.hexdigest()}")
+        print(f"[{len(manifest)}] {fname}: {item['status']}" +
+              (f" ({nbytes:,} bytes)" if nbytes else ""))
     (outdir / "download_manifest.json").write_text(json.dumps(manifest, indent=2, default=str))
     return manifest
 
@@ -113,7 +142,7 @@ def main() -> None:
     p.add_argument("--ra", type=float, required=True, help="ICRS RA in degrees")
     p.add_argument("--dec", type=float, required=True, help="ICRS Dec in degrees")
     p.add_argument("--radius", type=float, default=0.2, help="Search radius in degrees")
-    p.add_argument("--collections", nargs="+", default=list(DEFAULT_COLLECTIONS))
+    p.add_argument("--collections", nargs="+", choices=("spherex_dr1", "spherex_dr1_deep", "spherex_qr3", "spherex_qr3_deep"), default=list(DEFAULT_COLLECTIONS), help="Use uniformly processed DR1/QR3 wide and deep collections; QR2 is not mixed into the standard workflow")
     p.add_argument("--mjd-start", type=float)
     p.add_argument("--mjd-end", type=float)
     p.add_argument("--min-um", type=float)
@@ -130,15 +159,31 @@ def main() -> None:
         maxrec=args.maxrec)
     args.out.mkdir(parents=True, exist_ok=True)
     table.write(args.out / "sia_results.csv", format="ascii.csv", overwrite=True)
-    (args.out / "query.json").write_text(json.dumps({
+    from datetime import datetime, timezone
+    retrieved_utc = datetime.now(timezone.utc).isoformat()
+    query_metadata = {
         "query_url": query_url, "collections": args.collections,
         "ra_deg": args.ra, "dec_deg": args.dec, "radius_deg": args.radius,
         "mjd_start": args.mjd_start, "mjd_end": args.mjd_end,
-        "row_count": len(table), "retrieved_utc": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
-    }, indent=2))
+        "row_count": len(table), "maxrec": args.maxrec,
+        "wavelength_min_um": args.min_um, "wavelength_max_um": args.max_um,
+    }
+    query_metadata["retrieved_utc"] = retrieved_utc
+    query_metadata["download_scope"] = "all SIA2 rows" if args.download and args.limit is None else (f"first {args.limit} rows downloaded" if args.download else "discovery only; no files downloaded")
+    (args.out / "query.json").write_text(json.dumps(query_metadata, indent=2))
     print(f"IRSA returned {len(table)} rows. Saved {args.out / 'sia_results.csv'}")
-    if args.download:
-        download_manifest(table, args.out / "fits", limit=args.limit)
+    downloads = download_manifest(table, args.out / "fits", limit=args.limit) if args.download else []
+    from research_discovery.spherex.archive_manifest import manifest_from_sia, validate_manifest
+    sia_rows = [{str(k): (None if str(row[k]).lower() in {"masked", "none", "nan"} else str(row[k]))
+                 for k in table.colnames} for row in table]
+    archive_manifest = manifest_from_sia(sia_rows, query_url=query_url,
+        query_metadata=query_metadata, downloads=downloads, retrieved_utc=retrieved_utc)
+    (args.out / "archive_manifest.json").write_text(json.dumps(archive_manifest, indent=2, default=str))
+    validation = validate_manifest(archive_manifest, verify_local=args.download, base_dir=Path.cwd())
+    (args.out / "archive_manifest_validation.json").write_text(json.dumps(validation, indent=2))
+    print(f"Saved versioned archive manifest with {validation['product_count']} products; valid={validation['valid']}")
+    if not validation["valid"]:
+        raise SystemExit("Archive manifest has validation issues; inspect archive_manifest_validation.json")
 
 if __name__ == "__main__":
     main()

@@ -32,16 +32,10 @@ def validate_template_coordinate_frame(template_coordinate_frame: str, template_
         raise ValueError(f"template header DETCOORD={declared_frame!r} is not detector-native; no automatic sky-orientation flip/rotation is assumed")
 
 
-def detector_origin_offset(exposure_header: dict, native_shape: tuple[int, int] = NATIVE_SHAPE) -> tuple[float, float]:
-    """Return cutout-pixel to original detector-pixel offsets; fail closed."""
-    n1 = int(exposure_header.get("NAXIS1", -1)); n2 = int(exposure_header.get("NAXIS2", -1))
-    # Native full-frame images are already in detector coordinates. CRPIX1A/
-    # CRPIX2A are applied only to cutouts, per the IRSA documentation.
-    if n1 == native_shape[1] and n2 == native_shape[0]:
-        return 0.0, 0.0
-    if "CRPIX1A" in exposure_header and "CRPIX2A" in exposure_header:
-        return 1.0 - float(exposure_header["CRPIX1A"]), 1.0 - float(exposure_header["CRPIX2A"])
-    raise ValueError("cutout origin missing: require CRPIX1A and CRPIX2A in IMAGE header")
+def detector_origin_offset(exposure_header: dict, native_shape: tuple[int, int] = NATIVE_SHAPE) -> tuple[int, int]:
+    """Use the shared, fail-closed cutout-to-detector coordinate conversion."""
+    from research_discovery.spherex.coordinate_transform import detector_origin_offset as shared_offset
+    return shared_offset(exposure_header, native_shape=native_shape)
 
 
 def sample_detector_template(template: np.ndarray, detector_x: np.ndarray, detector_y: np.ndarray, *,

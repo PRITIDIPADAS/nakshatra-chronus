@@ -14,7 +14,7 @@ You cannot blink SPHEREx, so CHRONOS compares only fair pairs, searches with thr
 6. **Evidence (20 s).** Chapter VII: 98.8 percent when deciding, calibration error 0.007, 0 of 840 still stars moved.
 7. **Planet X (10 s).** Chapter IX: the ladder; CHRONOS reaches the candidate rung and no further.
 
-## Questions judges may ask
+## Questions people may ask
 
 * **Is this real data?** The observatory runs on the practice sky by default and labels it SIMULATION. Live mode reads the IRSA archive with the same code; it is tested on files in the IRSA layout.
 * **Why should I trust the probabilities?** They are calibrated on unseen practice fields and the engine says unknown when a case is unlike its training. On real data use the ranking and the unknown flag first.

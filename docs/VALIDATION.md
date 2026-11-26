@@ -1,5 +1,10 @@
 # Validation
 
+## Update, 26 November 2026: engine retrained with deep fields
+
+The engine is now trained with three in ten practice fields at six visits, as near the ecliptic poles (`DEEP_FRACTION` in `scripts/calibrate_engine.py`). Scores on 109 unseen fields (517 candidates): right in 98.4 percent of the cases it decides, unknown for 1.2 percent, Brier 0.028, expected calibration error 0.003. Camera effects called a sky change: 0 of 118. One detector alone is a real change 29 percent of the time, two 75 percent, three 90 percent; the anomaly ensemble alone 8 percent. Unmoving stars called moving: 4 of 5,599. Whole sky tiles: completeness in deep tiles rose from 46 to 94 percent, in crowded tiles from 79 to 92 percent, and the corrected rate is 105 percent of the truth. The sections below describe the earlier four-visit engine and are kept as the record of that run.
+
+
 Every number here comes from `data/validation.json`, written by `scripts/calibrate_engine.py`. Fields are split 70 percent for training and 30 percent for testing, by field. Intervals are 95 percent Wilson intervals. All numbers hold for the practice sky only.
 
 | Measure | Value |

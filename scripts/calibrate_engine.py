@@ -23,6 +23,7 @@ import sky  # noqa: E402
 
 N_FIELDS = int(os.environ.get("N_FIELDS", "360"))
 N_NULL = int(os.environ.get("N_NULL", "40"))
+DEEP = float(os.environ.get("DEEP_FRACTION", "0.3"))  # share of six visit fields, as near the ecliptic poles
 
 
 def one(args):
@@ -30,7 +31,8 @@ def one(args):
     rng = np.random.default_rng(seed)
     center = (float(rng.uniform(0, 360)), float(rng.uniform(-70, 70)))
     hard = float(rng.uniform(0.8, 2.2))
-    spec = sky.make_spec(seed, center=center, events="none" if kind == "null" else "random", hard=hard)
+    epochs = 6 if rng.uniform() < DEEP else 4
+    spec = sky.make_spec(seed, center=center, events="none" if kind == "null" else "random", hard=hard, epochs=epochs)
     E, truth, cat = sky.render(spec)
     core.prepare(E)
     S = P.run(E, cat, center=spec["center"])
@@ -41,7 +43,7 @@ def one(args):
     for t in found + missed:
         ev.append(dict(kind=t["kind"], sub=t.get("sub"), mag=t.get("mag"), amp=t.get("amp"), pm=math.hypot(*t.get("pm", [0, 0])) if t.get("pm") else 0.0,
                        level=t.get("level"), found=t in found))
-    return dict(seed=seed, kind=kind, hard=hard, rows=rows, events=ev, static_groups=static, static_moving=moving_static,
+    return dict(seed=seed, kind=kind, hard=hard, epochs=epochs, rows=rows, events=ev, static_groups=static, static_moving=moving_static,
                 floor=S["floor"], pfloor=S["pfloor"])
 
 

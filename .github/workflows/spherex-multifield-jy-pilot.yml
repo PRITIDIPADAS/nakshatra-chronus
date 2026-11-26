@@ -1,0 +1,72 @@
+name: SPHEREx multi-field calibrated Jy pilot
+
+on:
+  push:
+    branches: [chronos-5-causal-sky-twin]
+    paths:
+      - "research_discovery/spherex/run_multifield_jy_pilot.py"
+      - "research_discovery/spherex/run_real_field_audit.py"
+      - "research_discovery/spherex/summarize_injection_diagnostics.py"
+      - "research_discovery/tests/test_structured_background.py"
+      - "research_discovery/spherex/psf_physicality.py"
+      - "research_discovery/spherex/electron_conversion.py"
+      - "research_discovery/spherex/electron_calibration_record.schema.json"
+      - "research_discovery/validation/injection_recovery.py"
+      - "research_discovery/tests/test_jy_injection_model.py"
+      - "research_discovery/tests/test_multifield_jy_pilot.py"
+      - ".github/workflows/spherex-multifield-jy-pilot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spherex-multifield-jy-pilot
+  cancel-in-progress: false
+
+jobs:
+  six-region-calibrated-jy-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out the exact triggering revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install archive and analysis dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r research_discovery/requirements-research.txt
+      - name: Test field-gate logic
+        run: python -m pytest research_discovery/tests/test_multifield_jy_pilot.py -q
+      - name: Run six predeclared real D2 fields with exact roster acceptance
+        run: |
+          python -m research_discovery.spherex.run_multifield_jy_pilot \
+            --out data/spherex_multifield_jy_pilot \
+            --release dr1 --bandpass SPHEREx-D2 --code-revision ${{ github.sha }}
+      - name: Print per-injection diagnostics for every field
+        if: always()
+        run: |
+          python -m research_discovery.spherex.summarize_injection_diagnostics \
+            data/spherex_multifield_jy_pilot --json data/spherex_multifield_jy_pilot/injection_diagnostics.json
+          for f in data/spherex_multifield_jy_pilot/fields/*/runner.log; do echo "== $f"; tail -n 25 "$f"; done
+      - name: Upload reports and per-field logs only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spherex-multifield-jy-pilot
+          path: |
+            data/spherex_multifield_jy_pilot/multi_field_jy_pilot_summary.json
+            data/spherex_multifield_jy_pilot/injection_diagnostics.json
+            data/spherex_multifield_jy_pilot/fields/*/data/real_field_audit_summary.json
+            data/spherex_multifield_jy_pilot/fields/*/data/native_mef_audit.json
+            data/spherex_multifield_jy_pilot/fields/*/data/calibrated_injection/calibrated_jy_injection_recovery.json
+            data/spherex_multifield_jy_pilot/fields/*/runner.log
+            data/spherex_multifield_jy_pilot/fields/*/runner_attempt_*.log
+          if-no-files-found: warn
+          retention-days: 30

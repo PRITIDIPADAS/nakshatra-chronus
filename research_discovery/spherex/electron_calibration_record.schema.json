@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/PRITIDIPADAS/nakshatra-chronus/blob/main/research_discovery/spherex/electron_calibration_record.schema.json",
+  "title": "CHRONOS SPHEREx absolute-gain photon-noise calibration record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "verification_status",
+    "calibration_product",
+    "calibration_bunit",
+    "exposure_time_s",
+    "science_file_sha256",
+    "science_observation_id",
+    "science_source_uri",
+    "detector",
+    "image_unit",
+    "calibration_uri",
+    "calibration_file_path",
+    "calibration_sha256",
+    "conversion_method"
+  ],
+  "properties": {
+    "verification_status": {
+      "enum": [
+        "verified",
+        "derived_pending_independent_review"
+      ]
+    },
+    "calibration_product": {
+      "const": "abs_gain_matrix"
+    },
+    "calibration_bunit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "exposure_time_s": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "science_file_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "science_native_file_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "science_cutout_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "science_observation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "science_source_uri": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "detector": {
+      "enum": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6"
+      ]
+    },
+    "image_unit": {
+      "enum": [
+        "MJy/sr",
+        "MJy / sr"
+      ]
+    },
+    "calibration_uri": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "calibration_file_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "calibration_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "conversion_method": {
+      "type": "string",
+      "minLength": 12
+    },
+    "verified_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "verified_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "review_status": {
+      "type": "string"
+    },
+    "derived_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "derived_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provenance_link": {
+      "type": "object",
+      "required": [
+        "input_table",
+        "science_planeid",
+        "calibration_planeid",
+        "inputid",
+        "outputid",
+        "science_native_uri",
+        "calibration_native_uri"
+      ],
+      "properties": {
+        "input_table": {
+          "const": "spherex.provenance_input"
+        },
+        "science_planeid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "calibration_planeid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outputid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "science_native_uri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "calibration_native_uri": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$comment": "The verified status requires a human reviewer. The derived_pending_independent_review status is provenance-based and may be used only with an explicit exploratory opt-in; it is never human sign-off. A schema match is not scientific review.",
+  "description": "A verified human-reviewed record or an explicitly pending-review provenance-derived record. Pending-review records may be used only with the exploratory runtime opt-in.",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verification_status": {
+            "const": "verified"
+          }
+        },
+        "required": [
+          "verification_status"
+        ]
+      },
+      "then": {
+        "required": [
+          "verified_by",
+          "verified_utc"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verification_status": {
+            "const": "derived_pending_independent_review"
+          }
+        },
+        "required": [
+          "verification_status"
+        ]
+      },
+      "then": {
+        "required": [
+          "review_status",
+          "derived_by",
+          "derived_utc",
+          "provenance_link"
+        ],
+        "properties": {
+          "review_status": {
+            "const": "pending"
+          }
+        }
+      }
+    }
+  ]
+}

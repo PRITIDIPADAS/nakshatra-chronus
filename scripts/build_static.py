@@ -21,8 +21,8 @@ import study  # noqa: E402
 
 SITE = os.path.join(ROOT, "site")
 FRONT = os.path.join(ROOT, "frontend")
-KEEP = ("story", "media", "figures", "deck.html")
-LINKS = ('<a href="media/chronos_demo.mp4">Watch the 30 second demo</a> · <a href="deck.html">Read the 7 slides</a> · '
+KEEP = ("story", "media", "figures", "deck.html", "deck")
+LINKS = ('<a href="media/chronos_demo.mp4">Watch the 30 second demo</a> · <a href="deck.html">Read the slides</a> · '
          '<a href="https://github.com/PRITIDIPADAS/nakshatra-chronus">Source code</a>')
 
 
@@ -70,10 +70,17 @@ def main():
     st = study.make(outs)
     for d in (os.path.join(ROOT, "data"), os.path.join(SITE, "data")):
         json.dump(st, open(os.path.join(d, "study.json"), "w"), separators=(",", ":"))
-    for f in ("sky_tiles.json", "real_injection.json"):  # made by scripts/make_sky_tiles.py and scripts/inject_real.py
+    for f in ("sky_tiles.json", "real_injection.json", "real_data_run.json", "real_fields.json", "lvf_curves.json", "injection_diagnostics.json"):
         if os.path.exists(os.path.join(ROOT, "data", f)):
             shutil.copy(os.path.join(ROOT, "data", f), os.path.join(SITE, "data", f))
-    s = open(os.path.join(SITE, "index.html")).read()
+    os.replace(os.path.join(SITE, "index.html"), os.path.join(SITE, "observatory.html"))
+    os.replace(os.path.join(SITE, "home.html"), os.path.join(SITE, "index.html"))
+    for name in os.listdir(SITE):  # inside the site, the observatory lives at observatory.html
+        if name.endswith(".html") and name != "index.html":
+            p = os.path.join(SITE, name)
+            h = open(p).read().replace('href="index.html"', 'href="observatory.html"').replace('href="home.html"', 'href="index.html"')
+            open(p, "w").write(h)
+    s = open(os.path.join(SITE, "observatory.html")).read()
     link = '<a class="storylink" href="story.html" id="storyLink">The five minute story of one star, in English and Bangla →</a>'
     if os.path.exists(os.path.join(SITE, "story", "manifest.json")):
         s = s.replace(link, '<span class="storylink">' + link.replace(' class="storylink"', "") + "<br>" + LINKS + "</span>")
@@ -82,7 +89,7 @@ def main():
         s = s.replace(link, '<span class="storylink">' + LINKS + "<br>Run python scripts/record_story.py to add the story to this page.</span>")
         for f in ("story.html", "extras.js", "story_static.js"):
             os.remove(os.path.join(SITE, f))
-    open(os.path.join(SITE, "index.html"), "w").write(s)
+    open(os.path.join(SITE, "observatory.html"), "w").write(s)
     print(f"site built in {time.time() - t0:.0f} s")
 
 

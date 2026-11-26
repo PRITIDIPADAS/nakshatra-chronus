@@ -13,7 +13,7 @@ Read this before you trust a result.
 * The IMAGE header carries SIP distortion terms without the SIP suffix in CTYPE. Astropy applies them, as the IRSA tutorials expect.
 * The color at the star comes from the lookup table inside each file. IRSA calls this table display grade. For science, use the CWAVE and CBAND calibration products.
 * Pictures from QR2 and QR3 use different gains. CHRONOS does not apply the official flux correction product. A pair across releases is never called fair. The brightness check uses reference stars to remove the gain difference.
-* The PSF zone is taken from the keywords of the file. QR3 has a separate ePSF product that CHRONOS does not read yet.
+* In the observatory app the PSF zone is taken from the keywords of the file. The DR1 research path (`research_discovery/spherex/extract_epsf_stamp.py`) reads the official ePSF product at the exact sub-pixel phase; the app does not use it yet.
 * SPHEREx pixels are 6.15 arcseconds wide. Epsilon Indi Ba and Bb are one dot. RW Aurigae A and B are one dot.
 * R Draconis and Barnard's Star are very bright. Saturated pictures carry the OVERFLOW flag and CHRONOS leaves them out. Few pictures can remain.
 * WISE 0855 is near the single picture limit even in the longest band. A nondetection is the expected result in most colors.
@@ -25,7 +25,7 @@ Read this before you trust a result.
 * The difference picture is for the eye only. Lining up an undersampled picture is never exact. Near bright stars the difference picture is less sensitive.
 * The false change meter assumes a smooth spectrum between neighbor colors. A narrow molecular band can break this. The error of the meter grows when the fit is poor.
 * The parallax fit uses the position of the Earth, not the position of the spacecraft. The difference is far below one pixel for stars.
-* The known asteroid check uses an observer on the ground. A main belt object can be off by about one pixel.
+* The known asteroid check now places the observer at SPHEREx itself, using its geocentric state vector from JPL Horizons (id -163182). If Horizons cannot be reached it falls back to a ground observer and says so in the answer.
 * The Planet X tools are estimates on a practice sky. The depth limit is an assumption. A parallax shift can be larger than a small cutout.
 * The blind test uses practice images and is a small pilot.
 
@@ -45,14 +45,14 @@ Read this before you trust a result.
 ## Software
 
 * The story page keeps one loaded star in memory and serves one user at a time. The observatory caches each investigation on disk.
-* The cache folder has no size limit.
+* The investigation cache is capped at 512 MB (set `CHRONOS_CACHE_MB`); the oldest files go first. The memory cache keeps the last 32 investigations.
 * The Bangla text needs a review by a second native reader.
 
 ## New tools
 
-* Planted sources in real exposures get no photon noise of their own. For faint sources the error is small; for bright ones it makes them a little too easy.
+* In the DR1 calibrated pilots every planted source gets its own Poisson noise, drawn from the per-pixel absolute gain map and the exposure time. That conversion still waits for review by an instrument scientist. The older QR3 planting tool (`backend/inject.py`) adds source noise only when such a signed calibration record is supplied; without one, bright planted sources are a little too easy to find.
 * The whole sky tiles sample each tile with one small practice field. The map shows the method of correction, not the real sky.
-* The engine was trained on four visit fields. In the six visit tiles near the ecliptic poles it says unknown more often, so the completeness there is lower. Retraining with deep fields would fix this.
+* The engine is now trained with three in ten fields at six visits. Completeness in the deep tiles near the ecliptic poles rose from 46 to 94 percent. Fields deeper than six visits are still outside its training.
 * The citizen study has not been run with real participants. One person in a browser is not a study.
 * A Rubin match is a lead, not a confirmation: Rubin sees optical light, SPHEREx infrared, at other times.
 

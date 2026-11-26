@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "archive": "NASA/IPAC IRSA SPHEREx",
+  "query": {},
+  "retrieved_utc": null,
+  "software": {},
+  "processing_config": {},
+  "products": [],
+  "status": "empty_unpopulated",
+  "status_note": "Template only. No archive product was retrieved; no archive IDs, native URIs, checksums or calibration matches are asserted."
+}

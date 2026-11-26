@@ -8,7 +8,7 @@ url: "https://pritidipadas.github.io/nakshatra-chronus/"
 abstract: >-
   CHRONOS finds change between SPHEREx visits using fair pairs (same array, matched color, one release), three independent
   detectors whose disagreement is calibrated as a signal, a five hypothesis engine that may answer unknown, self questioning
-  tests, counterfactual reanalysis and an evidence linked report. Built for the NASA Space Apps challenge Planet X and SPHEREx.
+  tests, counterfactual reanalysis and an evidence linked report.
 keywords:
   - SPHEREx
   - time domain astronomy
