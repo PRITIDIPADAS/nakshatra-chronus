@@ -2,7 +2,7 @@ name: PritidipaDas PR review
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions:
   contents: read
@@ -77,9 +77,11 @@ jobs:
 
             const results = [];
             for (const file of supported.slice(0, 50)) {
-              const check = file.filename.match(/\.json$/i) ? 'JSON parse' :
-                file.filename.match(/\.py$/i) ? 'Python syntax compile' :
-                file.filename.match(/\.toml$/i) ? 'TOML parse' : 'JavaScript syntax check';
+              const check = file.filename.match(/\\.json$/i) ? 'JSON parse' :
+                file.filename.match(/\\.py$/i) ? 'Python syntax compile' :
+                file.filename.match(/\\.toml$/i) ? 'TOML parse' : 'JavaScript syntax check';
+
+              let source;
               try {
                 const response = await github.rest.repos.getContent({
                   owner: headOwner,
@@ -92,12 +94,18 @@ jobs:
                   results.push({ file: file.filename, check, status: 'SKIPPED', detail: 'GitHub did not return a base64 file body.' });
                   continue;
                 }
-                const source = Buffer.from(data.content, 'base64').toString('utf8');
+                source = Buffer.from(data.content, 'base64').toString('utf8');
                 if (Buffer.byteLength(source, 'utf8') > 800000) {
                   results.push({ file: file.filename, check, status: 'SKIPPED', detail: 'File is too large for this read-only check.' });
                   continue;
                 }
+              } catch (error) {
+                const detail = String(error.message || error).trim().split('\\n').slice(-1)[0].slice(0, 240);
+                results.push({ file: file.filename, check, status: 'UNAVAILABLE', detail: 'GitHub API could not read the PR head file: ' + detail });
+                continue;
+              }
 
+              try {
                 if (check === 'JSON parse') {
                   JSON.parse(source);
                 } else if (check === 'Python syntax compile') {
@@ -109,24 +117,26 @@ jobs:
                     input: source, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
                   });
                 } else {
-                  execFileSync('node', ['--check'], {
+                  const nodeArgs = file.filename.match(/\\.mjs$/i) ? ['--check', '--input-type=module'] : ['--check'];
+                  execFileSync('node', nodeArgs, {
                     input: source, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
                   });
                 }
                 results.push({ file: file.filename, check, status: 'PASS', detail: 'Parser completed successfully.' });
               } catch (error) {
-                const detail = String(error.stderr || error.message || error).trim().split('\n').slice(-1)[0].slice(0, 240);
+                const detail = String(error.stderr || error.message || error).trim().split('\\n').slice(-1)[0].slice(0, 240);
                 results.push({ file: file.filename, check, status: 'FAIL', detail });
               }
             }
 
-            const checked = results.filter(result => result.status !== 'SKIPPED');
+            const checked = results.filter(result => result.status === 'PASS' || result.status === 'FAIL');
             if (checked.length === 0) {
               core.info('No supported file could be checked; no review was posted.');
               return;
             }
 
             const body = [
+
               prefix,
               '',
               '**Automated, non-approving review by github-actions[bot].** No contributor project code or scripts were executed.',
