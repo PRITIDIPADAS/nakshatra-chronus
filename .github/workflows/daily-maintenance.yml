@@ -77,9 +77,9 @@ jobs:
 
             const results = [];
             for (const file of supported.slice(0, 50)) {
-              const check = file.filename.match(/\\.json$/i) ? 'JSON parse' :
-                file.filename.match(/\\.py$/i) ? 'Python syntax compile' :
-                file.filename.match(/\\.toml$/i) ? 'TOML parse' : 'JavaScript syntax check';
+              const check = file.filename.match(/\.json$/i) ? 'JSON parse' :
+                file.filename.match(/\.py$/i) ? 'Python syntax compile' :
+                file.filename.match(/\.toml$/i) ? 'TOML parse' : 'JavaScript syntax check';
 
               let source;
               try {
@@ -100,7 +100,7 @@ jobs:
                   continue;
                 }
               } catch (error) {
-                const detail = String(error.message || error).trim().split('\\n').slice(-1)[0].slice(0, 240);
+                const detail = String(error.message || error).trim().split('\n').slice(-1)[0].slice(0, 240);
                 results.push({ file: file.filename, check, status: 'UNAVAILABLE', detail: 'GitHub API could not read the PR head file: ' + detail });
                 continue;
               }
@@ -117,14 +117,14 @@ jobs:
                     input: source, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
                   });
                 } else {
-                  const nodeArgs = file.filename.match(/\\.mjs$/i) ? ['--check', '--input-type=module'] : ['--check'];
+                  const nodeArgs = file.filename.match(/\.mjs$/i) ? ['--check', '--input-type=module'] : ['--check'];
                   execFileSync('node', nodeArgs, {
                     input: source, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
                   });
                 }
                 results.push({ file: file.filename, check, status: 'PASS', detail: 'Parser completed successfully.' });
               } catch (error) {
-                const detail = String(error.stderr || error.message || error).trim().split('\\n').slice(-1)[0].slice(0, 240);
+                const detail = String(error.stderr || error.message || error).trim().split('\n').slice(-1)[0].slice(0, 240);
                 results.push({ file: file.filename, check, status: 'FAIL', detail });
               }
             }
@@ -136,6 +136,7 @@ jobs:
             }
 
             const body = [
+
 
               prefix,
               '',
