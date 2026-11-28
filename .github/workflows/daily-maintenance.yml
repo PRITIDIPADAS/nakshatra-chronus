@@ -1,105 +1,147 @@
-name: Daily repository maintenance
+name: PritidipaDas PR review
 
 on:
-  schedule:
-    - cron: '17 18 * * *'
-  workflow_dispatch:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
-  contents: write
+  contents: read
+  pull-requests: write
 
 concurrency:
-  group: daily-maintenance-${{ github.ref }}
+  group: pritidipa-daily-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
-  audit:
+  review:
+    if: github.event.pull_request.user.login != 'PRITIDIPADAS'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - name: Inspect the PR diff without executing contributor code
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { execFileSync } = require('node:child_process');
 
-      - name: Run safe, non-executing checks
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import pathlib
-          import subprocess
-          import tokenize
+            const START_DATE = '2026-11-28';
+            const date = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Asia/Dhaka',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }).format(new Date());
+            const dayNumber = Math.floor(
+              (Date.parse(date + 'T00:00:00Z') - Date.parse(START_DATE + 'T00:00:00Z')) / 86400000
+            ) + 1;
+            if (dayNumber < 1) {
+              core.info('The configured daily-check start date has not arrived; no review was posted.');
+              return;
+            }
 
-          root = pathlib.Path(".")
-          tracked = subprocess.check_output(
-              ["git", "ls-files", "-z"], text=True
-          ).split("\0")
-          tracked = [p for p in tracked if p]
-          ignored = {".git", "node_modules", ".venv", "venv", "vendor", "dist", "build"}
-          files = [
-              pathlib.Path(p) for p in tracked
-              if not any(part in ignored for part in pathlib.Path(p).parts)
-          ]
+            const prefix = 'PritidipaDas checked it — Day ' + dayNumber;
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+            const headFullName = pr.head.repo && pr.head.repo.full_name;
+            if (!headFullName) {
+              core.info('The PR head repository is unavailable; no review was posted.');
+              return;
+            }
+            const [headOwner, headRepo] = headFullName.split('/');
 
-          json_files = [p for p in files if p.suffix.lower() == ".json"]
-          python_files = [p for p in files if p.suffix.lower() == ".py"]
-          problems = []
+            const priorReviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            });
+            const alreadyReviewed = priorReviews.some(review =>
+              review.commit_id === pr.head.sha &&
+              review.user && review.user.login === 'github-actions[bot]' &&
+              typeof review.body === 'string' &&
+              review.body.startsWith(prefix)
+            );
+            if (alreadyReviewed) {
+              core.info('This PR head SHA already has its Day ' + dayNumber + ' automated review; skipping duplicate.');
+              return;
+            }
 
-          for path in json_files:
-              try:
-                  with path.open("r", encoding="utf-8-sig") as handle:
-                      json.load(handle)
-              except Exception as exc:
-                  problems.append(f"- JSON `{path}`: {type(exc).__name__}: {exc}")
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            });
+            const supported = files.filter(file =>
+              file.status !== 'removed' &&
+              /\.(json|py|toml|js|mjs|cjs)$/i.test(file.filename)
+            );
+            if (supported.length === 0) {
+              core.info('No changed JSON, Python, TOML, or JavaScript files; no placeholder review was posted.');
+              return;
+            }
 
-          for path in python_files:
-              try:
-                  with tokenize.open(path) as handle:
-                      source = handle.read()
-                  compile(source, str(path), "exec")
-              except Exception as exc:
-                  problems.append(f"- Python `{path}`: {type(exc).__name__}: {exc}")
+            const results = [];
+            for (const file of supported.slice(0, 50)) {
+              const check = file.filename.match(/\.json$/i) ? 'JSON parse' :
+                file.filename.match(/\.py$/i) ? 'Python syntax compile' :
+                file.filename.match(/\.toml$/i) ? 'TOML parse' : 'JavaScript syntax check';
+              try {
+                const response = await github.rest.repos.getContent({
+                  owner: headOwner,
+                  repo: headRepo,
+                  path: file.filename,
+                  ref: pr.head.sha,
+                });
+                const data = response.data;
+                if (!data || Array.isArray(data) || data.type !== 'file' || data.encoding !== 'base64') {
+                  results.push({ file: file.filename, check, status: 'SKIPPED', detail: 'GitHub did not return a base64 file body.' });
+                  continue;
+                }
+                const source = Buffer.from(data.content, 'base64').toString('utf8');
+                if (Buffer.byteLength(source, 'utf8') > 800000) {
+                  results.push({ file: file.filename, check, status: 'SKIPPED', detail: 'File is too large for this read-only check.' });
+                  continue;
+                }
 
-          json_bad = any(x.startswith("- JSON ") for x in problems)
-          python_bad = any(x.startswith("- Python ") for x in problems)
-          summary = [
-              "# Automated maintenance status",
-              "",
-              "This report is generated by the scheduled, non-destructive repository audit.",
-              "",
-              "## Checks",
-              f"- Tracked files inspected: **{len(files)}**",
-              f"- JSON syntax: **{'ATTENTION' if json_bad else 'PASS'}** ({len(json_files)} files)",
-              f"- Python syntax: **{'ATTENTION' if python_bad else 'PASS'}** ({len(python_files)} files)",
-              f"- Findings: **{len(problems)}**",
-              "",
-          ]
-          if problems:
-              summary += ["## Findings", "", *problems, ""]
-          else:
-              summary += ["No JSON or Python syntax issues were detected.", ""]
-          summary += [
-              "## Safety",
-              "",
-              "The audit parses JSON and compiles Python source without executing project code, installing dependencies, or changing application files.",
-              "A commit is created only when this report changes.",
-              "",
-          ]
+                if (check === 'JSON parse') {
+                  JSON.parse(source);
+                } else if (check === 'Python syntax compile') {
+                  execFileSync('python3', ['-c', "import sys; compile(sys.stdin.read(), '<pull-request>', 'exec')"], {
+                    input: source, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+                  });
+                } else if (check === 'TOML parse') {
+                  execFileSync('python3', ['-c', "import sys, tomllib; tomllib.loads(sys.stdin.read())"], {
+                    input: source, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+                  });
+                } else {
+                  execFileSync('node', ['--check'], {
+                    input: source, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+                  });
+                }
+                results.push({ file: file.filename, check, status: 'PASS', detail: 'Parser completed successfully.' });
+              } catch (error) {
+                const detail = String(error.stderr || error.message || error).trim().split('\n').slice(-1)[0].slice(0, 240);
+                results.push({ file: file.filename, check, status: 'FAIL', detail });
+              }
+            }
 
-          report = root / ".github" / "maintenance" / "status.md"
-          report.parent.mkdir(parents=True, exist_ok=True)
-          report.write_text("\n".join(summary), encoding="utf-8")
-          PY
+            const checked = results.filter(result => result.status !== 'SKIPPED');
+            if (checked.length === 0) {
+              core.info('No supported file could be checked; no review was posted.');
+              return;
+            }
 
-      - name: Commit report only when it changes
-        shell: bash
-        run: |
-          set -euo pipefail
-          git add .github/maintenance/status.md
-          if git diff --cached --quiet; then
-            echo "Maintenance report is unchanged; no commit needed."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: update maintenance status"
-          git push
+            const body = [
+              prefix,
+              '',
+              '**Automated, non-approving review by github-actions[bot].** No contributor project code or scripts were executed.',
+              '',
+              'Reviewed PR #' + pr.number + ' at head ' + pr.head.sha + ' following an opened or updated PR event.',
+              'GitHub reports ' + files.length + ' changed files. The workflow statically inspected ' + checked.length + ' supported files.',
+              '',
+              '**Checks and actual results:**',
+              ...results.map(result => '- ' + result.file + ' — ' + result.check + ': **' + result.status + '**' + (result.detail ? ' (' + result.detail + ')' : '')),
+              '',
+              '**Limits:** This check covers syntax/format parsing only for changed JSON, Python, TOML, and JavaScript files. It does not establish semantic correctness, security, or runtime behavior. Project CI and human review remain necessary.',
+              '',
+              'The automated identity is github-actions[bot]; this review is not an approval.'
+            ].join('\n');
+
+            await github.rest.pulls.createReview({
+              owner, repo, pull_number: pr.number, event: 'COMMENT', body,
+            });
